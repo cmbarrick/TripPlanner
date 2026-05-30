@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wander - Option 1 Calm Planner</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  body { background: #f8fafc; }
+  .calm .phone { box-shadow: 0 12px 30px -18px rgba(15, 23, 42, 0.25); }
+  .calm .card { box-shadow: none; border-radius: 16px; }
+  .calm .day-head { margin-top: 18px; margin-bottom: 10px; }
+  .calm .tl .item { margin-bottom: 14px; }
+  .calm .appbar .title { font-size: 22px; }
+  .calm .muted-note { font-size: 11px; color: var(--ink-400); margin-top: 6px; }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <div class="brandrow">
+    <div class="logo">✦</div>
+    <h1>Option 1 - Calm Planner</h1>
+  </div>
+  <p class="sub">Clarity-first layout with softer density, calmer hierarchy, and easier itinerary scanning.</p>
+</header>
+
+<main class="board calm">
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div><div class="title">My Trips</div><div class="sub">2 upcoming · 1 past</div></div><div class="icon-btn">🔍</div></div>
+      <div class="body">
+        <div class="cover lisbon" style="margin-bottom:16px">
+          <span class="badge">In 12 days</span>
+          <div class="ct">Lisbon, Portugal</div>
+          <div class="cs">Jun 10 - Jun 14 · Solo</div>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="row between"><b style="font-size:13px">Next up</b><span class="pill teal">Day 1 ready</span></div>
+          <div class="muted-note">15:00 Check in, 19:30 Dinner</div>
+        </div>
+        <div class="cover kyoto" style="margin-bottom:16px">
+          <span class="badge">In 2 months</span>
+          <div class="ct">Kyoto, Japan</div>
+          <div class="cs">Aug 3 - Aug 9 · Solo</div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tabbar">
+        <div class="tab active"><div class="ic">🧭</div>Trips</div>
+        <div class="tab"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">My Trips</div><div class="p">Cleaner overview + lower density</div></div>
+  </div>
+
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">Jun 10-14 · EUR620 est.</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body">
+        <div class="card">
+          <div class="row between"><b style="font-size:13px">Day 1 summary</b><span class="pill teal">Sunny 27C</span></div>
+          <div class="tiny muted" style="margin-top:6px">2 items · 12 min total walking · EUR43 planned</div>
+        </div>
+        <div class="day-head"><span class="d">Day 1 · Tue</span><span class="w">Jun 10</span></div>
+        <div class="tl">
+          <div class="item stay">
+            <div class="time">15:00</div>
+            <div class="card"><div class="iname">Check in · Casa do Bairro</div><div class="iloc">Alfama · conf. #BK2291</div></div>
+          </div>
+          <div class="item food">
+            <div class="time">19:30</div>
+            <div class="card"><div class="iname">Dinner · Time Out Market</div><div class="iloc">Cais do Sodre · EUR25</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+    </div></div>
+    <div class="caption"><div class="t">Itinerary</div><div class="p">Calmer timeline + daily summary</div></div>
+  </div>
+
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">✕</div><div class="title" style="font-size:17px">Add to itinerary</div></div><div class="pill teal" style="padding:7px 12px">Save</div></div>
+      <div class="body">
+        <div class="card" style="margin-bottom:12px">
+          <b style="font-size:12px">Required</b>
+          <div class="field" style="margin-top:8px"><label>Type</label><div class="seg"><div class="opt on">Activity</div><div class="opt">Food</div><div class="opt">Stay</div></div></div>
+          <div class="field"><label>Title</label><div class="control">Belem Tower & Jeronimos</div></div>
+          <div class="field"><label>Date + Time</label><div class="control">Jun 11 · 10:00</div></div>
+        </div>
+        <div class="card">
+          <b style="font-size:12px">Optional</b>
+          <div class="field" style="margin-top:8px"><label>Cost</label><div class="control">EUR18</div></div>
+          <div class="field"><label>Notes</label><div class="control placeholder">Add reminder or ticket details</div></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Add Activity</div><div class="p">Required vs optional field grouping</div></div>
+  </div>
+</main>
+
+</body>
+</html>

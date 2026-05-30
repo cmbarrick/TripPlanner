@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wander - Option 2 Map First</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .mapfirst .travel-chip { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 4px 8px; background: #ecfeff; color: #155e75; border: 1px solid #a5f3fc; }
+  .mapfirst .split-map { height: 98px; border-radius: 14px; border: 1px solid var(--line); background:
+    linear-gradient(0deg, rgba(15,23,42,.04) 1px, transparent 1px) 0 0/100% 20px,
+    linear-gradient(90deg, rgba(15,23,42,.04) 1px, transparent 1px) 0 0/20px 100%,
+    radial-gradient(120px 70px at 20% 30%, #bbf7d0 0%, transparent 70%),
+    #eef2f7;
+  }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <div class="brandrow">
+    <div class="logo">✦</div>
+    <h1>Option 2 - Map-First Navigator</h1>
+  </div>
+  <p class="sub">Route confidence first: timeline, travel chips, and map context are combined for quicker decisions.</p>
+</header>
+
+<main class="board mapfirst">
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div><div class="title">My Trips</div><div class="sub">Movement-aware planning</div></div><div class="icon-btn">🗺</div></div>
+      <div class="body">
+        <div class="cover lisbon" style="margin-bottom:12px">
+          <span class="badge">In 12 days · 4 nights</span>
+          <div class="ct">Lisbon, Portugal</div>
+          <div class="cs">Jun 10 - Jun 14 · Solo</div>
+        </div>
+        <div class="card">
+          <div class="row between"><b style="font-size:12px">Route confidence</b><span class="pill ok">High</span></div>
+          <div class="tiny muted" style="margin-top:6px">Next segment: Alfama -> Cais do Sodre · 12 min walk</div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tabbar">
+        <div class="tab active"><div class="ic">🧭</div>Trips</div>
+        <div class="tab"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">My Trips</div><div class="p">Route confidence preview</div></div>
+  </div>
+
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">Timeline | Map | Split</div></div></div><div class="pill teal">Split</div></div>
+      <div class="body">
+        <div class="day-head"><span class="d">Day 2 · Wed</span><span class="w">Jun 11</span><span class="weather">⛅ 24C</span></div>
+        <div class="tl">
+          <div class="item">
+            <div class="time">10:00</div>
+            <div class="card">
+              <div class="iname">Belem Tower</div>
+              <div class="iloc">Belem · EUR18</div>
+              <div style="margin-top:8px"><span class="travel-chip">12 min metro to next stop</span></div>
+            </div>
+          </div>
+          <div class="item food">
+            <div class="time">13:00</div>
+            <div class="card">
+              <div class="iname">Market Lunch</div>
+              <div class="iloc">Time Out Market · EUR25</div>
+              <div style="margin-top:8px"><span class="travel-chip">8 min walk from station</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="split-map" style="margin-top:8px"></div>
+      </div>
+      <div class="fab">+</div>
+    </div></div>
+    <div class="caption"><div class="t">Itinerary Split View</div><div class="p">Timeline + compact map strip</div></div>
+  </div>
+
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div class="title" style="font-size:17px">Day 2 · Map</div></div><div class="icon-btn">⛶</div></div>
+      <div class="map">
+        <svg class="route" viewBox="0 0 300 460" preserveAspectRatio="none">
+          <path d="M70 120 C 120 160, 90 240, 180 250 S 210 360, 150 380" fill="none" stroke="#0f766e" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round"/>
+        </svg>
+        <div class="pin stay" style="left:56px; top:104px"><span>A</span></div>
+        <div class="pin" style="left:166px; top:234px"><span>B</span></div>
+        <div class="pin food" style="left:136px; top:362px"><span>C</span></div>
+        <div class="map-card">
+          <div class="row between"><div class="iname">Transit summary</div><span class="pill teal">22 min total</span></div>
+          <div class="tiny muted" style="margin-top:6px">Walk 1.8 km · Metro 12 min · Low friction route</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Map View</div><div class="p">Sticky transit summary card</div></div>
+  </div>
+</main>
+
+</body>
+</html>

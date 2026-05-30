@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wander - Whole-Trip Map + AI</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  /* scope + view toggles */
+  .wt .seg2 { display: flex; gap: 8px; margin-bottom: 10px; }
+  .wt .scopeseg, .wt .viewseg { display: flex; gap: 4px; background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+  .wt .scopeseg { flex: 0 0 auto; }
+  .wt .viewseg { flex: 1; }
+  .wt .scopeseg .s, .wt .viewseg .v { text-align: center; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 9px; color: var(--ink-600); }
+  .wt .viewseg .v { flex: 1; padding: 6px 0; }
+  .wt .scopeseg .s.on, .wt .viewseg .v.on { background: var(--brand); color: #fff; }
+
+  /* day filter chips */
+  .wt .dayfilter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .wt .dchip { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink-600); display: flex; align-items: center; gap: 6px; }
+  .wt .dot-d { width: 8px; height: 8px; border-radius: 50%; }
+  .wt .dchip.all { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+  /* day color legend on pins */
+  .wt .pin.d1 { background: #6366f1; }
+  .wt .pin.d2 { background: #0f766e; }
+  .wt .pin.d3 { background: #f97316; }
+  .wt .pin.d4 { background: #0ea5e9; }
+
+  /* whole-trip day summary rows */
+  .wt .day-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; margin-bottom: 8px; }
+  .wt .day-row .num { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 12px; }
+  .wt .day-row .meta { flex: 1; }
+
+  /* AI dock + proposal */
+  .wt .ai-dock { background: var(--white); border-top: 1px solid var(--line); padding: 10px 14px; }
+  .wt .ai-spark { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-size: 13px; background: linear-gradient(135deg, var(--brand-600), #0ea5e9); }
+  .wt .ai-input { background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; font-size: 12px; color: var(--ink-400); flex: 1; }
+  .wt .proposal { border-left: 3px solid #0ea5e9; background: #f8fbff; }
+  .wt .action-row { display: flex; gap: 8px; margin-top: 10px; }
+  .wt .mini-btn { flex: 1; text-align: center; font-size: 12px; font-weight: 700; padding: 9px 0; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink-600); }
+  .wt .mini-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .wt .ai-route { stroke: #0ea5e9; stroke-width: 3; stroke-dasharray: 1 7; }
+  .wt .ai-chip-float { position: absolute; left: 14px; top: 14px; background: rgba(255,255,255,.92); border: 1px solid #bae6fd; color: #0369a1; font-size: 11px; font-weight: 700; padding: 6px 11px; border-radius: 999px; }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <div class="brandrow">
+    <div class="logo">✦</div>
+    <h1>Whole-Trip Map + AI</h1>
+  </div>
+  <p class="sub">The same Map + AI experience, scoped to the entire trip. A <b>Day | Trip</b> scope toggle lets the map show every stop across all days, and lets AI plan or optimize the whole trip at once.</p>
+  <div class="legend">
+    <span class="chip"><b>Scope toggle</b> · Day or Trip</span>
+    <span class="chip"><b>All days</b> on one map, color-coded</span>
+    <span class="chip"><b>AI</b> plans the full trip</span>
+  </div>
+</header>
+
+<main class="board wt">
+
+  <!-- 1. WHOLE-TRIP SPLIT VIEW -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">4 days · 9 stops · EUR620</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="seg2">
+          <div class="scopeseg"><div class="s">Day</div><div class="s on">Trip</div></div>
+          <div class="viewseg"><div class="v">List</div><div class="v on">Split</div><div class="v">Map</div></div>
+        </div>
+        <div class="split-map" style="height:150px;border-radius:14px;border:1px solid var(--line);position:relative;overflow:hidden;background:linear-gradient(0deg, rgba(15,23,42,.04) 1px, transparent 1px) 0 0/100% 22px,linear-gradient(90deg, rgba(15,23,42,.04) 1px, transparent 1px) 0 0/22px 100%,radial-gradient(120px 80px at 25% 30%, #bbf7d0 0%, transparent 70%),radial-gradient(150px 100px at 75% 70%, #bae6fd 0%, transparent 70%),#eef2f7;margin-bottom:10px">
+          <div class="pin d1" style="left:40px; top:30px"><span>1</span></div>
+          <div class="pin d2" style="left:150px; top:60px"><span>2</span></div>
+          <div class="pin d3" style="left:210px; top:100px"><span>3</span></div>
+          <div class="pin d4" style="left:90px; top:108px"><span>4</span></div>
+        </div>
+        <div class="day-row"><div class="num" style="background:#6366f1">D1</div><div class="meta"><div class="iname">Tue · Jun 10</div><div class="tiny muted">Check-in + dinner · Alfama</div></div><span class="pill teal">2</span></div>
+        <div class="day-row"><div class="num" style="background:#0f766e">D2</div><div class="meta"><div class="iname">Wed · Jun 11</div><div class="tiny muted">Belem + market lunch</div></div><span class="pill teal">3</span></div>
+        <div class="day-row"><div class="num" style="background:#f97316">D3</div><div class="meta"><div class="iname">Thu · Jun 12</div><div class="tiny muted">Viewpoints + market</div></div><span class="pill teal">2</span></div>
+      </div>
+      <div class="ai-dock">
+        <div class="row" style="gap:8px"><div class="ai-spark">✨</div><div class="ai-input">Ask Wander to plan or rebalance the whole trip…</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Whole-trip Split</div><div class="p">Scope = Trip · all days at once</div></div>
+  </div>
+
+  <!-- 2. WHOLE-TRIP MAP -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon · Trip map</div><div class="sub">All 9 stops</div></div></div><div class="icon-btn">⛶</div></div>
+      <div class="body" style="padding-top:8px">
+        <div class="dayfilter">
+          <div class="dchip all">All days</div>
+          <div class="dchip"><span class="dot-d" style="background:#6366f1"></span>D1</div>
+          <div class="dchip"><span class="dot-d" style="background:#0f766e"></span>D2</div>
+          <div class="dchip"><span class="dot-d" style="background:#f97316"></span>D3</div>
+          <div class="dchip"><span class="dot-d" style="background:#0ea5e9"></span>D4</div>
+        </div>
+      </div>
+      <div class="map" style="margin-top:0">
+        <svg class="route" viewBox="0 0 300 460" preserveAspectRatio="none">
+          <path d="M60 90 C 120 120, 90 180, 170 200 S 230 300, 130 320 S 90 400, 200 410" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="2 8" stroke-linecap="round"/>
+        </svg>
+        <div class="pin d1" style="left:48px; top:74px"><span>1</span></div>
+        <div class="pin d2" style="left:158px; top:184px"><span>2</span></div>
+        <div class="pin d3" style="left:118px; top:304px"><span>3</span></div>
+        <div class="pin d4" style="left:188px; top:394px"><span>4</span></div>
+        <div class="map-card">
+          <div class="row between"><div class="iname">Trip overview</div><span class="pill teal">9 stops · 4 days</span></div>
+          <div class="tiny muted" style="margin-top:6px">Total walking 7.4 km · most clustered in Alfama & Belem</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Whole-trip map</div><div class="p">Color-coded by day + day filters</div></div>
+  </div>
+
+  <!-- 3. AI PLANS THE WHOLE TRIP -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">AI planning whole trip</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="bubble me" style="max-width:84%;padding:10px 13px;border-radius:16px;font-size:12.5px;background:linear-gradient(135deg, var(--brand-600), var(--brand));color:#fff;align-self:flex-end;margin:6px 0 10px auto">Plan all 4 days — food + viewpoints, mid-budget, not rushed.</div>
+        <div class="card proposal" style="margin-bottom:8px">
+          <div class="row between"><b style="font-size:12px">Proposed: Full 4-day plan</b><span class="pill teal">EUR580 · 0 conflicts</span></div>
+          <div class="tiny muted" style="margin-top:6px">9 stops balanced across days · grouped by neighborhood to cut travel</div>
+        </div>
+        <div class="day-row"><div class="num" style="background:#6366f1">D1</div><div class="meta"><div class="iname">Arrival + Alfama evening</div><div class="tiny muted">Check-in · Fado dinner</div></div><span class="pill teal">+2</span></div>
+        <div class="day-row"><div class="num" style="background:#0f766e">D2</div><div class="meta"><div class="iname">Belem day</div><div class="tiny muted">Tower · Jeronimos · market</div></div><span class="pill teal">+3</span></div>
+        <div class="day-row"><div class="num" style="background:#f97316">D3</div><div class="meta"><div class="iname">Viewpoints + markets</div><div class="tiny muted">2 miradouros · lunch</div></div><span class="pill teal">+2</span></div>
+        <div class="action-row">
+          <div class="mini-btn primary">Apply all</div>
+          <div class="mini-btn">Review day-by-day</div>
+        </div>
+      </div>
+      <div class="ai-dock">
+        <div class="row" style="gap:8px"><div class="ai-spark">✨</div><div class="tiny muted">Preview across all days. Apply per-day or all at once.</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">AI plans the whole trip</div><div class="p">Trip-level proposal · apply all or per day</div></div>
+  </div>
+
+</main>
+
+<footer class="note">
+  Wander · whole-trip companion to <code>option-4-map-ai-planner.html</code>. The only new concept is a <b>Day | Trip</b> scope toggle — the map, timeline, and AI components are reused as-is.
+</footer>
+
+</body>
+</html>

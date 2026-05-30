@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# .NET / backend (Wander.Api)
+# ---------------------------------------------------------------------------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.userosscache
+*.dbmdl
+project.lock.json
+artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.csproj.user
+
+# .NET local secrets (defense in depth; user-secrets live outside the repo anyway)
+secrets.json
+
+# ---------------------------------------------------------------------------
+# Node / Expo / React Native (app)
+# ---------------------------------------------------------------------------
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ---------------------------------------------------------------------------
+# Environment / secrets
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.local
+
+# ---------------------------------------------------------------------------
+# OS / editor cruft
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Project-specific scratch files
+# ---------------------------------------------------------------------------
+docs/_sicily_extracted.txt

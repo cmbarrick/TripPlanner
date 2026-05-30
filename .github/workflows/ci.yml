@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Restore backend
+        run: dotnet restore backend/Wander.sln
+
+      - name: Build backend
+        run: dotnet build backend/Wander.sln --configuration Release --no-restore
+
+      - name: Run backend tests
+        run: dotnet test backend/Wander.sln --configuration Release --no-build
+
+      - name: Install app dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Lint app
+        run: npm run lint
+        working-directory: app
+
+      - name: Typecheck app
+        run: npm run typecheck
+        working-directory: app
+
+      - name: Run app tests
+        run: npm run test
+        working-directory: app
+
+      - name: Install EF CLI
+        run: dotnet tool install --global dotnet-ef --version 9.0.16
+
+      - name: Verify EF migrations compile
+        env:
+          PATH: ${{ env.PATH }}:/home/runner/.dotnet/tools
+        run: >
+          dotnet ef migrations script
+          --project backend/Wander.Api/Wander.Api.csproj
+          --startup-project backend/Wander.Api/Wander.Api.csproj
+          --idempotent
+          --no-build

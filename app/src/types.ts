@@ -1,0 +1,64 @@
+// Mirrors the Wander API contract (System.Text.Json camelCase).
+
+export type ItineraryItemType =
+  | 'Flight'
+  | 'Lodging'
+  | 'Food'
+  | 'Activity'
+  | 'Transport';
+
+export interface ItineraryItem {
+  id: string;
+  dayId: string;
+  type: ItineraryItemType;
+  title: string;
+  locationName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  startTime?: string | null; // "HH:mm:ss"
+  endTime?: string | null;
+  cost?: number | null;
+  currency: string;
+  confirmationNo?: string | null;
+  bookingUrl?: string | null; // e.g. GetYourGuide voucher / reservation link
+  notes?: string | null;
+  sortOrder: number;
+}
+
+export interface PackingItem {
+  id: string;
+  dayId: string;
+  name: string;
+  isPacked: boolean;
+}
+
+export interface Day {
+  id: string;
+  tripId: string;
+  dayNumber: number;
+  date: string; // "yyyy-MM-dd"
+  weatherSummary?: string | null;
+  weatherHighC?: number | null;
+  weatherIcon?: string | null;
+  items: ItineraryItem[];
+  packingItems?: PackingItem[];
+}
+
+export interface Trip {
+  id: string;
+  ownerId: string;
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  travelers: number;
+  coverTheme: string;
+  estimatedCost: number;
+  currency: string;
+  /** IANA time zone of the destination (e.g. "Europe/Rome"); used for notifications. */
+  timeZoneId?: string | null;
+  days: Day[];
+  createdAt: string;
+  updatedAt: string;
+  nights: number;
+}

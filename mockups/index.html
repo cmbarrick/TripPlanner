@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wander — Trip Planning App · Mockups</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="page-head">
+  <div class="brandrow">
+    <div class="logo">✦</div>
+    <h1>Wander — UI Mockups</h1>
+  </div>
+  <p class="sub">High-fidelity screen mockups for the solo-traveler trip planner (iOS / Android / Web from one codebase).
+  These are static design references that map to the build phases in <code>/phases</code>.</p>
+  <div class="legend">
+    <span class="chip"><b>Phase 0</b> · Onboarding · Sign in</span>
+    <span class="chip"><b>Phase 1</b> · My Trips · Itinerary · Add Activity · Calendar</span>
+    <span class="chip"><b>Phase 2</b> · Map · Weather</span>
+    <span class="chip"><b>Phase 3</b> · AI Assistant</span>
+    <span class="chip"><b>Phase 4</b> · Offline</span>
+  </div>
+</header>
+
+<main class="board">
+
+  <!-- 1. ONBOARDING -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="ob">
+        <div class="big-logo">✦</div>
+        <h2>Plan trips you'll<br/>actually love</h2>
+        <p>Build day-by-day itineraries, see them on a map and calendar, and let AI help fill the gaps — even offline.</p>
+        <div class="spacer"></div>
+        <div class="btns">
+          <div class="btn primary">Get started</div>
+          <div class="btn ghost">I already have an account</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Onboarding</div><div class="p">Phase 0</div></div>
+  </div>
+
+  <!-- 2. SIGN IN -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div><div class="title">Welcome back</div><div class="sub">Sign in to continue planning</div></div></div>
+      <div class="body">
+        <div class="field"><label>Email</label><div class="control placeholder">you@email.com</div></div>
+        <div class="field"><label>Password</label><div class="control placeholder">••••••••</div></div>
+        <div class="btn dark" style="margin-top:6px">Sign in</div>
+        <div style="text-align:center; color:var(--ink-400); font-size:11px; margin:16px 0">or continue with</div>
+        <div class="btn" style="background:#fff;border:1px solid var(--line)"> Continue with Google</div>
+        <div class="btn" style="background:#fff;border:1px solid var(--line);margin-top:10px"> Continue with Apple</div>
+        <p class="tiny muted" style="text-align:center;margin-top:18px">Protected by Row-Level Security.<br/>Your trips are private to you.</p>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Sign in</div><div class="p">Phase 0 · email + OAuth</div></div>
+  </div>
+
+  <!-- 3. MY TRIPS -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div><div class="title">My Trips</div><div class="sub">2 upcoming · 1 past</div></div><div class="icon-btn">🔍</div></div>
+      <div class="body">
+        <div class="cover lisbon" style="margin-bottom:14px">
+          <span class="badge">In 12 days · 4 nights</span>
+          <div class="ct">Lisbon, Portugal</div>
+          <div class="cs">Jun 10 – Jun 14 · Solo</div>
+        </div>
+        <div class="cover kyoto" style="margin-bottom:14px">
+          <span class="badge">In 2 months · 6 nights</span>
+          <div class="ct">Kyoto, Japan</div>
+          <div class="cs">Aug 3 – Aug 9 · Solo</div>
+        </div>
+        <div class="cover alps" style="opacity:.7">
+          <span class="badge">Past</span>
+          <div class="ct">Swiss Alps</div>
+          <div class="cs">Mar 1 – Mar 5</div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tabbar">
+        <div class="tab active"><div class="ic">🧭</div>Trips</div>
+        <div class="tab"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">My Trips</div><div class="p">Phase 1 · trip list</div></div>
+  </div>
+
+  <!-- 4. ITINERARY -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">Jun 10–14 · €620 est.</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="day-head"><span class="d">Day 1 · Tue</span><span class="w">Jun 10</span><span class="weather">☀️ 27°</span></div>
+        <div class="tl">
+          <div class="item stay">
+            <div class="time">15:00</div>
+            <div class="card" style="margin-top:2px">
+              <div class="iname">Check in · Casa do Bairro</div>
+              <div class="iloc">📍 Alfama · conf. #BK2291</div>
+            </div>
+          </div>
+          <div class="travel">↳ 12 min walk</div>
+          <div class="item food">
+            <div class="time">19:30</div>
+            <div class="card" style="margin-top:2px">
+              <div class="row between"><div class="iname">Dinner · Time Out Market</div><span class="pill orange">Food</span></div>
+              <div class="iloc">📍 Cais do Sodré · €25</div>
+            </div>
+          </div>
+        </div>
+        <div class="day-head"><span class="d">Day 2 · Wed</span><span class="w">Jun 11</span><span class="weather">⛅ 24°</span></div>
+        <div class="tl">
+          <div class="item">
+            <div class="time">10:00</div>
+            <div class="card" style="margin-top:2px">
+              <div class="iname">Belém Tower & Jerónimos</div>
+              <div class="iloc">📍 Belém · €18</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-fade"></div>
+      <div class="fab">+</div>
+      <div class="tabbar">
+        <div class="tab active"><div class="ic">🧭</div>Trips</div>
+        <div class="tab"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Trip · Itinerary</div><div class="p">Phase 1 + weather (P2)</div></div>
+  </div>
+
+  <!-- 5. ADD ACTIVITY -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">✕</div><div class="title" style="font-size:17px">Add to itinerary</div></div><div class="pill teal" style="padding:7px 12px">Save</div></div>
+      <div class="body">
+        <div class="field"><label>Type</label>
+          <div class="seg"><div class="opt">✈️ Flight</div><div class="opt">🛏 Stay</div><div class="opt on">🎟 Activity</div><div class="opt">🍽 Food</div></div>
+        </div>
+        <div class="field"><label>Title</label><div class="control">Belém Tower & Jerónimos</div></div>
+        <div class="field"><label>Place</label><div class="control">📍 Belém, Lisbon <span class="pill teal" style="margin-left:auto">via search</span></div></div>
+        <div class="row" style="gap:10px">
+          <div class="field" style="flex:1"><label>Date</label><div class="control">Jun 11</div></div>
+          <div class="field" style="flex:1"><label>Time</label><div class="control">10:00</div></div>
+        </div>
+        <div class="row" style="gap:10px">
+          <div class="field" style="flex:1"><label>Cost</label><div class="control">€18</div></div>
+          <div class="field" style="flex:1"><label>Conf. #</label><div class="control placeholder">optional</div></div>
+        </div>
+        <div class="field"><label>Notes</label><div class="control placeholder" style="height:54px;align-items:flex-start">Buy combined ticket online to skip the line…</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Add Activity</div><div class="p">Phase 1 · structured place (P2)</div></div>
+  </div>
+
+  <!-- 6. CALENDAR -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div><div class="title">Calendar</div><div class="sub">June 2026 · Lisbon</div></div><div class="icon-btn">▦</div></div>
+      <div class="body">
+        <div class="card" style="margin-bottom:12px">
+          <div class="cal-week" style="margin-bottom:6px">
+            <div class="dow">M</div><div class="dow">T</div><div class="dow">W</div><div class="dow">T</div><div class="dow">F</div><div class="dow">S</div><div class="dow">S</div>
+          </div>
+          <div class="cal-week">
+            <div class="day">9</div><div class="day on">10</div><div class="day has">11</div><div class="day has">12</div><div class="day has">13</div><div class="day has">14</div><div class="day">15</div>
+          </div>
+        </div>
+        <div class="row between" style="margin:4px 2px 8px"><b style="font-size:13px">Tue, Jun 10</b><span class="tiny muted">Agenda</span></div>
+        <div class="agenda">
+          <div class="slot"><div class="hr">15:00</div><div class="ev"><div class="iname" style="font-size:12px">Check in · Casa do Bairro</div><div class="tiny muted">Alfama</div></div></div>
+          <div class="slot"><div class="hr">19:00</div><div class="ev conflict"><div class="row between"><div class="iname" style="font-size:12px">Dinner · Time Out</div><span class="pill" style="background:#fee2e2;color:#dc2626">Overlap</span></div><div class="tiny" style="color:#dc2626">Conflicts with Fado show 19:30</div></div></div>
+          <div class="slot"><div class="hr">19:30</div><div class="ev food"><div class="iname" style="font-size:12px">Fado show · Alfama</div><div class="tiny muted">€30</div></div></div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="ic">🧭</div>Trips</div>
+        <div class="tab active"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Calendar + conflicts</div><div class="p">Phase 1</div></div>
+  </div>
+
+  <!-- 7. MAP -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div class="title" style="font-size:17px">Day 2 · Map</div></div><div class="icon-btn">⛶</div></div>
+      <div class="map">
+        <svg class="route" viewBox="0 0 300 460" preserveAspectRatio="none">
+          <path d="M70 120 C 120 160, 90 240, 180 250 S 210 360, 150 380" fill="none" stroke="#0f766e" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round"/>
+        </svg>
+        <div class="pin stay" style="left:56px; top:104px"><span>A</span></div>
+        <div class="pin" style="left:166px; top:234px"><span>B</span></div>
+        <div class="pin food" style="left:136px; top:362px"><span>C</span></div>
+        <div class="map-card">
+          <div class="row between"><div class="iname">B · Belém Tower</div><span class="pill teal">10:00</span></div>
+          <div class="iloc" style="margin-top:2px">📍 Belém · €18</div>
+          <div class="travel" style="margin-top:8px">🚶 18 min · 🚇 12 min to next stop</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab active"><div class="ic">🧭</div>Trips</div>
+        <div class="tab"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Map view</div><div class="p">Phase 2 · pins + travel time</div></div>
+  </div>
+
+  <!-- 8. AI ASSISTANT -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="logo" style="width:30px;height:30px;border-radius:9px;font-size:15px">✨</div><div><div class="title" style="font-size:16px">Assistant</div><div class="sub">Editing: Lisbon</div></div></div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="chat">
+          <div class="bubble me">Plan day 3 — I like food markets and viewpoints, mid-budget.</div>
+          <div class="bubble ai">Here's a relaxed Day 3 with two miradouros and a market lunch:
+            <div class="ai-action">✓ Added 3 stops to Day 3</div>
+          </div>
+          <div class="card" style="padding:10px">
+            <div class="tiny muted">10:30 · Miradouro da Senhora do Monte</div>
+            <div class="tiny muted">13:00 · Mercado de Campo de Ourique</div>
+            <div class="tiny muted">17:00 · Miradouro de Santa Catarina</div>
+          </div>
+          <div class="bubble me">Make the afternoon lighter.</div>
+          <div class="bubble ai">Done — removed one stop and added a café break.
+            <div class="ai-action">↺ Undo · ✓ Saved</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:0 14px 8px"><div class="suggest"><div class="s">Find rainy-day options</div><div class="s">Optimize my route</div></div></div>
+      <div class="composer"><div class="input">Ask Wander to plan or tweak…</div><div class="send">↑</div></div>
+    </div></div>
+    <div class="caption"><div class="t">AI Assistant</div><div class="p">Phase 3 · edits the real trip</div></div>
+  </div>
+
+  <!-- 9. OFFLINE STATE -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">✈ ▮</span></div>
+      <div class="appbar"><div><div class="title">My Trips</div><div class="sub">Offline mode</div></div><div class="icon-btn">🔍</div></div>
+      <div class="body">
+        <div class="offline">✈️ You're offline — changes saved locally, will sync when reconnected. <span class="pill warn" style="margin-left:auto">2 pending</span></div>
+        <div class="cover lisbon" style="margin-bottom:14px">
+          <span class="badge">Available offline ✓</span>
+          <div class="ct">Lisbon, Portugal</div>
+          <div class="cs">Jun 10 – Jun 14 · Solo</div>
+        </div>
+        <div class="card">
+          <div class="row between"><b style="font-size:13px">Sync status</b><span class="pill warn">Pending</span></div>
+          <div class="tiny muted" style="margin-top:6px">✓ Itinerary cached · ✓ Map tiles cached</div>
+          <div class="tiny muted" style="margin-top:3px">↻ 2 edits queued (last-write-wins on reconnect)</div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tabbar">
+        <div class="tab active"><div class="ic">🧭</div>Trips</div>
+        <div class="tab"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Offline mode</div><div class="p">Phase 4 · local-first sync</div></div>
+  </div>
+
+</main>
+
+<footer class="note">
+  Wander · static mockups · open <code>index.html</code> in any browser. See <code>/docs/project-plan.md</code> and <code>/phases</code> for the build plan.
+</footer>
+
+</body>
+</html>

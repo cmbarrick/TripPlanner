@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wander - Map + AI Planner (Recommended)</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  /* view toggle */
+  .mai .viewseg { display: flex; gap: 4px; background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+  .mai .viewseg .v { flex: 1; text-align: center; font-size: 11px; font-weight: 700; padding: 6px 0; border-radius: 9px; color: var(--ink-600); }
+  .mai .viewseg .v.on { background: var(--brand); color: #fff; }
+
+  /* travel chip */
+  .mai .travel-chip { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 4px 8px; background: #ecfeff; color: #155e75; border: 1px solid #a5f3fc; }
+
+  /* compact split map */
+  .mai .split-map { height: 120px; border-radius: 14px; border: 1px solid var(--line); position: relative; overflow: hidden; background:
+    linear-gradient(0deg, rgba(15,23,42,.04) 1px, transparent 1px) 0 0/100% 20px,
+    linear-gradient(90deg, rgba(15,23,42,.04) 1px, transparent 1px) 0 0/20px 100%,
+    radial-gradient(120px 70px at 25% 35%, #bbf7d0 0%, transparent 70%),
+    radial-gradient(140px 90px at 78% 70%, #bae6fd 0%, transparent 70%),
+    #eef2f7; }
+
+  /* AI dock (persistent layer) */
+  .mai .ai-dock { background: var(--white); border-top: 1px solid var(--line); padding: 10px 14px; }
+  .mai .ai-dock .row-head { display: flex; align-items: center; gap: 8px; }
+  .mai .ai-spark { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-size: 13px;
+    background: linear-gradient(135deg, var(--brand-600), #0ea5e9); }
+  .mai .ai-input { margin-top: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; font-size: 12px; color: var(--ink-400); }
+
+  /* proposal preview */
+  .mai .proposal { border-left: 3px solid #0ea5e9; background: #f8fbff; }
+  .mai .ghost { opacity: .9; }
+  .mai .ghost .card { border-style: dashed; background: #f8fbff; }
+  .mai .ghost-pill { font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: #e0f2fe; color: #0369a1; }
+  .mai .action-row { display: flex; gap: 8px; margin-top: 10px; }
+  .mai .mini-btn { flex: 1; text-align: center; font-size: 12px; font-weight: 700; padding: 9px 0; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink-600); }
+  .mai .mini-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+  /* proposed (dashed) route overlay on map */
+  .mai .ai-route { stroke: #0ea5e9; stroke-width: 3; stroke-dasharray: 1 7; }
+  .mai .pin.ai { background: #0ea5e9; }
+  .mai .ai-chip-float { position: absolute; left: 14px; top: 14px; background: rgba(255,255,255,.92); backdrop-filter: blur(4px); border: 1px solid #bae6fd; color: #0369a1; font-size: 11px; font-weight: 700; padding: 6px 11px; border-radius: 999px; }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <div class="brandrow">
+    <div class="logo">✦</div>
+    <h1>Recommended - Map + AI Planner</h1>
+  </div>
+  <p class="sub">A single experience that fuses the two directions you liked: a Timeline/Split/Map <b>view toggle</b> plus a persistent <b>AI layer</b> that previews its proposals on the map and timeline before you apply them.</p>
+  <div class="legend">
+    <span class="chip"><b>Map</b> · view toggle + transit context</span>
+    <span class="chip"><b>AI</b> · preview, apply, undo</span>
+    <span class="chip"><b>Low complexity</b> · one screen, not 3 layouts</span>
+  </div>
+</header>
+
+<main class="board mai">
+
+  <!-- 1. SPLIT VIEW + AI DOCK COLLAPSED -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">Jun 10-14 · EUR620 est.</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="viewseg" style="margin-bottom:10px"><div class="v">Timeline</div><div class="v on">Split</div><div class="v">Map</div></div>
+        <div class="day-head"><span class="d">Day 2 · Wed</span><span class="w">Jun 11</span><span class="weather">⛅ 24C</span></div>
+        <div class="tl">
+          <div class="item">
+            <div class="time">10:00</div>
+            <div class="card"><div class="iname">Belem Tower</div><div class="iloc">Belem · EUR18</div>
+              <div style="margin-top:8px"><span class="travel-chip">12 min metro to next stop</span></div></div>
+          </div>
+          <div class="item food">
+            <div class="time">13:00</div>
+            <div class="card"><div class="iname">Market Lunch</div><div class="iloc">Time Out Market · EUR25</div></div>
+          </div>
+        </div>
+        <div class="split-map" style="margin-top:4px">
+          <svg class="route" viewBox="0 0 300 130" preserveAspectRatio="none">
+            <path d="M50 40 C 110 70, 150 30, 220 90" fill="none" stroke="#0f766e" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round"/>
+          </svg>
+          <div class="pin stay" style="left:40px; top:28px"><span>A</span></div>
+          <div class="pin food" style="left:208px; top:78px"><span>B</span></div>
+        </div>
+      </div>
+      <div class="ai-dock">
+        <div class="row-head"><div class="ai-spark">✨</div><div class="ai-input" style="flex:1;margin-top:0">Ask Wander to plan or tweak this day…</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Split view + AI dock</div><div class="p">One screen: timeline, map, and assistant</div></div>
+  </div>
+
+  <!-- 2. AI PROPOSAL PREVIEW (timeline ghosts) -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">AI is proposing changes</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="card proposal" style="margin-bottom:10px">
+          <div class="row between"><b style="font-size:12px">Proposed: Relaxed Day 3</b><span class="pill teal">+EUR42 · +0 conflicts</span></div>
+          <div class="tiny muted" style="margin-top:6px">2 viewpoints + a market lunch · optimized walking route</div>
+        </div>
+        <div class="day-head"><span class="d">Day 3 · Thu</span><span class="w">Jun 12</span></div>
+        <div class="tl ghost">
+          <div class="item">
+            <div class="time">10:30</div>
+            <div class="card"><div class="row between"><div class="iname">Miradouro da Senhora do Monte</div><span class="ghost-pill">Proposed</span></div><div class="iloc">Viewpoint · best morning light</div></div>
+          </div>
+          <div class="item food">
+            <div class="time">13:00</div>
+            <div class="card"><div class="row between"><div class="iname">Mercado de Campo de Ourique</div><span class="ghost-pill">Proposed</span></div><div class="iloc">Market lunch · EUR22</div></div>
+          </div>
+        </div>
+        <div class="action-row">
+          <div class="mini-btn primary">Apply</div>
+          <div class="mini-btn">Edit</div>
+          <div class="mini-btn">Discard</div>
+        </div>
+      </div>
+      <div class="ai-dock">
+        <div class="row-head"><div class="ai-spark">✨</div><div class="tiny muted">Preview shown on timeline and map. Nothing saved yet.</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">AI proposal preview</div><div class="p">Ghost items + apply / edit / discard</div></div>
+  </div>
+
+  <!-- 3. SAME PROPOSAL ON THE MAP -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Day 3 · Map preview</div><div class="sub">Proposed route in blue</div></div></div><div class="icon-btn">⛶</div></div>
+      <div class="map">
+        <div class="ai-chip-float">✨ AI proposed route · 3 stops</div>
+        <svg class="route" viewBox="0 0 300 460" preserveAspectRatio="none">
+          <path class="ai-route" d="M70 120 C 120 160, 90 240, 180 250 S 210 360, 150 380" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="pin ai" style="left:56px; top:104px"><span>1</span></div>
+        <div class="pin ai" style="left:166px; top:234px"><span>2</span></div>
+        <div class="pin ai" style="left:136px; top:362px"><span>3</span></div>
+        <div class="map-card">
+          <div class="row between"><div class="iname">Apply this plan?</div><span class="pill teal">19 min walking</span></div>
+          <div class="tiny muted" style="margin-top:6px">Low-friction route · no time conflicts · EUR42 added</div>
+          <div class="action-row"><div class="mini-btn primary">Apply</div><div class="mini-btn">Edit</div></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">Proposal on the map</div><div class="p">Same AI plan, geographic confidence</div></div>
+  </div>
+
+  <!-- 4. AFTER APPLY: PROVENANCE + UNDO -->
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">Applied · reversible</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="offline" style="background:#ecfeff;border-color:#a5f3fc;color:#155e75">✓ Applied AI plan to Day 3 <span class="pill teal" style="margin-left:auto">Undo</span></div>
+        <div class="day-head"><span class="d">Day 3 · Thu</span><span class="w">Jun 12</span><span class="weather">☀️ 26C</span></div>
+        <div class="tl">
+          <div class="item">
+            <div class="time">10:30</div>
+            <div class="card"><div class="row between"><div class="iname">Miradouro da Senhora do Monte</div><span class="pill teal">AI added</span></div><div class="iloc">Viewpoint · Why this? best light</div></div>
+          </div>
+          <div class="item food">
+            <div class="time">13:00</div>
+            <div class="card"><div class="row between"><div class="iname">Mercado lunch</div><span class="pill teal">AI added</span></div><div class="iloc">Campo de Ourique · EUR22</div>
+              <div style="margin-top:8px"><span class="travel-chip">9 min walk to viewpoint</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="ai-dock">
+        <div class="row-head"><div class="ai-spark">✨</div><div class="ai-input" style="flex:1;margin-top:0">Make the afternoon lighter…</div></div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">After apply</div><div class="p">AI provenance + one-tap undo</div></div>
+  </div>
+
+</main>
+
+<footer class="note">
+  Wander · recommended direction · fuses Map (Option 2) + AI (Option 3). The "layout choice" becomes a lightweight Timeline/Split/Map view toggle, not three separate UIs.
+</footer>
+
+</body>
+</html>

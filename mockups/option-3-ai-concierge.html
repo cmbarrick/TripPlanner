@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wander - Option 3 AI Concierge</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .ai .proposal { border-left: 3px solid #0ea5e9; background: #f8fbff; }
+  .ai .activity-rail { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 8px 10px; background: #fff; }
+  .ai .action-row { display: flex; gap: 8px; margin-top: 8px; }
+  .ai .mini-btn { font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink-600); }
+  .ai .mini-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+</style>
+</head>
+<body>
+<header class="page-head">
+  <div class="brandrow">
+    <div class="logo">✦</div>
+    <h1>Option 3 - AI Concierge</h1>
+  </div>
+  <p class="sub">Assistant-led planning with explicit apply/edit controls and transparent trip-change history.</p>
+</header>
+
+<main class="board ai">
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="logo" style="width:30px;height:30px;border-radius:9px;font-size:15px">✨</div><div><div class="title" style="font-size:16px">Assistant</div><div class="sub">Editing: Lisbon</div></div></div></div>
+      <div class="body" style="overflow:hidden">
+        <div class="chat">
+          <div class="bubble me">Plan day 3 with viewpoints and food markets.</div>
+          <div class="card proposal">
+            <div class="row between"><b style="font-size:12px">AI Proposal: Relaxed Day 3</b><span class="pill teal">+EUR42</span></div>
+            <div class="tiny muted" style="margin-top:6px">3 stops · medium pace · optimized route</div>
+            <div class="action-row">
+              <div class="mini-btn primary">Apply</div>
+              <div class="mini-btn">Edit</div>
+              <div class="mini-btn">Save later</div>
+            </div>
+          </div>
+          <div class="activity-rail">
+            <div class="tiny muted">Trip changed</div>
+            <div class="tiny" style="margin-top:4px">+ Added 13:00 market lunch</div>
+            <div class="tiny">+ Added 17:00 viewpoint</div>
+          </div>
+        </div>
+      </div>
+      <div class="composer"><div class="input">Ask Wander to plan or tweak...</div><div class="send">↑</div></div>
+    </div></div>
+    <div class="caption"><div class="t">Assistant</div><div class="p">Structured proposals with controls</div></div>
+  </div>
+
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div class="row"><div class="icon-btn">‹</div><div><div class="title" style="font-size:17px">Lisbon</div><div class="sub">AI edits visible and reversible</div></div></div><div class="icon-btn">⋯</div></div>
+      <div class="body">
+        <div class="day-head"><span class="d">Day 3 · Thu</span><span class="w">Jun 12</span><span class="pill warn">AI batch #14</span></div>
+        <div class="tl">
+          <div class="item">
+            <div class="time">10:30</div>
+            <div class="card"><div class="row between"><div class="iname">Miradouro da Senhora do Monte</div><span class="pill teal">AI added</span></div><div class="iloc">Viewpoint · Why this? good morning light</div></div>
+          </div>
+          <div class="item food">
+            <div class="time">13:00</div>
+            <div class="card"><div class="row between"><div class="iname">Mercado lunch</div><span class="pill teal">AI added</span></div><div class="iloc">Campo de Ourique · EUR22</div></div>
+          </div>
+        </div>
+        <div class="btn dark" style="margin-top:8px">Undo last AI batch</div>
+      </div>
+      <div class="fab">+</div>
+    </div></div>
+    <div class="caption"><div class="t">Itinerary</div><div class="p">AI provenance + undo at day level</div></div>
+  </div>
+
+  <div class="frame">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="dots">●●● ▮</span></div>
+      <div class="appbar"><div><div class="title">My Trips</div><div class="sub">Needs decisions</div></div><div class="icon-btn">🔔</div></div>
+      <div class="body">
+        <div class="card" style="margin-bottom:12px">
+          <div class="row between"><b style="font-size:13px">Lisbon</b><span class="pill warn">2 pending</span></div>
+          <div class="tiny muted" style="margin-top:6px">Assistant proposed a rainy-day backup and route change.</div>
+          <div class="action-row">
+            <div class="mini-btn primary">Review</div>
+            <div class="mini-btn">Dismiss</div>
+          </div>
+        </div>
+        <div class="cover lisbon">
+          <span class="badge">In 12 days · 4 nights</span>
+          <div class="ct">Lisbon, Portugal</div>
+          <div class="cs">Jun 10 - Jun 14 · Solo</div>
+        </div>
+      </div>
+      <div class="fab">+</div>
+      <div class="tabbar">
+        <div class="tab active"><div class="ic">🧭</div>Trips</div>
+        <div class="tab"><div class="ic">🗓️</div>Calendar</div>
+        <div class="tab"><div class="ic">✨</div>Assistant</div>
+        <div class="tab"><div class="ic">👤</div>Profile</div>
+      </div>
+    </div></div>
+    <div class="caption"><div class="t">My Trips</div><div class="p">Pending AI decisions surfaced</div></div>
+  </div>
+</main>
+
+</body>
+</html>
