@@ -1,8 +1,29 @@
-import { Trip } from './types';
+import { Trip, Day, ItineraryItem, ItineraryItemStatus } from './types';
+
+// Mock items omit the durable trip link and lifecycle status; normalizeTrips() fills them in
+// (tripId from the parent trip, status defaulting to "Confirmed") so the literals stay readable.
+type MockItem = Omit<ItineraryItem, 'tripId' | 'status'> & { status?: ItineraryItemStatus };
+type MockDay = Omit<Day, 'items'> & { items: MockItem[] };
+type MockTrip = Omit<Trip, 'days' | 'unscheduledItems'> & {
+  days: MockDay[];
+  unscheduledItems?: MockItem[];
+};
+
+function normalizeItems(items: MockItem[], tripId: string): ItineraryItem[] {
+  return items.map((it) => ({ ...it, tripId, status: it.status ?? 'Confirmed' }));
+}
+
+function normalizeTrips(trips: MockTrip[]): Trip[] {
+  return trips.map((trip) => ({
+    ...trip,
+    days: trip.days.map((d) => ({ ...d, items: normalizeItems(d.items, trip.id) })),
+    unscheduledItems: trip.unscheduledItems ? normalizeItems(trip.unscheduledItems, trip.id) : [],
+  }));
+}
 
 // Local fallback data so the UI renders even when the API is unreachable.
 // Mirrors the API's seeded trips.
-export const mockTrips: Trip[] = [
+export const mockTrips: Trip[] = normalizeTrips([
   {
     id: '5111c1a0-0000-4000-8000-00000000515c',
     ownerId: 'demo-user',
@@ -18,6 +39,11 @@ export const mockTrips: Trip[] = [
     nights: 16,
     createdAt: '',
     updatedAt: '',
+    unscheduledItems: [
+      { id: 'sic-w1', dayId: null, type: 'Activity', status: 'Wishlist', title: 'Valley of the Temples', locationName: 'Agrigento', cost: 12, currency: 'EUR', sortOrder: 0 },
+      { id: 'sic-w2', dayId: null, type: 'Activity', status: 'Tentative', title: 'Mount Etna sunset jeep tour', locationName: 'Mount Etna', cost: 95, currency: 'EUR', sortOrder: 1 },
+      { id: 'sic-w3', dayId: null, type: 'Food', status: 'Wishlist', title: 'Granita & brioche at a local bar', locationName: 'Catania', cost: null, currency: 'EUR', sortOrder: 2 },
+    ],
     days: [
       {
         id: 'sic-d2', tripId: '5111c1a0-0000-4000-8000-00000000515c', dayNumber: 2, date: '2026-05-14',
@@ -111,4 +137,4 @@ export const mockTrips: Trip[] = [
     updatedAt: '',
     days: [],
   },
-];
+]);

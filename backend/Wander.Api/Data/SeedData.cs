@@ -35,6 +35,7 @@ public static class SeedData
                 foreach (var item in day.Items)
                 {
                     item.Id = Guid.NewGuid();
+                    item.TripId = tripId;
                     item.DayId = dayId;
                     item.OwnerId = ownerId;
                     item.CreatedAt = trip.CreatedAt;
@@ -51,6 +52,19 @@ public static class SeedData
                     packingItem.UpdatedAt = trip.CreatedAt;
                     packingItem.DeletedAt = null;
                 }
+            }
+
+            for (var i = 0; i < trip.UnscheduledItems.Count; i++)
+            {
+                var item = trip.UnscheduledItems[i];
+                item.Id = Guid.NewGuid();
+                item.TripId = tripId;
+                item.DayId = null;
+                item.OwnerId = ownerId;
+                item.SortOrder = i;
+                item.CreatedAt = trip.CreatedAt;
+                item.UpdatedAt = trip.CreatedAt;
+                item.DeletedAt = null;
             }
         }
 
@@ -78,6 +92,13 @@ public static class SeedData
             Currency = "EUR",
             TimeZoneId = "Europe/Rome"
         };
+
+        // Ideas backlog — places we want to fit in but haven't pinned to a day yet.
+        AddWishlist(trip, ItineraryItemType.Activity, "Valley of the Temples", "Agrigento",
+            cost: 12m, lat: 37.2900, lng: 13.5870);
+        AddWishlist(trip, ItineraryItemType.Activity, "Mount Etna sunset jeep tour", "Mount Etna",
+            status: ItineraryItemStatus.Tentative, cost: 95m, lat: 37.7510, lng: 14.9934);
+        AddWishlist(trip, ItineraryItemType.Food, "Granita & brioche at a local bar", "Catania");
 
         var d1 = NewDay(trip, 1, new DateOnly(2026, 5, 13), "Travel day", 22, "cloud-sun");
         AddItem(d1, ItineraryItemType.Flight, "DL4976 Indianapolis → JFK", "Indianapolis Intl (IND)",
@@ -367,6 +388,27 @@ public static class SeedData
             new TimeOnly(9, 0), cost: 210m, lat: 46.5474, lng: 7.9856);
 
         return trip;
+    }
+
+    /// <summary>Adds an unscheduled "idea" to the trip backlog (no day, no time).</summary>
+    private static void AddWishlist(Trip trip, ItineraryItemType type, string title, string location,
+        ItineraryItemStatus status = ItineraryItemStatus.Wishlist, decimal? cost = null,
+        double? lat = null, double? lng = null)
+    {
+        trip.UnscheduledItems.Add(new ItineraryItem
+        {
+            TripId = trip.Id,
+            DayId = null,
+            OwnerId = trip.OwnerId,
+            Type = type,
+            Status = status,
+            Title = title,
+            LocationName = location,
+            Cost = cost,
+            Latitude = lat,
+            Longitude = lng,
+            SortOrder = trip.UnscheduledItems.Count
+        });
     }
 
     private static Day NewDay(Trip trip, int number, DateOnly date, string weather, int highC, string icon)

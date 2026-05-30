@@ -5,13 +5,28 @@ namespace Wander.Api.Data;
 
 public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
 {
-    public IEnumerable<Trip> GetAll(string ownerId) =>
-        QueryTrips(ownerId)
-            .OrderBy(x => x.StartDate)
-            .ToList();
+    public IEnumerable<Trip> GetAll(string ownerId)
+    {
+        var trips = QueryTrips(ownerId).OrderBy(x => x.StartDate).ToList();
+        foreach (var trip in trips)
+            trip.UnscheduledItems = LoadBacklog(trip.Id, ownerId);
+        return trips;
+    }
 
-    public Trip? GetById(Guid id, string ownerId) =>
-        QueryTrips(ownerId).SingleOrDefault(x => x.Id == id);
+    public Trip? GetById(Guid id, string ownerId)
+    {
+        var trip = QueryTrips(ownerId).SingleOrDefault(x => x.Id == id);
+        if (trip is not null)
+            trip.UnscheduledItems = LoadBacklog(trip.Id, ownerId);
+        return trip;
+    }
+
+    private List<ItineraryItem> LoadBacklog(Guid tripId, string ownerId) =>
+        dbContext.ItineraryItems
+            .AsNoTracking()
+            .Where(x => x.TripId == tripId && x.OwnerId == ownerId && x.DayId == null && x.DeletedAt == null)
+            .OrderBy(x => x.SortOrder)
+            .ToList();
 
     public Trip Add(Trip trip)
     {
@@ -32,6 +47,7 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
             foreach (var item in day.Items)
             {
                 item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
+                item.TripId = trip.Id;
                 item.DayId = day.Id;
                 item.OwnerId = trip.OwnerId;
                 item.CreatedAt = trip.CreatedAt;
@@ -41,6 +57,20 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         }
 
         dbContext.Trips.Add(trip);
+
+        // Backlog items are [NotMapped] on Trip, so add them to the items set explicitly.
+        foreach (var item in trip.UnscheduledItems)
+        {
+            item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
+            item.TripId = trip.Id;
+            item.DayId = null;
+            item.OwnerId = trip.OwnerId;
+            item.CreatedAt = trip.CreatedAt;
+            item.UpdatedAt = trip.CreatedAt;
+            item.DeletedAt = null;
+            dbContext.ItineraryItems.Add(item);
+        }
+
         dbContext.SaveChanges();
         return trip;
     }
@@ -82,8 +112,8 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
             day.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        var dayIds = days.Select(x => x.Id).ToList();
-        var items = dbContext.ItineraryItems.Where(x => dayIds.Contains(x.DayId) && x.DeletedAt == null).ToList();
+        // Soft-delete every item on the trip — scheduled (on a day) and backlog (DayId == null) alike.
+        var items = dbContext.ItineraryItems.Where(x => x.TripId == id && x.DeletedAt == null).ToList();
         foreach (var item in items)
         {
             item.DeletedAt = DateTimeOffset.UtcNow;
@@ -105,6 +135,7 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
             return null;
 
         item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
+        item.TripId = tripId;
         item.DayId = dayId;
         item.OwnerId = ownerId;
         item.SortOrder = dbContext.ItineraryItems
@@ -121,6 +152,29 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         return item;
     }
 
+    public ItineraryItem? AddUnscheduledItem(Guid tripId, string ownerId, ItineraryItem item)
+    {
+        if (!TripIsOwned(tripId, ownerId))
+            return null;
+
+        item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
+        item.TripId = tripId;
+        item.DayId = null;
+        item.OwnerId = ownerId;
+        item.Status = item.Status == ItineraryItemStatus.Confirmed ? ItineraryItemStatus.Wishlist : item.Status;
+        item.SortOrder = dbContext.ItineraryItems
+            .Where(x => x.TripId == tripId && x.DayId == null && x.DeletedAt == null)
+            .Select(x => (int?)x.SortOrder)
+            .Max() is int max ? max + 1 : 0;
+        item.CreatedAt = DateTimeOffset.UtcNow;
+        item.UpdatedAt = item.CreatedAt;
+        item.DeletedAt = null;
+
+        dbContext.ItineraryItems.Add(item);
+        dbContext.SaveChanges();
+        return item;
+    }
+
     public ItineraryItem? UpdateItem(Guid tripId, string ownerId, Guid itemId, ItineraryItem updated)
     {
         var item = FindOwnedItem(tripId, ownerId, itemId);
@@ -128,6 +182,7 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
             return null;
 
         item.Type = updated.Type;
+        item.Status = updated.Status;
         item.Title = updated.Title;
         item.LocationName = updated.LocationName;
         item.Latitude = updated.Latitude;
@@ -139,6 +194,18 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         item.ConfirmationNo = updated.ConfirmationNo;
         item.BookingUrl = updated.BookingUrl;
         item.Notes = updated.Notes;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+        dbContext.SaveChanges();
+        return item;
+    }
+
+    public ItineraryItem? SetItemStatus(Guid tripId, string ownerId, Guid itemId, ItineraryItemStatus status)
+    {
+        var item = FindOwnedItem(tripId, ownerId, itemId);
+        if (item is null)
+            return null;
+
+        item.Status = status;
         item.UpdatedAt = DateTimeOffset.UtcNow;
         dbContext.SaveChanges();
         return item;
@@ -156,15 +223,21 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         return true;
     }
 
-    public bool ReorderDayItems(Guid tripId, string ownerId, Guid dayId, IReadOnlyList<Guid> orderedItemIds)
+    public bool ReorderDayItems(Guid tripId, string ownerId, Guid? dayId, IReadOnlyList<Guid> orderedItemIds)
     {
-        var day = dbContext.Days.SingleOrDefault(d =>
-            d.Id == dayId && d.TripId == tripId && d.OwnerId == ownerId && d.DeletedAt == null);
-        if (day is null)
+        if (!TripIsOwned(tripId, ownerId))
             return false;
 
+        if (dayId is { } id)
+        {
+            var dayExists = dbContext.Days.Any(d =>
+                d.Id == id && d.TripId == tripId && d.OwnerId == ownerId && d.DeletedAt == null);
+            if (!dayExists)
+                return false;
+        }
+
         var items = dbContext.ItineraryItems
-            .Where(i => i.DayId == dayId && i.DeletedAt == null)
+            .Where(i => i.TripId == tripId && i.DayId == dayId && i.DeletedAt == null)
             .ToList();
 
         var order = orderedItemIds
@@ -184,20 +257,23 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         return true;
     }
 
-    public ItineraryItem? MoveItem(Guid tripId, string ownerId, Guid itemId, Guid targetDayId)
+    public ItineraryItem? MoveItem(Guid tripId, string ownerId, Guid itemId, Guid? targetDayId)
     {
         var item = FindOwnedItem(tripId, ownerId, itemId);
         if (item is null)
             return null;
 
-        var targetDay = dbContext.Days.SingleOrDefault(d =>
-            d.Id == targetDayId && d.TripId == tripId && d.OwnerId == ownerId && d.DeletedAt == null);
-        if (targetDay is null)
-            return null;
+        if (targetDayId is { } dayId)
+        {
+            var targetExists = dbContext.Days.Any(d =>
+                d.Id == dayId && d.TripId == tripId && d.OwnerId == ownerId && d.DeletedAt == null);
+            if (!targetExists)
+                return null;
+        }
 
         item.DayId = targetDayId;
         item.SortOrder = dbContext.ItineraryItems
-            .Where(x => x.DayId == targetDayId && x.DeletedAt == null && x.Id != itemId)
+            .Where(x => x.TripId == tripId && x.DayId == targetDayId && x.DeletedAt == null && x.Id != itemId)
             .Select(x => (int?)x.SortOrder)
             .Max() is int max ? max + 1 : 0;
         item.UpdatedAt = DateTimeOffset.UtcNow;
@@ -270,17 +346,14 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
     private bool TripIsOwned(Guid tripId, string ownerId) =>
         dbContext.Trips.Any(t => t.Id == tripId && t.OwnerId == ownerId && t.DeletedAt == null);
 
+    // Ownership is enforced via the item's own TripId + OwnerId, so this also finds backlog
+    // (DayId == null) items, which no longer join through a Day.
     private ItineraryItem? FindOwnedItem(Guid tripId, string ownerId, Guid itemId) =>
-        dbContext.ItineraryItems
-            .Join(dbContext.Days, item => item.DayId, day => day.Id, (item, day) => new { item, day })
-            .Where(x =>
-                x.item.Id == itemId &&
-                x.item.DeletedAt == null &&
-                x.day.TripId == tripId &&
-                x.day.OwnerId == ownerId &&
-                x.day.DeletedAt == null)
-            .Select(x => x.item)
-            .SingleOrDefault();
+        dbContext.ItineraryItems.SingleOrDefault(x =>
+            x.Id == itemId &&
+            x.TripId == tripId &&
+            x.OwnerId == ownerId &&
+            x.DeletedAt == null);
 
     private PackingItem? FindOwnedPackingItem(Guid tripId, string ownerId, Guid packingItemId) =>
         dbContext.PackingItems

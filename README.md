@@ -22,7 +22,7 @@ Trip planning App/
 │  └─ privacy-consent-moderation.md    ← consent model, PII, UGC moderation, data rights
 ├─ mockups/                 ← static HTML/CSS UI mockups (open index.html)
 ├─ backend/                 ← ASP.NET Core Web API (.NET 9)
-│  └─ Wander.Api/           ← controllers, models, seeded in-memory data
+│  └─ Wander.Api/           ← controllers, models, EF Core + PostgreSQL, seed data
 ├─ app/                     ← Expo (React Native + Web) client
 │  └─ src/                  ← screens, components, api client, theme
 └─ phases/                  ← one folder per delivery phase, each with tasks + tests
@@ -63,18 +63,22 @@ npm run web        # opens http://localhost:8081 (or: npm run android / npm run 
   ownership checks are enforced per user, Entra JWT validation + dev bypass are wired, and local startup scripts
   boot API + Expo together. The client uses TanStack Query + Zustand, Expo Router entrypoint, Entra auth-session
   sign-in/sign-out scaffolding (with persisted token session), and includes Jest/RNTL plus Playwright smoke test scaffolding.
-- **Phase 1 (in progress) — Trip CRUD + My Trips list:** Users can **create, edit, and delete trips**
-  (API-backed, owner-enforced, with field validation), and the **My Trips** list now supports **search**
-  (title/destination), **sort** (date / name), **upcoming vs. past grouping**, and loading/empty/error states.
-  Mutations update the TanStack Query cache and invalidate the trips list. See
+- **Phase 1 (functionally complete) — Core itinerary & calendar:** The full manual planning loop works
+  end to end. Users can **create/edit/delete trips** (API-backed, owner-enforced, validated) and use the
+  **My Trips** list with search (title/destination), sort (date/name), upcoming/past grouping, and
+  loading/empty/error states. A unified **Trip Planner** (`List | Split | Map` view + `Day | Trip` scope
+  with drill-down) supports **itinerary items** (type, time, location, cost, confirmation #, notes) with
+  **add/edit/delete**, **reorder within a day**, and **move across days**; plus a **packing list**,
+  **conflict detection**, and **cost rollup** at day and trip scope. The **Calendar** has Day, Week
+  (multi-day), and Agenda views with tap-to-edit. Profile has **°F/°C** and **12h/24h** preferences that
+  persist on-device. A 16-day **Sicily** seed makes the loop demoable. Tests: backend **17**, app **16**,
+  web smoke green. _Remaining before exit: real test-Postgres integration run, literal touch
+  drag-and-drop, and the full E2E journey test._ See
   [`phases/phase-1-core-itinerary`](./phases/phase-1-core-itinerary) for the full progress log and local checklist.
-- **Prototype UX still present for feature scope:** Trip itinerary (timeline + weather + costs),
-  Add Activity, Calendar (day + **multi-day** views), Profile with °F/°C unit toggle, tab navigation.
-  Full inventory: [`phases/phase-minus-1-prototype`](./phases/phase-minus-1-prototype).
 - **Before building for real:** see the [pre-build checklist](./docs/pre-build-checklist.md)
   (decisions to lock, Azure/Entra/OpenAI provisioning, local Postgres, CI).
-- **Next:** continue Phase 1 (itinerary builder with drag-to-reorder, planner shell, calendar, conflict
-  detection); deployment/app-store work is deferred to **Phase 2.5**.
+- **Next:** close the Phase 1 exit gaps (test-Postgres run, drag-and-drop, full E2E), then begin
+  **Phase 2** (maps & integrations). Deployment/app-store work is deferred to **Phase 2.5**.
 
 ## What's next & handoff (read this if you're the next agent)
 

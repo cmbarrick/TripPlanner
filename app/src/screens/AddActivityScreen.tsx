@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
-import { Trip, ItineraryItem, ItineraryItemType } from '../types';
+import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus } from '../types';
 import { ItineraryItemInput } from '../api';
 import { colors, radius, itemEmoji } from '../theme';
 import { dayLabel } from '../format';
@@ -13,6 +13,12 @@ const TYPES: { key: ItineraryItemType; label: string }[] = [
   { key: 'Activity', label: 'Activity' },
   { key: 'Food', label: 'Food' },
   { key: 'Transport', label: 'Transit' },
+];
+
+const STATUSES: { key: ItineraryItemStatus; label: string }[] = [
+  { key: 'Confirmed', label: 'Confirmed' },
+  { key: 'Tentative', label: 'Tentative' },
+  { key: 'Wishlist', label: 'Wishlist' },
 ];
 
 export function AddActivityScreen({
@@ -30,15 +36,17 @@ export function AddActivityScreen({
   saving?: boolean;
   serverError?: string | null;
   onCancel: () => void;
-  onSubmit: (dayId: string, input: ItineraryItemInput, originalDayId?: string) => void;
+  onSubmit: (dayId: string | null, input: ItineraryItemInput, originalDayId?: string | null) => void;
   onDelete?: () => void;
   clock?: ClockPref;
 }) {
   const editing = !!item;
   const [type, setType] = useState<ItineraryItemType>(item?.type ?? 'Activity');
+  const [status, setStatus] = useState<ItineraryItemStatus>(item?.status ?? 'Confirmed');
   const [title, setTitle] = useState(item?.title ?? '');
   const [place, setPlace] = useState(item?.locationName ?? '');
-  const [dayId, setDayId] = useState(item?.dayId ?? trip.days[0]?.id ?? '');
+  // null = the trip backlog ("Ideas", no date).
+  const [dayId, setDayId] = useState<string | null>(item ? item.dayId : trip.days[0]?.id ?? null);
   const [startTime, setStartTime] = useState<string | null>(item?.startTime ?? null);
   const [endTime, setEndTime] = useState<string | null>(item?.endTime ?? null);
   const [cost, setCost] = useState(item?.cost != null ? String(item.cost) : '');
@@ -47,32 +55,35 @@ export function AddActivityScreen({
   const [notes, setNotes] = useState(item?.notes ?? '');
   const [error, setError] = useState('');
 
-  const canSave = title.trim().length > 0 && dayId.length > 0;
+  const scheduled = dayId != null;
+  const canSave = title.trim().length > 0;
 
   const handleSave = () => {
     if (!canSave) {
-      setError('Add a title and pick a day.');
+      setError('Add a title.');
       return;
     }
-    if (startTime && endTime && endTime < startTime) {
+    if (scheduled && startTime && endTime && endTime < startTime) {
       setError('End time must be after the start time.');
       return;
     }
     const input: ItineraryItemInput = {
       type,
+      status,
       title: title.trim(),
       locationName: place.trim() || null,
       latitude: item?.latitude ?? null,
       longitude: item?.longitude ?? null,
-      startTime,
-      endTime,
+      // Times only make sense for a scheduled (dated) item.
+      startTime: scheduled ? startTime : null,
+      endTime: scheduled ? endTime : null,
       cost: cost ? Number(cost) : null,
       currency: trip.currency,
       confirmationNo: conf.trim() || null,
       bookingUrl: normalizeUrl(link),
       notes: notes.trim() || null,
     };
-    onSubmit(dayId, input, item?.dayId);
+    onSubmit(dayId, input, item ? item.dayId : undefined);
   };
 
   return (
@@ -101,6 +112,19 @@ export function AddActivityScreen({
           </View>
         </Field>
 
+        <Field label="Status">
+          <View style={s.seg}>
+            {STATUSES.map((st) => {
+              const on = st.key === status;
+              return (
+                <Pressable key={st.key} style={[s.statusOpt, on && s.optOn]} onPress={() => setStatus(st.key)}>
+                  <Text style={[s.statusText, on && s.optTextOn]}>{st.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Field>
+
         <Field label="Title">
           <TextInput
             style={s.control}
@@ -121,8 +145,12 @@ export function AddActivityScreen({
           />
         </Field>
 
-        <Field label={editing ? 'Day (change to move across days)' : 'Day'}>
+        <Field label={editing ? 'Day (change to move, or Ideas to unschedule)' : 'Day'}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            <Pressable style={[s.dayChip, !scheduled && s.dayChipOn]} onPress={() => { setDayId(null); setError(''); }}>
+              <Text style={[s.dayChipText, !scheduled && s.dayChipTextOn]}>💡 Ideas</Text>
+              <Text style={[s.dayChipSub, !scheduled && { color: '#d1fae5' }]}>no date</Text>
+            </Pressable>
             {trip.days.map((d) => {
               const on = d.id === dayId;
               const lbl = dayLabel(d.date, d.dayNumber);
@@ -136,14 +164,16 @@ export function AddActivityScreen({
           </ScrollView>
         </Field>
 
-        <View style={s.row}>
-          <Field label="Start time" style={{ flex: 1 }}>
-            <TimeField value={startTime} onChange={(t) => { setStartTime(t); setError(''); }} placeholder="Add start" accessibilityLabel="Start time" clock={clock} />
-          </Field>
-          <Field label="End time" style={{ flex: 1 }}>
-            <TimeField value={endTime} onChange={(t) => { setEndTime(t); setError(''); }} placeholder="Add end" accessibilityLabel="End time" clock={clock} />
-          </Field>
-        </View>
+        {scheduled ? (
+          <View style={s.row}>
+            <Field label="Start time" style={{ flex: 1 }}>
+              <TimeField value={startTime} onChange={(t) => { setStartTime(t); setError(''); }} placeholder="Add start" accessibilityLabel="Start time" clock={clock} />
+            </Field>
+            <Field label="End time" style={{ flex: 1 }}>
+              <TimeField value={endTime} onChange={(t) => { setEndTime(t); setError(''); }} placeholder="Add end" accessibilityLabel="End time" clock={clock} />
+            </Field>
+          </View>
+        ) : null}
 
         <View style={s.row}>
           <Field label={`Cost (${trip.currency})`} style={{ flex: 1 }}>
@@ -221,6 +251,8 @@ const s = StyleSheet.create({
   optOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   optText: { fontSize: 15, fontWeight: '700', color: colors.ink600 },
   optTextOn: { color: '#fff' },
+  statusOpt: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: radius.sm, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  statusText: { fontSize: 12, fontWeight: '700', color: colors.ink600 },
   row: { flexDirection: 'row', gap: 10 },
   dayChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.sm, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center' },
   dayChipOn: { backgroundColor: colors.brand, borderColor: colors.brand },

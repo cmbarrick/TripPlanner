@@ -37,16 +37,56 @@ export function costRollup(items: ItineraryItem[]): CostRollup {
   return { total, byCurrency };
 }
 
-/** Conflicting item ids within a single day (overlaps only make sense within a day). */
-export function conflictIdsForDay(day: Day): Set<string> {
-  return detectConflicts(day.items);
+export interface CostSplit {
+  /** Confirmed items — the committed total. */
+  confirmed: CostRollup;
+  /** Tentative + wishlist items — "potential" spend if added/confirmed. */
+  potential: CostRollup;
 }
 
-/** Union of conflicting item ids across the scope (per-day overlaps). */
+/** Splits cost into the confirmed total vs. potential (tentative/wishlist) spend. */
+export function splitCost(items: ItineraryItem[]): CostSplit {
+  return {
+    confirmed: costRollup(items.filter((i) => i.status === 'Confirmed')),
+    potential: costRollup(items.filter((i) => i.status !== 'Confirmed')),
+  };
+}
+
+export interface DaySchedule {
+  /** Items with a start time, sorted chronologically (time decides their order). */
+  timed: ItineraryItem[];
+  /** Items with no time, in manual SortOrder — the "Anytime" group. */
+  anytime: ItineraryItem[];
+}
+
+/**
+ * Splits a day's items into a time-ordered list and a manually-ordered "Anytime" group.
+ * Timed items sort by start time; untimed items keep their manual SortOrder.
+ */
+export function daySchedule(day: Day): DaySchedule {
+  const timed = sortByTime(day.items.filter((i) => i.startTime));
+  const anytime = [...day.items.filter((i) => !i.startTime)].sort((a, b) => a.sortOrder - b.sortOrder);
+  return { timed, anytime };
+}
+
+/** The trip's unscheduled "Ideas" backlog, in manual SortOrder. */
+export function tripBacklog(trip: Trip): ItineraryItem[] {
+  return [...(trip.unscheduledItems ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/**
+ * Conflicting item ids within a single day. Only **confirmed** items participate in hard
+ * conflict detection — tentative/wishlist items are pencilled in and don't trigger warnings.
+ */
+export function conflictIdsForDay(day: Day): Set<string> {
+  return detectConflicts(day.items.filter((i) => i.status === 'Confirmed'));
+}
+
+/** Union of conflicting item ids across the scope (per-day overlaps, confirmed items only). */
 export function conflictIdsForScope(trip: Trip, scope: Scope, dayId?: string): Set<string> {
   const all = new Set<string>();
   for (const day of scopedDays(trip, scope, dayId)) {
-    for (const id of detectConflicts(day.items)) all.add(id);
+    for (const id of conflictIdsForDay(day)) all.add(id);
   }
   return all;
 }

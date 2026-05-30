@@ -13,14 +13,36 @@ public enum ItineraryItemType
     Transport
 }
 
-/// <summary>A single stop/event on a day's itinerary.</summary>
+/// <summary>
+/// Lifecycle state of an itinerary item. Independent of whether the item has a date/time:
+/// an item can carry any status whether scheduled on a day or sitting in the trip backlog.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ItineraryItemStatus
+{
+    /// <summary>Locked into the plan (bookings, fixed plans). Counts toward the trip cost total.</summary>
+    Confirmed,
+    /// <summary>Pencilled in but not locked. Excluded from hard conflict warnings; shown muted.</summary>
+    Tentative,
+    /// <summary>An idea, typically with no date/time, living in the trip's "Ideas" backlog.</summary>
+    Wishlist
+}
+
+/// <summary>A single stop/event on a trip. Scheduled onto a day (<see cref="DayId"/> set) or
+/// sitting in the trip-level backlog (<see cref="DayId"/> null).</summary>
 public class ItineraryItem : IValidatableObject
 {
     public const int MaxTitleLength = 200;
     public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid DayId { get; set; }
+
+    /// <summary>Durable link to the owning trip; set for scheduled and backlog items alike.</summary>
+    public Guid TripId { get; set; }
+
+    /// <summary>Day this item is scheduled on, or <c>null</c> when it lives in the trip backlog.</summary>
+    public Guid? DayId { get; set; }
     public string OwnerId { get; set; } = "demo-user";
     public ItineraryItemType Type { get; set; } = ItineraryItemType.Activity;
+    public ItineraryItemStatus Status { get; set; } = ItineraryItemStatus.Confirmed;
 
     [Required(AllowEmptyStrings = false, ErrorMessage = "Title is required.")]
     public string Title { get; set; } = string.Empty;

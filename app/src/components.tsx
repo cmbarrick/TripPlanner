@@ -3,13 +3,14 @@ import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, coverThemes, radius } from './theme';
 
-export function Pill({ label, tone = 'teal' }: { label: string; tone?: 'teal' | 'orange' | 'warn' | 'ok' | 'danger' }) {
+export function Pill({ label, tone = 'teal' }: { label: string; tone?: 'teal' | 'orange' | 'warn' | 'ok' | 'danger' | 'neutral' }) {
   const map = {
     teal: { bg: colors.brand100, fg: colors.brand },
     orange: { bg: colors.accent100, fg: '#c2410c' },
     warn: { bg: '#fef3c7', fg: colors.warn },
     ok: { bg: '#dcfce7', fg: colors.ok },
     danger: { bg: '#fee2e2', fg: colors.danger },
+    neutral: { bg: '#f1f5f9', fg: colors.ink600 },
   }[tone];
   return (
     <View style={[s.pill, { backgroundColor: map.bg }]}>

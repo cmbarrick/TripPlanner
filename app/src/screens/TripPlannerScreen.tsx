@@ -1,12 +1,21 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking, TextInput, Platform } from 'react-native';
+import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { Trip, Day, ItineraryItem, PackingItem } from '../types';
 import { Card, Pill } from '../components';
 import { colors, radius, itemAccent, itemEmoji } from '../theme';
 import { dateRange, dayLabel, formatClock, fmtMoney, weatherEmoji, formatTemp } from '../format';
 import { ClockPref } from '../store/uiStore';
-import { Scope, scopedDays, scopeSummary, conflictIdsForDay, tripPackingItems } from '../scope';
-import { sortByTime } from '../itinerary';
+import {
+  Scope,
+  scopedDays,
+  scopeSummary,
+  conflictIdsForDay,
+  tripPackingItems,
+  daySchedule,
+  tripBacklog,
+  splitCost,
+} from '../scope';
 
 type PlannerView = 'list' | 'split' | 'map';
 
@@ -19,8 +28,10 @@ export function TripPlannerScreen({
   onDeleteTrip,
   deletingTrip,
   onAddItem,
+  onAddIdea,
   onEditItem,
   onReorder,
+  onReorderBacklog,
   onAddPacking,
   onTogglePacking,
   onDeletePacking,
@@ -33,8 +44,10 @@ export function TripPlannerScreen({
   onDeleteTrip: () => void;
   deletingTrip?: boolean;
   onAddItem: (dayId: string) => void;
+  onAddIdea: (title: string) => void;
   onEditItem: (item: ItineraryItem) => void;
   onReorder: (dayId: string, itemIds: string[]) => void;
+  onReorderBacklog: (itemIds: string[]) => void;
   onAddPacking: (name: string) => void;
   onTogglePacking: (id: string, isPacked: boolean) => void;
   onDeletePacking: (id: string) => void;
@@ -42,20 +55,26 @@ export function TripPlannerScreen({
   const [scope, setScope] = useState<Scope>('trip');
   const [view, setView] = useState<PlannerView>('list');
   const [selectedDayId, setSelectedDayId] = useState(trip.days[0]?.id ?? '');
-  const [showPacking, setShowPacking] = useState(false);
+  const [panel, setPanel] = useState<'none' | 'packing' | 'ideas'>('none');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const summary = useMemo(() => scopeSummary(trip, scope, selectedDayId), [trip, scope, selectedDayId]);
   const days = scopedDays(trip, scope, selectedDayId);
+  const cost = useMemo(() => splitCost(days.flatMap((d) => d.items)), [days]);
 
   const drillIntoDay = (dayId: string) => {
     setSelectedDayId(dayId);
     setScope('day');
   };
 
+  const showPacking = panel === 'packing';
+  const showIdeas = panel === 'ideas';
+  const togglePanel = (which: 'packing' | 'ideas') => setPanel((p) => (p === which ? 'none' : which));
+
   const fabDayId = scope === 'day' ? selectedDayId : trip.days[0]?.id ?? '';
   const packing = tripPackingItems(trip);
   const packedCount = packing.filter((p) => p.isPacked).length;
+  const backlog = useMemo(() => tripBacklog(trip), [trip]);
 
   return (
     <View style={s.root}>
@@ -114,12 +133,21 @@ export function TripPlannerScreen({
 
       <View style={s.metaRow}>
         <Pill label={summary.stops === 1 ? '1 stop' : `${summary.stops} stops`} tone="teal" />
-        {Object.entries(summary.cost.byCurrency).map(([cur, amt]) => (
+        {Object.entries(cost.confirmed.byCurrency).map(([cur, amt]) => (
           <Pill key={cur} label={fmtMoney(amt, cur)} tone="orange" />
         ))}
+        {cost.potential.total > 0 ? (
+          <Pill
+            label={`+${Object.entries(cost.potential.byCurrency).map(([cur, amt]) => fmtMoney(amt, cur)).join(' ')} maybe`}
+            tone="neutral"
+          />
+        ) : null}
         {summary.conflicts > 0 ? <Pill label={`${summary.conflicts} overlap${summary.conflicts > 1 ? 's' : ''}`} tone="danger" /> : null}
         <View style={{ flex: 1 }} />
-        <Pressable onPress={() => setShowPacking((p) => !p)} style={[s.packToggle, showPacking && s.packToggleOn]} accessibilityLabel="Toggle packing list">
+        <Pressable onPress={() => togglePanel('ideas')} style={[s.packToggle, showIdeas && s.packToggleOn]} accessibilityLabel="Toggle ideas list">
+          <Text style={[s.packToggleText, showIdeas && { color: '#fff' }]}>💡 {backlog.length}</Text>
+        </Pressable>
+        <Pressable onPress={() => togglePanel('packing')} style={[s.packToggle, showPacking && s.packToggleOn]} accessibilityLabel="Toggle packing list">
           <Text style={[s.packToggleText, showPacking && { color: '#fff' }]}>🎒 {packedCount}/{packing.length}</Text>
         </Pressable>
       </View>
@@ -139,7 +167,14 @@ export function TripPlannerScreen({
         </ScrollView>
       ) : null}
 
-      {showPacking ? (
+      {showIdeas ? (
+        <IdeasPanel
+          items={backlog}
+          onAdd={onAddIdea}
+          onEdit={onEditItem}
+          onReorder={onReorderBacklog}
+        />
+      ) : showPacking ? (
         <PackingPanel
           items={packing}
           onAdd={onAddPacking}
@@ -178,7 +213,7 @@ export function TripPlannerScreen({
         </ScrollView>
       )}
 
-      {!showPacking && fabDayId ? (
+      {panel === 'none' && fabDayId ? (
         <Pressable style={s.fab} onPress={() => onAddItem(fabDayId)} accessibilityLabel="Add item">
           <Text style={{ color: '#fff', fontSize: 28, marginTop: -2 }}>+</Text>
         </Pressable>
@@ -206,15 +241,18 @@ function DayBlock({
 }) {
   const label = dayLabel(day.date, day.dayNumber);
   const conflicts = useMemo(() => conflictIdsForDay(day), [day]);
-  const ordered = useMemo(() => [...day.items].sort((a, b) => a.sortOrder - b.sortOrder), [day.items]);
+  // Timed items order themselves by time; only the untimed "Anytime" group is hand-ordered.
+  const { timed, anytime } = useMemo(() => daySchedule(day), [day]);
 
-  const move = (index: number, dir: -1 | 1) => {
+  const moveAnytime = (index: number, dir: -1 | 1) => {
     const next = index + dir;
-    if (next < 0 || next >= ordered.length) return;
-    const ids = ordered.map((i) => i.id);
+    if (next < 0 || next >= anytime.length) return;
+    const ids = anytime.map((i) => i.id);
     [ids[index], ids[next]] = [ids[next], ids[index]];
     onReorder(day.id, ids);
   };
+
+  const empty = timed.length === 0 && anytime.length === 0;
 
   return (
     <View style={{ marginBottom: 6 }}>
@@ -228,23 +266,36 @@ function DayBlock({
         {onHeaderPress ? <Text style={s.drill}>›</Text> : null}
       </Pressable>
       <View style={s.timeline}>
-        {ordered.length === 0 ? (
-          <Text style={s.emptyDay}>Nothing planned.</Text>
-        ) : (
-          ordered.map((item, index) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              clock={clock}
-              conflict={conflicts.has(item.id)}
-              canUp={index > 0}
-              canDown={index < ordered.length - 1}
-              onEdit={() => onEditItem(item)}
-              onUp={() => move(index, -1)}
-              onDown={() => move(index, 1)}
-            />
-          ))
-        )}
+        {empty ? <Text style={s.emptyDay}>Nothing planned.</Text> : null}
+        {timed.map((item) => (
+          <ItemRow
+            key={item.id}
+            item={item}
+            clock={clock}
+            conflict={conflicts.has(item.id)}
+            showOrder={false}
+            onEdit={() => onEditItem(item)}
+          />
+        ))}
+        {anytime.length > 0 ? (
+          <View style={s.anytimeHead}>
+            <Text style={s.anytimeLabel}>◦ Anytime</Text>
+          </View>
+        ) : null}
+        {anytime.map((item, index) => (
+          <ItemRow
+            key={item.id}
+            item={item}
+            clock={clock}
+            conflict={conflicts.has(item.id)}
+            showOrder
+            canUp={index > 0}
+            canDown={index < anytime.length - 1}
+            onEdit={() => onEditItem(item)}
+            onUp={() => moveAnytime(index, -1)}
+            onDown={() => moveAnytime(index, 1)}
+          />
+        ))}
       </View>
     </View>
   );
@@ -254,8 +305,9 @@ function ItemRow({
   item,
   clock,
   conflict,
-  canUp,
-  canDown,
+  showOrder,
+  canUp = false,
+  canDown = false,
   onEdit,
   onUp,
   onDown,
@@ -263,23 +315,25 @@ function ItemRow({
   item: ItineraryItem;
   clock: ClockPref;
   conflict: boolean;
-  canUp: boolean;
-  canDown: boolean;
+  showOrder: boolean;
+  canUp?: boolean;
+  canDown?: boolean;
   onEdit: () => void;
-  onUp: () => void;
-  onDown: () => void;
+  onUp?: () => void;
+  onDown?: () => void;
 }) {
+  const tentative = item.status === 'Tentative';
   return (
     <View style={s.itemRow}>
       <View style={s.rail}>
-        <Text style={s.time}>{formatClock(item.startTime, clock) || '—'}</Text>
-        <View style={[s.dot, { borderColor: conflict ? colors.danger : (itemAccent[item.type] ?? colors.brand) }]} />
+        <Text style={s.time}>{formatClock(item.startTime, clock) || '◦'}</Text>
+        <View style={[s.dot, tentative && s.dotTentative, { borderColor: conflict ? colors.danger : (itemAccent[item.type] ?? colors.brand) }]} />
       </View>
       <Pressable style={{ flex: 1 }} onPress={onEdit} accessibilityLabel={`Edit ${item.title}`}>
-        <Card style={conflict ? s.cardConflict : undefined}>
+        <Card style={[conflict ? s.cardConflict : null, tentative ? s.cardTentative : null] as any}>
           <View style={s.itemHeader}>
-            <Text style={s.itemName}>{itemEmoji[item.type]} {item.title}</Text>
-            {conflict ? <Pill label="Overlap" tone="danger" /> : null}
+            <Text style={[s.itemName, tentative && s.itemNameMuted]} numberOfLines={2}>{itemEmoji[item.type]} {item.title}</Text>
+            {conflict ? <Pill label="Overlap" tone="danger" /> : tentative ? <Pill label="Tentative" tone="orange" /> : null}
           </View>
           {item.locationName || item.cost != null || item.confirmationNo ? (
             <Text style={s.itemLoc}>
@@ -295,14 +349,16 @@ function ItemRow({
           ) : null}
         </Card>
       </Pressable>
-      <View style={s.orderCol}>
-        <Pressable style={[s.orderBtn, !canUp && s.orderBtnOff]} onPress={onUp} disabled={!canUp} accessibilityLabel="Move up">
-          <Text style={s.orderText}>↑</Text>
-        </Pressable>
-        <Pressable style={[s.orderBtn, !canDown && s.orderBtnOff]} onPress={onDown} disabled={!canDown} accessibilityLabel="Move down">
-          <Text style={s.orderText}>↓</Text>
-        </Pressable>
-      </View>
+      {showOrder ? (
+        <View style={s.orderCol}>
+          <Pressable style={[s.orderBtn, !canUp && s.orderBtnOff]} onPress={onUp} disabled={!canUp} accessibilityLabel="Move up">
+            <Text style={s.orderText}>↑</Text>
+          </Pressable>
+          <Pressable style={[s.orderBtn, !canDown && s.orderBtnOff]} onPress={onDown} disabled={!canDown} accessibilityLabel="Move down">
+            <Text style={s.orderText}>↓</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -394,6 +450,137 @@ function PackingPanel({
   );
 }
 
+function IdeasPanel({
+  items,
+  onAdd,
+  onEdit,
+  onReorder,
+}: {
+  items: ItineraryItem[];
+  onAdd: (title: string) => void;
+  onEdit: (item: ItineraryItem) => void;
+  onReorder: (itemIds: string[]) => void;
+}) {
+  const [title, setTitle] = useState('');
+  const add = () => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setTitle('');
+  };
+
+  // Gesture-based drag is unreliable on react-native-web, so we expose tap
+  // up/down controls there and keep drag-and-drop on native.
+  const useArrows = Platform.OS === 'web';
+  const moveBy = (index: number, dir: -1 | 1) => {
+    const next = index + dir;
+    if (next < 0 || next >= items.length) return;
+    const ids = items.map((i) => i.id);
+    [ids[index], ids[next]] = [ids[next], ids[index]];
+    onReorder(ids);
+  };
+
+  const Header = (
+    <View>
+      <Text style={s.packTitle}>💡 Ideas</Text>
+      <Text style={s.packSub}>
+        {useArrows
+          ? 'Unscheduled wishes. Reorder with the arrows, tap to give one a date or confirm it.'
+          : 'Unscheduled wishes. Drag to reorder, tap to give one a date or confirm it.'}
+      </Text>
+      <View style={s.packAddRow}>
+        <TextInput
+          style={s.packInput}
+          placeholder="Add an idea (e.g. Valley of the Temples)"
+          placeholderTextColor={colors.ink400}
+          value={title}
+          onChangeText={setTitle}
+          onSubmitEditing={add}
+          returnKeyType="done"
+          accessibilityLabel="New idea"
+        />
+        <Pressable style={s.packAddBtn} onPress={add} accessibilityLabel="Add idea">
+          <Text style={s.packAddText}>Add</Text>
+        </Pressable>
+      </View>
+      {items.length === 0 ? (
+        <Card style={{ marginTop: 12 }}>
+          <Text style={{ color: colors.ink600, fontSize: 13 }}>No ideas yet. Jot down places you might want to fit in.</Text>
+        </Card>
+      ) : null}
+    </View>
+  );
+
+  const renderItem = ({ item, drag, isActive, getIndex }: RenderItemParams<ItineraryItem>) => {
+    const tentative = item.status === 'Tentative';
+    const index = getIndex() ?? 0;
+    return (
+      <ScaleDecorator>
+        <View style={[s.ideaRow, isActive && s.ideaRowActive]}>
+          {useArrows ? (
+            <View style={s.dragHandle}>
+              <Pressable
+                onPress={() => moveBy(index, -1)}
+                disabled={index === 0}
+                hitSlop={6}
+                accessibilityLabel={`Move ${item.title} up`}
+              >
+                <Text style={[s.reorderArrow, index === 0 && s.reorderArrowDisabled]}>▲</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => moveBy(index, 1)}
+                disabled={index === items.length - 1}
+                hitSlop={6}
+                accessibilityLabel={`Move ${item.title} down`}
+              >
+                <Text style={[s.reorderArrow, index === items.length - 1 && s.reorderArrowDisabled]}>▼</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPressIn={drag}
+              hitSlop={8}
+              style={s.dragHandle}
+              accessibilityLabel={`Drag ${item.title}`}
+            >
+              <Text style={s.dragGrip}>⠿</Text>
+            </Pressable>
+          )}
+          <Pressable style={{ flex: 1 }} onPress={() => onEdit(item)} onLongPress={drag} accessibilityLabel={`Edit ${item.title}`}>
+            <Card style={tentative ? s.cardTentative : undefined}>
+              <View style={s.itemHeader}>
+                <Text style={[s.itemName, tentative && s.itemNameMuted]} numberOfLines={2}>{itemEmoji[item.type]} {item.title}</Text>
+                <Pill label={tentative ? 'Tentative' : 'Wishlist'} tone={tentative ? 'orange' : 'neutral'} />
+              </View>
+              {item.locationName || item.cost != null ? (
+                <Text style={s.itemLoc}>
+                  {item.locationName ? `📍 ${item.locationName}` : ''}
+                  {item.cost != null ? `  ·  ${fmtMoney(item.cost, item.currency)}` : ''}
+                </Text>
+              ) : null}
+              <Text style={s.ideaHint}>Tap to schedule →</Text>
+            </Card>
+          </Pressable>
+        </View>
+      </ScaleDecorator>
+    );
+  };
+
+  return (
+    <DraggableFlatList
+      data={items}
+      keyExtractor={(i) => i.id}
+      onDragEnd={({ data }) => onReorder(data.map((i) => i.id))}
+      renderItem={renderItem}
+      ListHeaderComponent={Header}
+      ListFooterComponent={<View style={{ height: 40 }} />}
+      contentContainerStyle={s.body}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    />
+  );
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   appbar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
@@ -436,6 +623,18 @@ const s = StyleSheet.create({
   time: { fontSize: 11, fontWeight: '700', color: colors.ink400 },
   dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 3, marginTop: 6 },
   cardConflict: { backgroundColor: '#fff1f2', borderColor: '#fecdd3' },
+  cardTentative: { borderStyle: 'dashed', borderColor: '#fcd34d', backgroundColor: '#fffbeb' },
+  dotTentative: { backgroundColor: '#fffbeb' },
+  itemNameMuted: { color: colors.ink600 },
+  anytimeHead: { marginTop: 2, marginBottom: 6, paddingLeft: 50 },
+  anytimeLabel: { fontSize: 11, fontWeight: '800', color: colors.ink400, textTransform: 'uppercase', letterSpacing: 0.5 },
+  ideaRow: { flexDirection: 'row', gap: 8, marginBottom: 10, alignItems: 'center' },
+  ideaRowActive: { opacity: 0.9 },
+  ideaHint: { fontSize: 10, color: colors.brand, fontWeight: '700', marginTop: 6 },
+  dragHandle: { width: 26, height: 40, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  dragGrip: { fontSize: 18, color: colors.ink400, fontWeight: '800' },
+  reorderArrow: { fontSize: 12, color: colors.ink600, fontWeight: '800', lineHeight: 14 },
+  reorderArrowDisabled: { color: colors.line },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   itemName: { fontWeight: '700', fontSize: 13, color: colors.ink, flexShrink: 1 },
   itemLoc: { fontSize: 11, color: colors.ink600, marginTop: 4 },

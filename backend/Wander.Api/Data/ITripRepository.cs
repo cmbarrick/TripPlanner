@@ -15,14 +15,23 @@ public interface ITripRepository
     bool Delete(Guid id, string ownerId);
 
     ItineraryItem? AddItem(Guid tripId, string ownerId, Guid dayId, ItineraryItem item);
+
+    /// <summary>Adds an item to the trip backlog (no day). Defaults to <see cref="ItineraryItemStatus.Wishlist"/>.</summary>
+    ItineraryItem? AddUnscheduledItem(Guid tripId, string ownerId, ItineraryItem item);
+
     ItineraryItem? UpdateItem(Guid tripId, string ownerId, Guid itemId, ItineraryItem updated);
     bool DeleteItem(Guid tripId, string ownerId, Guid itemId);
 
-    /// <summary>Sets each item's SortOrder to its position in <paramref name="orderedItemIds"/>.</summary>
-    bool ReorderDayItems(Guid tripId, string ownerId, Guid dayId, IReadOnlyList<Guid> orderedItemIds);
+    /// <summary>Sets the lifecycle status (wishlist / tentative / confirmed) of an item.</summary>
+    ItineraryItem? SetItemStatus(Guid tripId, string ownerId, Guid itemId, ItineraryItemStatus status);
 
-    /// <summary>Moves an item to another day in the same trip, appended to the end of that day.</summary>
-    ItineraryItem? MoveItem(Guid tripId, string ownerId, Guid itemId, Guid targetDayId);
+    /// <summary>Sets each item's SortOrder to its position in <paramref name="orderedItemIds"/>.
+    /// Pass <paramref name="dayId"/> = <c>null</c> to reorder the trip backlog.</summary>
+    bool ReorderDayItems(Guid tripId, string ownerId, Guid? dayId, IReadOnlyList<Guid> orderedItemIds);
+
+    /// <summary>Moves an item onto another day (appended), or to the backlog when
+    /// <paramref name="targetDayId"/> is <c>null</c>.</summary>
+    ItineraryItem? MoveItem(Guid tripId, string ownerId, Guid itemId, Guid? targetDayId);
 
     IEnumerable<PackingItem> GetPackingItems(Guid tripId, string ownerId);
     PackingItem? AddPackingItem(Guid tripId, string ownerId, string name);

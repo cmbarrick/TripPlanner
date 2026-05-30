@@ -22,6 +22,24 @@ Verifies the Phase 1 slices as they land. **Slice 1 = Trip CRUD + My Trips list 
 - [ ] Empty account shows the "No trips yet" state; a non-matching search shows the "No matches" state.
 - [ ] With the API stopped, the list shows the demo-data banner (local-first fallback) and still renders.
 
+## Slice 2 — Itinerary, planner shell, calendar, packing
+- [ ] Open a trip → **Trip Planner** shows `List | Split | Map` view toggle and `Day | Trip` scope toggle.
+- [ ] `Trip` scope lists all days; tap a day header → drills into `Day` scope for that day.
+- [ ] **Add item** on a day → pick type/title/time (via time picker)/cost → saves and appears in order.
+- [ ] **Edit** an item (from planner or by tapping it in the calendar) → changes persist.
+- [ ] **Reorder** items within a day (up/down) and **move** an item to another day → order persists after API restart.
+- [ ] Overlapping times surface a **conflict** indicator at both day and trip scope.
+- [ ] **Cost rollup** totals item costs for the day and the whole trip.
+- [ ] **Packing list:** add / check / uncheck / delete items; state persists.
+- [ ] **Calendar:** Day, Week (multi-day), and Agenda views render; tapping an item opens the editor.
+- [ ] Map panel shows a "coming in Phase 2" placeholder; AI dock shows a "Phase 3" placeholder.
+- [ ] Map/empty/loading/error states behave across the planner and calendar.
+
+## Preferences
+- [ ] Profile → **Clock** toggle (12h / 24h) changes all time displays and the time picker wheel.
+- [ ] Profile → **Temperature** toggle (°F / °C) changes weather displays.
+- [ ] Both preferences **persist across a reload** (web localStorage / native secure-store).
+
 ## Ownership (per-user boundaries)
 - [ ] As user A, create a trip; switch `EXPO_PUBLIC_DEV_USER_ID` to user B and confirm A's trip is not visible.
 - [ ] Editing/deleting another user's trip id is denied by the API (404/NotFound), never cross-user.

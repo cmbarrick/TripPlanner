@@ -22,9 +22,12 @@ jest.mock('./src/queries/itinerary', () => {
   const stub = () => ({ mutate: jest.fn(), mutateAsync: jest.fn(), isPending: false, error: null });
   return {
     useCreateItemMutation: stub,
+    useCreateWishlistItemMutation: stub,
     useUpdateItemMutation: stub,
     useDeleteItemMutation: stub,
+    useSetItemStatusMutation: stub,
     useReorderDayItemsMutation: stub,
+    useReorderBacklogMutation: stub,
     useMoveItemMutation: stub,
     useAddPackingMutation: stub,
     useTogglePackingMutation: stub,

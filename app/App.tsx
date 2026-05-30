@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Platform, SafeAreaView } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { colors } from './src/theme';
@@ -19,9 +20,11 @@ import {
 } from './src/queries/trips';
 import {
   useCreateItemMutation,
+  useCreateWishlistItemMutation,
   useUpdateItemMutation,
   useDeleteItemMutation,
   useReorderDayItemsMutation,
+  useReorderBacklogMutation,
   useMoveItemMutation,
   useAddPackingMutation,
   useTogglePackingMutation,
@@ -37,9 +40,11 @@ initClientObservability();
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppShell />
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <AppShell />
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -77,9 +82,11 @@ function AppShell() {
   const updateTrip = useUpdateTripMutation();
   const deleteTrip = useDeleteTripMutation();
   const createItem = useCreateItemMutation();
+  const createWishlistItem = useCreateWishlistItemMutation();
   const updateItem = useUpdateItemMutation();
   const deleteItem = useDeleteItemMutation();
   const reorderItems = useReorderDayItemsMutation();
+  const reorderBacklog = useReorderBacklogMutation();
   const moveItem = useMoveItemMutation();
   const addPacking = useAddPackingMutation();
   const togglePacking = useTogglePackingMutation();
@@ -96,7 +103,11 @@ function AppShell() {
   );
 
   const editingItem = useMemo(
-    () => openTripData?.days.flatMap((d) => d.items).find((i) => i.id === editingItemId),
+    () =>
+      [
+        ...(openTripData?.days.flatMap((d) => d.items) ?? []),
+        ...(openTripData?.unscheduledItems ?? []),
+      ].find((i) => i.id === editingItemId),
     [openTripData, editingItemId]
   );
 
@@ -118,14 +129,21 @@ function AppShell() {
     deleteTrip.mutate(openTripId, { onSuccess: () => backToList() });
   };
 
-  const handleSubmitItem = async (dayId: string, input: ItineraryItemInput, originalDayId?: string) => {
+  const handleSubmitItem = async (
+    dayId: string | null,
+    input: ItineraryItemInput,
+    originalDayId?: string | null
+  ) => {
     if (!openTripId) return;
     try {
       if (editingItemId) {
         await updateItem.mutateAsync({ tripId: openTripId, itemId: editingItemId, input });
-        if (originalDayId && originalDayId !== dayId) {
+        // Day changed (including scheduling from / unscheduling to the backlog).
+        if (originalDayId !== dayId) {
           await moveItem.mutateAsync({ tripId: openTripId, itemId: editingItemId, targetDayId: dayId });
         }
+      } else if (dayId == null) {
+        await createWishlistItem.mutateAsync({ tripId: openTripId, input });
       } else {
         await createItem.mutateAsync({ tripId: openTripId, dayId, input });
       }
@@ -133,6 +151,14 @@ function AppShell() {
     } catch {
       // error surfaced via mutation state below
     }
+  };
+
+  const handleAddIdea = (title: string) => {
+    if (!openTripId) return;
+    createWishlistItem.mutate({
+      tripId: openTripId,
+      input: { type: 'Activity', status: 'Wishlist', title, currency: openTripData?.currency ?? 'EUR' },
+    });
   };
 
   const handleDeleteItem = () => {
@@ -164,9 +190,10 @@ function AppShell() {
         <AddActivityScreen
           trip={openTripData}
           item={editingItem}
-          saving={createItem.isPending || updateItem.isPending || moveItem.isPending}
+          saving={createItem.isPending || createWishlistItem.isPending || updateItem.isPending || moveItem.isPending}
           serverError={
             (createItem.error as Error | null)?.message ??
+            (createWishlistItem.error as Error | null)?.message ??
             (updateItem.error as Error | null)?.message ??
             null
           }
@@ -187,8 +214,10 @@ function AppShell() {
           onDeleteTrip={handleDeleteTrip}
           deletingTrip={deleteTrip.isPending}
           onAddItem={(dayId) => showAddItem(dayId)}
+          onAddIdea={handleAddIdea}
           onEditItem={(item) => showEditItem(item.id)}
           onReorder={(dayId, itemIds) => reorderItems.mutate({ tripId: openTripData.id, dayId, itemIds })}
+          onReorderBacklog={(itemIds) => reorderBacklog.mutate({ tripId: openTripData.id, itemIds })}
           onAddPacking={(name) => addPacking.mutate({ tripId: openTripData.id, name })}
           onTogglePacking={(id, isPacked) => togglePacking.mutate({ tripId: openTripData.id, packingItemId: id, isPacked })}
           onDeletePacking={(id) => deletePacking.mutate({ tripId: openTripData.id, packingItemId: id })}

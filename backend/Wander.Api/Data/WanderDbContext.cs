@@ -55,10 +55,12 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
         modelBuilder.Entity<Day>(entity =>
         {
             entity.HasIndex(x => new { x.TripId, x.DayNumber }).IsUnique();
+            // DayId is nullable on items (null = trip backlog); deleting a day sends its items to the
+            // backlog rather than deleting them. We soft-delete in practice, so this rarely fires.
             entity.HasMany(x => x.Items)
                 .WithOne()
                 .HasForeignKey(x => x.DayId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasMany(x => x.PackingItems)
                 .WithOne()
                 .HasForeignKey(x => x.DayId)
@@ -67,7 +69,9 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
 
         modelBuilder.Entity<ItineraryItem>(entity =>
         {
-            entity.HasIndex(x => new { x.DayId, x.SortOrder });
+            // TripId is a durable scalar link (no navigation); indexed with DayId/SortOrder so both
+            // day agendas and the backlog query (DayId == null) stay fast.
+            entity.HasIndex(x => new { x.TripId, x.DayId, x.SortOrder });
         });
 
         modelBuilder.Entity<PackingItem>(entity =>

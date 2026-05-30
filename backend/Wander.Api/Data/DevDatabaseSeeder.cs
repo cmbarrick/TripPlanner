@@ -30,6 +30,14 @@ public static class DevDatabaseSeeder
         }
 
         dbContext.Trips.AddRange(missing);
+
+        // Backlog items are [NotMapped] on Trip, so AddRange(trips) won't persist them — add explicitly.
+        var backlog = missing.SelectMany(t => t.UnscheduledItems).ToList();
+        if (backlog.Count > 0)
+        {
+            dbContext.ItineraryItems.AddRange(backlog);
+        }
+
         dbContext.SaveChanges();
     }
 }

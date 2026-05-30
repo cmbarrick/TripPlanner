@@ -401,4 +401,128 @@ public class EfCoreTripRepositoryTests
             Assert.Empty(repo.GetPackingItems(tripId, "owner-a"));
         }
     }
+
+    [Fact]
+    public void AddUnscheduledItem_AddsToBacklog_AndIsReturnedFromFreshContext()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId;
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            tripId = repo.Add(SampleTrip("owner-a")).Id;
+
+            Assert.Null(repo.AddUnscheduledItem(tripId, "owner-b", new ItineraryItem { Title = "Sneaky" }));
+            var idea = repo.AddUnscheduledItem(tripId, "owner-a", new ItineraryItem { Title = "Valley of the Temples" });
+            Assert.NotNull(idea);
+            Assert.Null(idea!.DayId);
+            Assert.Equal(tripId, idea.TripId);
+            // Defaults to Wishlist when created in the backlog.
+            Assert.Equal(ItineraryItemStatus.Wishlist, idea.Status);
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var trip = new EfCoreTripRepository(ctx).GetById(tripId, "owner-a")!;
+            Assert.Single(trip.UnscheduledItems);
+            Assert.Empty(trip.Days[0].Items);
+            Assert.Equal("Valley of the Temples", trip.UnscheduledItems[0].Title);
+        }
+    }
+
+    [Fact]
+    public void MoveItem_SchedulesFromBacklog_AndUnschedulesBackToBacklog()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId, dayId, itemId;
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            var created = repo.Add(SampleTrip("owner-a"));
+            tripId = created.Id;
+            dayId = created.Days[0].Id;
+            itemId = repo.AddUnscheduledItem(tripId, "owner-a", new ItineraryItem { Title = "Etna tour" })!.Id;
+        }
+
+        // Schedule onto a day.
+        using (var ctx = NewContext(db))
+        {
+            var moved = new EfCoreTripRepository(ctx).MoveItem(tripId, "owner-a", itemId, dayId);
+            Assert.Equal(dayId, moved!.DayId);
+        }
+        using (var ctx = NewContext(db))
+        {
+            var trip = new EfCoreTripRepository(ctx).GetById(tripId, "owner-a")!;
+            Assert.Single(trip.Days[0].Items);
+            Assert.Empty(trip.UnscheduledItems);
+        }
+
+        // Unschedule back to the backlog (null target day).
+        using (var ctx = NewContext(db))
+        {
+            var moved = new EfCoreTripRepository(ctx).MoveItem(tripId, "owner-a", itemId, null);
+            Assert.Null(moved!.DayId);
+        }
+        using (var ctx = NewContext(db))
+        {
+            var trip = new EfCoreTripRepository(ctx).GetById(tripId, "owner-a")!;
+            Assert.Empty(trip.Days[0].Items);
+            Assert.Single(trip.UnscheduledItems);
+        }
+    }
+
+    [Fact]
+    public void SetItemStatus_UpdatesStatus_AndDeniesForNonOwner()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId, itemId;
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            var created = repo.Add(SampleTrip("owner-a"));
+            tripId = created.Id;
+            itemId = repo.AddItem(tripId, "owner-a", created.Days[0].Id, new ItineraryItem { Title = "Dinner" })!.Id;
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            Assert.Null(repo.SetItemStatus(tripId, "owner-b", itemId, ItineraryItemStatus.Tentative));
+            var updated = repo.SetItemStatus(tripId, "owner-a", itemId, ItineraryItemStatus.Tentative);
+            Assert.Equal(ItineraryItemStatus.Tentative, updated!.Status);
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var trip = new EfCoreTripRepository(ctx).GetById(tripId, "owner-a")!;
+            Assert.Equal(ItineraryItemStatus.Tentative, trip.Days[0].Items[0].Status);
+        }
+    }
+
+    [Fact]
+    public void ReorderBacklog_PersistsNewOrder()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId, a, b, c;
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            tripId = repo.Add(SampleTrip("owner-a")).Id;
+            a = repo.AddUnscheduledItem(tripId, "owner-a", new ItineraryItem { Title = "A" })!.Id;
+            b = repo.AddUnscheduledItem(tripId, "owner-a", new ItineraryItem { Title = "B" })!.Id;
+            c = repo.AddUnscheduledItem(tripId, "owner-a", new ItineraryItem { Title = "C" })!.Id;
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            // Null dayId targets the backlog.
+            Assert.True(new EfCoreTripRepository(ctx).ReorderDayItems(tripId, "owner-a", null, new[] { c, a, b }));
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var trip = new EfCoreTripRepository(ctx).GetById(tripId, "owner-a")!;
+            Assert.Equal(new[] { "C", "A", "B" }, trip.UnscheduledItems.Select(i => i.Title).ToArray());
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Wander.Api.Models;
 
@@ -43,6 +44,14 @@ public class Trip : IValidatableObject
     public string? TimeZoneId { get; set; }
 
     public List<Day> Days { get; set; } = new();
+
+    /// <summary>
+    /// Unscheduled "Ideas" backlog: itinerary items with no day (<c>DayId == null</c>). Not a mapped
+    /// relationship — the repository populates this from the items table so the API payload carries the
+    /// backlog alongside the scheduled days.
+    /// </summary>
+    [NotMapped]
+    public List<ItineraryItem> UnscheduledItems { get; set; } = new();
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

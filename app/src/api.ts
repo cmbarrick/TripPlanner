@@ -117,6 +117,7 @@ export async function deleteTrip(id: string): Promise<void> {
 /** Writable fields the client sends when creating or editing an itinerary item. */
 export interface ItineraryItemInput {
   type: ItineraryItem['type'];
+  status?: ItineraryItem['status'];
   title: string;
   locationName?: string | null;
   latitude?: number | null;
@@ -134,6 +135,11 @@ export async function createItem(tripId: string, dayId: string, input: Itinerary
   return sendJson<ItineraryItem>(`/api/trips/${tripId}/days/${dayId}/items`, 'POST', input);
 }
 
+/** Creates an item in the trip backlog (no day). */
+export async function createWishlistItem(tripId: string, input: ItineraryItemInput): Promise<ItineraryItem> {
+  return sendJson<ItineraryItem>(`/api/trips/${tripId}/items`, 'POST', input);
+}
+
 export async function updateItem(tripId: string, itemId: string, input: ItineraryItemInput): Promise<ItineraryItem> {
   return sendJson<ItineraryItem>(`/api/trips/${tripId}/items/${itemId}`, 'PUT', input);
 }
@@ -142,11 +148,21 @@ export async function deleteItem(tripId: string, itemId: string): Promise<void> 
   await sendJson<void>(`/api/trips/${tripId}/items/${itemId}`, 'DELETE');
 }
 
+export async function setItemStatus(tripId: string, itemId: string, status: ItineraryItem['status']): Promise<ItineraryItem> {
+  return sendJson<ItineraryItem>(`/api/trips/${tripId}/items/${itemId}/status`, 'PUT', { status });
+}
+
 export async function reorderDayItems(tripId: string, dayId: string, itemIds: string[]): Promise<void> {
   await sendJson<void>(`/api/trips/${tripId}/days/${dayId}/items/order`, 'PUT', { itemIds });
 }
 
-export async function moveItem(tripId: string, itemId: string, targetDayId: string): Promise<ItineraryItem> {
+/** Reorders the trip backlog (unscheduled items). */
+export async function reorderBacklog(tripId: string, itemIds: string[]): Promise<void> {
+  await sendJson<void>(`/api/trips/${tripId}/items/order`, 'PUT', { itemIds });
+}
+
+/** Moves an item onto a day, or to the backlog when targetDayId is null. */
+export async function moveItem(tripId: string, itemId: string, targetDayId: string | null): Promise<ItineraryItem> {
   return sendJson<ItineraryItem>(`/api/trips/${tripId}/items/${itemId}/move`, 'PUT', { targetDayId });
 }
 

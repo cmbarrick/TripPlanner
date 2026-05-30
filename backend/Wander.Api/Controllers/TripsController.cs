@@ -77,6 +77,17 @@ public class TripsController : ControllerBase
         return created is null ? NotFound() : Ok(created);
     }
 
+    [HttpPost("{tripId:guid}/items")]
+    public ActionResult<ItineraryItem> AddWishlistItem(Guid tripId, [FromBody] ItineraryItem item)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        var created = _repo.AddUnscheduledItem(tripId, ownerId, item);
+        return created is null ? NotFound() : Ok(created);
+    }
+
     [HttpPut("{tripId:guid}/items/{itemId:guid}")]
     public ActionResult<ItineraryItem> UpdateItem(Guid tripId, Guid itemId, [FromBody] ItineraryItem item)
     {
@@ -97,6 +108,17 @@ public class TripsController : ControllerBase
             : (_repo.DeleteItem(tripId, ownerId, itemId) ? NoContent() : NotFound());
     }
 
+    [HttpPut("{tripId:guid}/items/{itemId:guid}/status")]
+    public ActionResult<ItineraryItem> SetItemStatus(Guid tripId, Guid itemId, [FromBody] ItemStatusRequest request)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        var updated = _repo.SetItemStatus(tripId, ownerId, itemId, request.Status);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
     [HttpPut("{tripId:guid}/days/{dayId:guid}/items/order")]
     public IActionResult ReorderDayItems(Guid tripId, Guid dayId, [FromBody] ReorderRequest request)
     {
@@ -108,6 +130,17 @@ public class TripsController : ControllerBase
         return _repo.ReorderDayItems(tripId, ownerId, dayId, itemIds) ? NoContent() : NotFound();
     }
 
+    [HttpPut("{tripId:guid}/items/order")]
+    public IActionResult ReorderBacklog(Guid tripId, [FromBody] ReorderRequest request)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        var itemIds = request.ItemIds ?? [];
+        return _repo.ReorderDayItems(tripId, ownerId, null, itemIds) ? NoContent() : NotFound();
+    }
+
     [HttpPut("{tripId:guid}/items/{itemId:guid}/move")]
     public ActionResult<ItineraryItem> MoveItem(Guid tripId, Guid itemId, [FromBody] MoveItemRequest request)
     {
@@ -115,6 +148,7 @@ public class TripsController : ControllerBase
         if (ownerId is null)
             return Unauthorized();
 
+        // TargetDayId == null moves the item to the trip backlog.
         var moved = _repo.MoveItem(tripId, ownerId, itemId, request.TargetDayId);
         return moved is null ? NotFound() : Ok(moved);
     }
@@ -160,7 +194,9 @@ public class TripsController : ControllerBase
 
 public record ReorderRequest(List<Guid> ItemIds);
 
-public record MoveItemRequest(Guid TargetDayId);
+public record MoveItemRequest(Guid? TargetDayId);
+
+public record ItemStatusRequest(ItineraryItemStatus Status);
 
 public class PackingItemRequest
 {

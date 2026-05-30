@@ -3,13 +3,17 @@ import {
   ItineraryItemInput,
   addPackingItem,
   createItem,
+  createWishlistItem,
   deleteItem,
   deletePackingItem,
   moveItem,
+  reorderBacklog,
   reorderDayItems,
+  setItemStatus,
   setPackingItemPacked,
   updateItem,
 } from '../api';
+import { ItineraryItemStatus } from '../types';
 import { tripsQueryKey } from './trips';
 
 /** Mutations all refetch the trips tree so the planner, calendar, and packing stay in sync. */
@@ -23,6 +27,33 @@ export function useCreateItemMutation() {
   return useMutation({
     mutationFn: ({ tripId, dayId, input }: { tripId: string; dayId: string; input: ItineraryItemInput }) =>
       createItem(tripId, dayId, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCreateWishlistItemMutation() {
+  const invalidate = useTripsInvalidation();
+  return useMutation({
+    mutationFn: ({ tripId, input }: { tripId: string; input: ItineraryItemInput }) =>
+      createWishlistItem(tripId, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useSetItemStatusMutation() {
+  const invalidate = useTripsInvalidation();
+  return useMutation({
+    mutationFn: ({ tripId, itemId, status }: { tripId: string; itemId: string; status: ItineraryItemStatus }) =>
+      setItemStatus(tripId, itemId, status),
+    onSuccess: invalidate,
+  });
+}
+
+export function useReorderBacklogMutation() {
+  const invalidate = useTripsInvalidation();
+  return useMutation({
+    mutationFn: ({ tripId, itemIds }: { tripId: string; itemIds: string[] }) =>
+      reorderBacklog(tripId, itemIds),
     onSuccess: invalidate,
   });
 }
@@ -56,7 +87,7 @@ export function useReorderDayItemsMutation() {
 export function useMoveItemMutation() {
   const invalidate = useTripsInvalidation();
   return useMutation({
-    mutationFn: ({ tripId, itemId, targetDayId }: { tripId: string; itemId: string; targetDayId: string }) =>
+    mutationFn: ({ tripId, itemId, targetDayId }: { tripId: string; itemId: string; targetDayId: string | null }) =>
       moveItem(tripId, itemId, targetDayId),
     onSuccess: invalidate,
   });

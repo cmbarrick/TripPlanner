@@ -7,10 +7,16 @@ export type ItineraryItemType =
   | 'Activity'
   | 'Transport';
 
+/** Lifecycle state, independent of whether the item has a date/time. */
+export type ItineraryItemStatus = 'Confirmed' | 'Tentative' | 'Wishlist';
+
 export interface ItineraryItem {
   id: string;
-  dayId: string;
+  tripId: string;
+  /** Day the item is scheduled on, or null when it lives in the trip backlog. */
+  dayId: string | null;
   type: ItineraryItemType;
+  status: ItineraryItemStatus;
   title: string;
   locationName?: string | null;
   latitude?: number | null;
@@ -58,6 +64,8 @@ export interface Trip {
   /** IANA time zone of the destination (e.g. "Europe/Rome"); used for notifications. */
   timeZoneId?: string | null;
   days: Day[];
+  /** Unscheduled "Ideas" backlog: items with no day (dayId === null). */
+  unscheduledItems?: ItineraryItem[];
   createdAt: string;
   updatedAt: string;
   nights: number;

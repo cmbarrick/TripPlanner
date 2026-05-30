@@ -1,16 +1,21 @@
 import {
   costRollup,
   conflictIdsForScope,
+  daySchedule,
   scopedDays,
   scopedItems,
   scopeSummary,
+  splitCost,
+  tripBacklog,
 } from './scope';
 import { Trip, Day, ItineraryItem } from './types';
 
 function item(over: Partial<ItineraryItem> & { id: string }): ItineraryItem {
   return {
+    tripId: 't1',
     dayId: over.dayId ?? 'd1',
     type: 'Activity',
+    status: 'Confirmed',
     title: 'Item',
     currency: 'EUR',
     sortOrder: 0,
@@ -87,6 +92,59 @@ describe('conflictIdsForScope', () => {
 
   it('does not flag conflicts on a day with no overlaps', () => {
     expect(conflictIdsForScope(trip, 'day', 'd2').size).toBe(0);
+  });
+});
+
+describe('daySchedule', () => {
+  it('orders timed items by time and keeps untimed items in the Anytime group by sortOrder', () => {
+    const d = day('d1', [
+      item({ id: 'late', startTime: '15:00:00' }),
+      item({ id: 'idea2', sortOrder: 1 }),
+      item({ id: 'early', startTime: '09:00:00' }),
+      item({ id: 'idea1', sortOrder: 0 }),
+    ]);
+    const { timed, anytime } = daySchedule(d);
+    expect(timed.map((i) => i.id)).toEqual(['early', 'late']);
+    expect(anytime.map((i) => i.id)).toEqual(['idea1', 'idea2']);
+  });
+});
+
+describe('tripBacklog', () => {
+  it('returns unscheduled items sorted by sortOrder, empty when none', () => {
+    expect(tripBacklog(trip)).toEqual([]);
+    const withBacklog: Trip = {
+      ...trip,
+      unscheduledItems: [
+        item({ id: 'w2', dayId: null, status: 'Wishlist', sortOrder: 1 }),
+        item({ id: 'w1', dayId: null, status: 'Wishlist', sortOrder: 0 }),
+      ],
+    };
+    expect(tripBacklog(withBacklog).map((i) => i.id)).toEqual(['w1', 'w2']);
+  });
+});
+
+describe('splitCost', () => {
+  it('separates confirmed total from potential (tentative/wishlist) spend', () => {
+    const items = [
+      item({ id: 'c1', cost: 100, status: 'Confirmed' }),
+      item({ id: 't1', cost: 50, status: 'Tentative' }),
+      item({ id: 'w1', cost: 20, status: 'Wishlist' }),
+    ];
+    const { confirmed, potential } = splitCost(items);
+    expect(confirmed.total).toBe(100);
+    expect(potential.total).toBe(70);
+  });
+});
+
+describe('conflicts ignore tentative items', () => {
+  it('does not flag overlaps for tentative items', () => {
+    const d = day('d1', [
+      item({ id: 'a', status: 'Confirmed', startTime: '10:00:00', endTime: '11:00:00' }),
+      item({ id: 'b', status: 'Tentative', startTime: '10:30:00', endTime: '11:30:00' }),
+    ]);
+    const t: Trip = { ...trip, days: [d] };
+    const conflicts = conflictIdsForScope(t, 'trip');
+    expect(conflicts.size).toBe(0);
   });
 });
 

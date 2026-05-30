@@ -14,7 +14,17 @@ public class InMemoryTripRepository : ITripRepository
     public InMemoryTripRepository()
     {
         foreach (var trip in SeedData.CreateTrips())
+        {
+            // Stamp the durable trip link onto seed items so payloads match the EF Core path.
+            foreach (var item in trip.Days.SelectMany(d => d.Items))
+                item.TripId = trip.Id;
+            foreach (var item in trip.UnscheduledItems)
+            {
+                item.TripId = trip.Id;
+                item.DayId = null;
+            }
             _trips[trip.Id] = trip;
+        }
     }
 
     public IEnumerable<Trip> GetAll(string ownerId) =>
@@ -71,10 +81,27 @@ public class InMemoryTripRepository : ITripRepository
         if (day is null) return null;
 
         item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
+        item.TripId = tripId;
         item.DayId = dayId;
         item.OwnerId = ownerId;
         item.SortOrder = day.Items.Count == 0 ? 0 : day.Items.Max(i => i.SortOrder) + 1;
         day.Items.Add(item);
+        trip.UpdatedAt = DateTimeOffset.UtcNow;
+        return item;
+    }
+
+    public ItineraryItem? AddUnscheduledItem(Guid tripId, string ownerId, ItineraryItem item)
+    {
+        if (!_trips.TryGetValue(tripId, out var trip) || trip.OwnerId != ownerId || trip.DeletedAt is not null)
+            return null;
+
+        item.Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id;
+        item.TripId = tripId;
+        item.DayId = null;
+        item.OwnerId = ownerId;
+        item.Status = item.Status == ItineraryItemStatus.Confirmed ? ItineraryItemStatus.Wishlist : item.Status;
+        item.SortOrder = trip.UnscheduledItems.Count == 0 ? 0 : trip.UnscheduledItems.Max(i => i.SortOrder) + 1;
+        trip.UnscheduledItems.Add(item);
         trip.UpdatedAt = DateTimeOffset.UtcNow;
         return item;
     }
@@ -86,6 +113,7 @@ public class InMemoryTripRepository : ITripRepository
             return null;
 
         item.Type = updated.Type;
+        item.Status = updated.Status;
         item.Title = updated.Title;
         item.LocationName = updated.LocationName;
         item.Latitude = updated.Latitude;
@@ -101,34 +129,52 @@ public class InMemoryTripRepository : ITripRepository
         return item;
     }
 
+    public ItineraryItem? SetItemStatus(Guid tripId, string ownerId, Guid itemId, ItineraryItemStatus status)
+    {
+        var item = FindOwnedItem(tripId, ownerId, itemId);
+        if (item is null)
+            return null;
+
+        item.Status = status;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+        return item;
+    }
+
     public bool DeleteItem(Guid tripId, string ownerId, Guid itemId)
     {
         if (!_trips.TryGetValue(tripId, out var trip) || trip.OwnerId != ownerId || trip.DeletedAt is not null)
             return false;
-        foreach (var day in trip.Days)
-        {
-            var item = day.Items.FirstOrDefault(i => i.Id == itemId && i.DeletedAt is null);
-            if (item is not null)
-            {
-                item.DeletedAt = DateTimeOffset.UtcNow;
-                trip.UpdatedAt = DateTimeOffset.UtcNow;
-                return true;
-            }
-        }
-        return false;
+
+        var item = AllItems(trip).FirstOrDefault(i => i.Id == itemId && i.DeletedAt is null);
+        if (item is null)
+            return false;
+
+        item.DeletedAt = DateTimeOffset.UtcNow;
+        trip.UpdatedAt = DateTimeOffset.UtcNow;
+        return true;
     }
 
-    public bool ReorderDayItems(Guid tripId, string ownerId, Guid dayId, IReadOnlyList<Guid> orderedItemIds)
+    public bool ReorderDayItems(Guid tripId, string ownerId, Guid? dayId, IReadOnlyList<Guid> orderedItemIds)
     {
         if (!_trips.TryGetValue(tripId, out var trip) || trip.OwnerId != ownerId || trip.DeletedAt is not null)
             return false;
-        var day = trip.Days.FirstOrDefault(d => d.Id == dayId && d.DeletedAt is null);
-        if (day is null)
-            return false;
+
+        List<ItineraryItem> bucket;
+        if (dayId is { } id)
+        {
+            var day = trip.Days.FirstOrDefault(d => d.Id == id && d.DeletedAt is null);
+            if (day is null)
+                return false;
+            bucket = day.Items;
+        }
+        else
+        {
+            bucket = trip.UnscheduledItems;
+        }
 
         for (var i = 0; i < orderedItemIds.Count; i++)
         {
-            var item = day.Items.FirstOrDefault(x => x.Id == orderedItemIds[i] && x.DeletedAt is null);
+            var item = bucket.FirstOrDefault(x => x.Id == orderedItemIds[i] && x.DeletedAt is null);
             if (item is not null)
             {
                 item.SortOrder = i;
@@ -139,32 +185,47 @@ public class InMemoryTripRepository : ITripRepository
         return true;
     }
 
-    public ItineraryItem? MoveItem(Guid tripId, string ownerId, Guid itemId, Guid targetDayId)
+    public ItineraryItem? MoveItem(Guid tripId, string ownerId, Guid itemId, Guid? targetDayId)
     {
         if (!_trips.TryGetValue(tripId, out var trip) || trip.OwnerId != ownerId || trip.DeletedAt is not null)
             return null;
-        var targetDay = trip.Days.FirstOrDefault(d => d.Id == targetDayId && d.DeletedAt is null);
-        if (targetDay is null)
-            return null;
 
+        Day? targetDay = null;
+        if (targetDayId is { } dayId)
+        {
+            targetDay = trip.Days.FirstOrDefault(d => d.Id == dayId && d.DeletedAt is null);
+            if (targetDay is null)
+                return null;
+        }
+
+        // Detach from its current bucket (a day, or the backlog).
         ItineraryItem? item = null;
         foreach (var day in trip.Days)
         {
             var found = day.Items.FirstOrDefault(i => i.Id == itemId && i.DeletedAt is null);
-            if (found is not null)
-            {
-                item = found;
-                day.Items.Remove(found);
-                break;
-            }
+            if (found is not null) { item = found; day.Items.Remove(found); break; }
+        }
+        if (item is null)
+        {
+            item = trip.UnscheduledItems.FirstOrDefault(i => i.Id == itemId && i.DeletedAt is null);
+            if (item is not null) trip.UnscheduledItems.Remove(item);
         }
         if (item is null)
             return null;
 
-        item.DayId = targetDayId;
-        item.SortOrder = targetDay.Items.Count == 0 ? 0 : targetDay.Items.Max(i => i.SortOrder) + 1;
+        if (targetDay is null)
+        {
+            item.DayId = null;
+            item.SortOrder = trip.UnscheduledItems.Count == 0 ? 0 : trip.UnscheduledItems.Max(i => i.SortOrder) + 1;
+            trip.UnscheduledItems.Add(item);
+        }
+        else
+        {
+            item.DayId = targetDay.Id;
+            item.SortOrder = targetDay.Items.Count == 0 ? 0 : targetDay.Items.Max(i => i.SortOrder) + 1;
+            targetDay.Items.Add(item);
+        }
         item.UpdatedAt = DateTimeOffset.UtcNow;
-        targetDay.Items.Add(item);
         trip.UpdatedAt = DateTimeOffset.UtcNow;
         return item;
     }
@@ -226,10 +287,12 @@ public class InMemoryTripRepository : ITripRepository
     {
         if (!_trips.TryGetValue(tripId, out var trip) || trip.OwnerId != ownerId || trip.DeletedAt is not null)
             return null;
-        return trip.Days
-            .SelectMany(d => d.Items)
-            .FirstOrDefault(i => i.Id == itemId && i.DeletedAt is null);
+        return AllItems(trip).FirstOrDefault(i => i.Id == itemId && i.DeletedAt is null);
     }
+
+    // Scheduled items (across days) plus the trip backlog.
+    private static IEnumerable<ItineraryItem> AllItems(Trip trip) =>
+        trip.Days.SelectMany(d => d.Items).Concat(trip.UnscheduledItems);
 
     private PackingItem? FindOwnedPackingItem(Guid tripId, string ownerId, Guid packingItemId)
     {
