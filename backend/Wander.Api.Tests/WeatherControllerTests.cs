@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Wander.Api.Controllers;
@@ -15,10 +16,10 @@ namespace Wander.Api.Tests;
 /// </summary>
 public class WeatherControllerTests
 {
-    private static IMemoryCache NewCache() =>
-        new MemoryCache(Options.Create(new MemoryCacheOptions()));
+    private static IDistributedCache NewCache() =>
+        new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
 
-    private static CachingWeatherProvider CachedFake(IMemoryCache? cache = null) =>
+    private static CachingWeatherProvider CachedFake(IDistributedCache? cache = null) =>
         new(new FakeWeatherProvider(), cache ?? NewCache());
 
     // ── WeatherController ─────────────────────────────────────────────────────

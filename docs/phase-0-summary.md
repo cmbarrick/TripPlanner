@@ -54,9 +54,9 @@ Phase 0 established a local-first foundation so development can proceed without 
 ## Locked Decisions
 
 - Database: PostgreSQL
-- API hosting direction: Azure App Service (execution deferred to Phase 2.5)
+- API hosting direction: Azure App Service (execution deferred to Phase 3)
 - Vector strategy: `pgvector` first, Azure AI Search as scale-up option
-- Delivery approach: local-first through Phase 2, deployment/release infra in Phase 2.5
+- Delivery approach: local-first through Phase 2, deployment/release infra in Phase 3
 
 ## Remaining Items (Outside Core In-Repo Build)
 

@@ -187,9 +187,9 @@ is unavailable.
 
 | Item | Deferred to | Notes |
 |---|---|---|
-| Hourly weather | Phase 4/5 | `GetHourlyAsync` extension point on `IWeatherProvider`; same Open-Meteo endpoint |
+| Hourly weather | Phase 5/6 | `GetHourlyAsync` extension point on `IWeatherProvider`; same Open-Meteo endpoint |
 | Google Calendar two-way sync | Later / optional | `.ics` + `expo-calendar` cover the use case |
-| Redis cache | Phase 2.5 | Upgrade path documented in architecture §6 and Phase 2.5 README |
+| Redis cache | Phase 3 | Upgrade path documented in architecture §6 and Phase 3 README |
 | Real map tiles on native | Future Phase 2 slice | `react-native-maps` or Mapbox; web already has Leaflet/OSM |
 | Azure Maps routing | When key is available | `AzureMapsRoutingProvider` already implemented, activated by config key |
 
@@ -197,9 +197,9 @@ is unavailable.
 
 ## What's next
 
-**Phase 2.5 — Deployment & Release Foundations:** Azure resource groups, App Service deploy,
+**Phase 3 — Deployment & Release Foundations:** Azure resource groups, App Service deploy,
 PostgreSQL environments, CI/CD pipeline, EAS Build/Update, Redis cache upgrade, Key Vault
 wiring for all Phase 2 provider keys.
 
-**Phase 3 — AI Planning Assistant:** generate/refine itineraries via chat, tool-calling
+**Phase 4 — AI Planning Assistant:** generate/refine itineraries via chat, tool-calling
 (search places, add/move items, gap-fill), preference-aware, per-user quotas.

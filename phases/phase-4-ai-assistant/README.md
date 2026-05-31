@@ -1,7 +1,7 @@
-# Phase 3 — AI Assistant
+# Phase 4 — AI Assistant
 
 > Goal: Accelerate planning with an AI that **edits the real trip** (not just chats).
-> Est: ~3 weeks · Depends on: Phase 2
+> Est: ~3 weeks · Depends on: Phase 3 (cloud infra for AI orchestration)
 
 ## Objectives
 - Generate editable itineraries from a prompt.
@@ -20,7 +20,7 @@
       safe-content checks.
 
 ## Out of scope
-- Autonomous booking, payments (Phase 5).
+- Autonomous booking, payments (Later / v2).
 
 ## Testing plan
 - [ ] **Unit:** prompt builders, tool argument parsing/validation, quota accounting.
@@ -32,7 +32,7 @@
 - [ ] **E2E:** "Plan 3 days in Lisbon, foodie, mid-budget" → draft appears & is editable →
       in chat "make day 2 more relaxed" → itinerary updates and persists → undo works.
 - [ ] **Safety:** prompt-injection and unsafe-request test cases handled.
-- [ ] **Regression:** Phases 0–2 suites green.
+- [ ] **Regression:** Phases 0–3 suites green.
 
 ## Exit criteria
 - From a prompt, the AI produces an **editable** draft itinerary.

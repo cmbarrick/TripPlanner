@@ -1,7 +1,7 @@
-# Phase 4 — Notes & Journaling
+# Phase 5 — Notes & Journaling
 
 > Goal: Capture the trip **as it happens** — text and **voice notes** — low-friction and offline.
-> Est: ~3–4 weeks · Depends on: Phase 1 (and accounts from Phase 0)
+> Est: ~3–4 weeks · Depends on: Phase 3 (cloud + media infra for voice/photos), Phase 1 itinerary
 
 ## Objectives
 - **Journal-as-you-go:** make the **itinerary itself the journal** — capture against the specific
@@ -36,7 +36,7 @@
 - [ ] Ownership checks; signed URLs for media.
 
 ## Out of scope
-- AI recap generation (Phase 5), sharing/publishing (Phases 6–7).
+- AI recap generation (Phase 6), sharing/publishing (Phases 7–8).
 
 ## Testing plan
 - [ ] **Unit:** note scoping, prompt enable/disable logic, notification scheduling rules
@@ -48,7 +48,7 @@
 - [ ] **Offline E2E:** airplane mode → create text + voice note on an event → notification still
       scheduled locally → reconnect → media + transcript sync.
 - [ ] **Privacy:** notes default private; media access requires ownership/signed URL.
-- [ ] **Regression:** Phases 0–3 suites green.
+- [ ] **Regression:** Phases 0–4 suites green.
 
 ## Exit criteria
 - From the itinerary, add text/voice/photo to a **specific event** (journal-as-you-go), **offline**, and it syncs.

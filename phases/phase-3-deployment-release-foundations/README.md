@@ -1,4 +1,4 @@
-# Phase 2.5 — Deployment & Release Foundations
+# Phase 3 — Deployment & Release Foundations
 
 > Goal: Move from local-first development to repeatable cloud/stores release infrastructure.
 > Est: ~1–2 weeks · Depends on: Phase 2
@@ -26,7 +26,7 @@
 - [ ] Document deployment runbook + rollback steps.
 
 ## Out of scope
-- Public launch hardening and full store submission (Phase 8).
+- Public launch hardening and full store submission (Phase 9).
 
 ## Exit criteria
 - CI deploys successfully to at least one Azure environment.

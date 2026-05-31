@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Wander.Api.Controllers;
@@ -12,8 +13,8 @@ namespace Wander.Api.Tests;
 /// </summary>
 public class PlacesControllerTests
 {
-    private static IMemoryCache NewCache() =>
-        new MemoryCache(Options.Create(new MemoryCacheOptions()));
+    private static IDistributedCache NewCache() =>
+        new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
 
     private static PlacesController ControllerWithFake(IPlaceProvider? provider = null)
     {

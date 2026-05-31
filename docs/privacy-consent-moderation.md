@@ -52,7 +52,7 @@ Three independent, opt-in, revocable scopes:
 
 ---
 
-## 4. Moderation (public UGC — Phase 7)
+## 4. Moderation (public UGC — Phase 8)
 - **Automated screening:** Azure AI Content Safety on text (and image moderation for photos) at publish
   time and on edits; block/flag categories (hate, harassment, sexual, self-harm, violence, etc.).
 - **Reporting & takedown:** any user can report public content; reported items enter a **review queue**.

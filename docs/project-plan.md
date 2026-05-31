@@ -61,17 +61,17 @@ and discovery layers make it a community product over time.
 | **0** | Foundation & Setup (Local-first) | Repo, CI/CD, **accounts/auth**, design system, local app shell | ~2 wks |
 | **1** | Core Itinerary & Calendar | Create trips, day-by-day plans, calendar (day + multi-day) | ~3–4 wks |
 | **2** | Maps & Integrations | Map view, place search, live weather, .ics export | ~3 wks |
-| **2.5** | Deployment & Release Foundations | Azure environments, CI/CD deploy, EAS/store groundwork | ~1–2 wks |
-| **3** | AI Planning Assistant | Generate & refine itineraries via chat | ~3 wks |
-| **4** | Notes & Journaling | Text + **voice notes** (audio+transcript), reflection prompts, offline capture | ~3–4 wks |
-| **5** | AI Recap & Export | Summarize notes → recap (event/day/trip), export to PDF/web | ~2–3 wks |
-| **6** | Sharing & Collaboration | Share by link + accounts, **real-time co-edit**, reactions | ~3–4 wks |
-| **7** | Public Recaps & Discovery | Publish + moderation, search, **RAG** location Q&A + itinerary discovery | ~4–5 wks |
-| **8** | Offline, Polish & Launch | Robust sync, performance, accessibility, launch hardening | ~2–3 wks |
+| **3** | Deployment & Release Foundations | Azure environments, CI/CD deploy, EAS/store groundwork | ~1–2 wks |
+| **4** | AI Planning Assistant | Generate & refine itineraries via chat | ~3 wks |
+| **5** | Notes & Journaling | Text + **voice notes** (audio+transcript), reflection prompts, offline capture | ~3–4 wks |
+| **6** | AI Recap & Export | Summarize notes → recap (event/day/trip), export to PDF/web | ~2–3 wks |
+| **7** | Sharing & Collaboration | Share by link + accounts, **real-time co-edit**, reactions | ~3–4 wks |
+| **8** | Public Recaps & Discovery | Publish + moderation, search, **RAG** location Q&A + itinerary discovery | ~4–5 wks |
+| **9** | Offline, Polish & Launch | Robust sync, performance, accessibility, launch hardening | ~2–3 wks |
 | **Later / v2** | Monetization & advanced | Premium tier, booking, fine-tuning exploration | post-launch |
 
 > Estimates assume a small team and are planning aids, not commitments. Offline foundations begin in
-> Phase 4 (capture must work offline) and are hardened in Phase 8.
+> Phase 5 (capture must work offline) and are hardened in Phase 9.
 
 ---
 
@@ -83,7 +83,7 @@ and discovery layers make it a community product over time.
   **Microsoft Entra External ID**, design system, CI/CD, base schema (incl. sharing/consent fields).
 - **Exit criteria:** A user can sign up, log in, and see an empty "My Trips" on iOS/Android/Web; CI runs
   lint + typecheck + tests on every PR; API enforces per-user ownership.
-- **Note:** cloud deployment and app-store work are intentionally deferred to Phase 2.5.
+- **Note:** cloud deployment and app-store work are intentionally deferred to Phase 3.
 
 ### Phase 1 — Core Itinerary & Calendar
 - **Goal:** Plan a trip manually, end to end.
@@ -98,7 +98,7 @@ and discovery layers make it a community product over time.
   (Open-Meteo → Azure Maps; date-based forecast vs. climate normals), `.ics` export + calendar sync.
 - **Exit criteria:** Search → pin on map + into itinerary; per-day weather; valid `.ics` export.
 
-### Phase 2.5 — Deployment & Release Foundations
+### Phase 3 — Deployment & Release Foundations
 - **Goal:** Prepare cloud and release infrastructure once core local feature loops are stable.
 - **Deliverables:** Azure resource groups/environments (`dev`/`staging`/`prod`), API deployment target
   (App Service), database environment plan, CI/CD deployment stages, EAS build/update setup, and app-store
@@ -106,13 +106,13 @@ and discovery layers make it a community product over time.
 - **Exit criteria:** App deploys from pipeline to at least one Azure environment; first internal mobile
   build path is proven; deployment runbook is documented.
 
-### Phase 3 — AI Planning Assistant
+### Phase 4 — AI Planning Assistant
 - **Goal:** Accelerate planning with AI that edits the real trip.
 - **Deliverables:** "Generate itinerary" from a prompt; chat assistant with tool-calling (search places,
   add/move items, gap-fill); preference-aware; per-user quotas.
 - **Exit criteria:** Prompt → editable draft; chat edits persist; respects preferences & token quotas.
 
-### Phase 4 — Notes & Journaling  *(NEW — capture)*
+### Phase 5 — Notes & Journaling  *(NEW — capture)*
 - **Goal:** Capture the trip as it happens, low-friction and offline.
 - **Deliverables:**
   - **Text notes** scoped to an **event**, a **day**, or the **whole trip**.
@@ -124,7 +124,7 @@ and discovery layers make it a community product over time.
 - **Exit criteria:** Create text & voice notes (with transcript) on an event/day/trip offline; they sync;
   prompts can be turned off; media stored securely with ownership checks.
 
-### Phase 5 — AI Recap & Export  *(NEW)*
+### Phase 6 — AI Recap & Export  *(NEW)*
 - **Goal:** Turn captured notes into a shareable story.
 - **Deliverables:** **Azure OpenAI** summarizes notes (text + transcripts) into a **recap** at event,
   day, and whole-trip levels; tone/format options; user can **edit before saving**; **export** to
@@ -132,7 +132,7 @@ and discovery layers make it a community product over time.
 - **Exit criteria:** Generate an editable trip recap from notes; export a polished PDF/web page; AI recap
   quality passes the eval thresholds; no fabricated facts beyond the user's notes.
 
-### Phase 6 — Sharing & Collaboration  *(expanded from old v2)*
+### Phase 7 — Sharing & Collaboration  *(expanded from old v2)*
 - **Goal:** Plan and relive trips together.
 - **Deliverables:** Share a trip via **link** (viewer needs no account) and **in-app friends/accounts**;
   roles (owner/editor/viewer); **real-time co-editing** (Azure Web PubSub/SignalR) with presence;
@@ -140,7 +140,7 @@ and discovery layers make it a community product over time.
 - **Exit criteria:** Two users co-edit a trip in real time with correct roles; link sharing works for
   non-users; reactions + shared notes propagate live.
 
-### Phase 7 — Public Recaps & Discovery  *(NEW)*
+### Phase 8 — Public Recaps & Discovery  *(NEW)*
 - **Goal:** A searchable, AI-powered travel knowledge layer from public recaps.
 - **Deliverables:**
   - **Publish** a recap publicly (explicit opt-in, per recap), with PII review.
@@ -153,7 +153,7 @@ and discovery layers make it a community product over time.
 - **Discovery approach:** **RAG first** (controllable, current, consent-clean). Fine-tuning is a
   later evaluation, gated on explicit training consent — see the privacy doc.
 
-### Phase 8 — Offline, Polish & Launch
+### Phase 9 — Offline, Polish & Launch
 - **Goal:** Reliable in the field; production-ready.
 - **Deliverables:** Harden offline sync (incl. media), conflict handling, performance & accessibility
   passes, onboarding, store assets, final security/privacy review.
@@ -184,11 +184,11 @@ We test continuously, not just at the end. Each phase folder contains a concrete
 | **Unit** | Jest + RN Testing Library; xUnit (API) | Pure logic, components, services | Every PR |
 | **Integration** | RNTL + MSW; API integration tests vs. test Postgres | Feature flows, data layer, ownership/roles | Every PR |
 | **End-to-end** | Maestro (mobile) / Playwright (web) | Critical journeys incl. **multi-user co-edit** | Pre-merge + nightly |
-| **AI evals** | Prompt/golden suites | Itinerary quality, **recap faithfulness**, **RAG groundedness/citations**, safety | Phases 3,5,7 on AI changes |
-| **Media/voice** | Transcription accuracy samples; audio upload/playback | Voice notes, transcripts, Blob round-trip | Phase 4+ |
-| **Moderation/privacy** | Content-safety test corpus; consent-state tests; PII redaction | Public UGC, consent gates, deletion/export | Phase 7 + regression |
+| **AI evals** | Prompt/golden suites | Itinerary quality, **recap faithfulness**, **RAG groundedness/citations**, safety | Phases 4,6,8 on AI changes |
+| **Media/voice** | Transcription accuracy samples; audio upload/playback | Voice notes, transcripts, Blob round-trip | Phase 5+ |
+| **Moderation/privacy** | Content-safety test corpus; consent-state tests; PII redaction | Public UGC, consent gates, deletion/export | Phase 8 + regression |
 | **Manual / exploratory** | Device matrix, internal track | UX, real-device quirks, **offline capture** | End of each phase |
-| **Non-functional** | Lighthouse, perf profiling, axe a11y | Performance, accessibility, bundle size | Phase 8 + regression |
+| **Non-functional** | Lighthouse, perf profiling, axe a11y | Performance, accessibility, bundle size | Phase 9 + regression |
 
 **Definition of Done (every feature):**
 - Code reviewed and merged via PR with green CI.
@@ -223,10 +223,10 @@ checklist are signed off.
 - **M1:** Authenticated app shell on all platforms (end of Phase 0)
 - **M2:** Manual planning end-to-end (end of Phase 1)
 - **M3:** Map + live weather + integrations (end of Phase 2)
-- **M4:** Deployment/release foundations in place (end of Phase 2.5)
-- **M5:** AI planning assistant usable (end of Phase 3)
-- **M6:** Notes & voice journaling, offline (end of Phase 4)
-- **M7:** AI recap + export (end of Phase 5)
-- **M8:** Sharing + real-time collaboration (end of Phase 6)
-- **M9:** Public discovery + RAG Q&A (end of Phase 7)
-- **M10:** Public launch — offline, polished, privacy-reviewed (end of Phase 8)
+- **M4:** Deployment/release foundations in place (end of Phase 3)
+- **M5:** AI planning assistant usable (end of Phase 4)
+- **M6:** Notes & voice journaling, offline (end of Phase 5)
+- **M7:** AI recap + export (end of Phase 6)
+- **M8:** Sharing + real-time collaboration (end of Phase 7)
+- **M9:** Public discovery + RAG Q&A (end of Phase 8)
+- **M10:** Public launch — offline, polished, privacy-reviewed (end of Phase 9)

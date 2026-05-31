@@ -1,9 +1,9 @@
 # Later / v2 — Monetization & Advanced
 
 > Goal: Introduce revenue and advanced capabilities once the core platform has shipped.
-> Est: post-launch · Depends on: Phase 8 (public launch)
+> Est: post-launch · Depends on: Phase 9 (public launch)
 
-> Note: **Collaboration moved into core** (now Phase 6). This bucket holds post-launch revenue and
+> Note: **Collaboration moved into core** (now Phase 7). This bucket holds post-launch revenue and
 > advanced AI work.
 
 ## Objectives

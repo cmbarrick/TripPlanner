@@ -29,7 +29,7 @@ the **decisions** must be locked and the **dev tooling** working.
 
 > Full publishing steps, store requirements, and the launch checklist:
 > [`deployment-and-app-stores.md`](./deployment-and-app-stores.md).
-> Deployment/store execution is deferred to **Phase 2.5**; keep these tracked so lead-time items don't surprise us.
+> Deployment/store execution is deferred to **Phase 3**; keep these tracked so lead-time items don't surprise us.
 
 ## 3. Local dev environment (each developer)
 - [ ] **.NET 9 SDK**, **Node LTS + npm**, **Git**.
@@ -62,4 +62,4 @@ the **decisions** must be locked and the **dev tooling** working.
 3. Every dev can run the API + Expo client locally against a **local Postgres**.
 4. CI runs on PRs (even if minimal).
 
-Deployment/app-store rollout items land in **Phase 2.5**.
+Deployment/app-store rollout items land in **Phase 3**.

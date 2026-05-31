@@ -38,11 +38,11 @@
   - [x] Store/fetch Celsius; client renders °F/°C per user preference via `formatTemp`.
   - [x] Cache: `CachingWeatherProvider` — 2 h forecast TTL, 24 h climate TTL, key = `(lat/lng ±1 km, date)`.
   - [x] **Granularity:** per-stop weather (items with lat/lng); day header = first located item; unlocated items show no badge. Multi-town days get per-stop conditions. See architecture §7.
-  - [ ] **Hourly weather** *(deferred to Phase 4/5)*: Open-Meteo supports `hourly=temperature_2m,weather_code,precipitation_probability`
+  - [ ] **Hourly weather** *(deferred to Phase 5/6)*: Open-Meteo supports `hourly=temperature_2m,weather_code,precipitation_probability`
         on the same endpoint (24 values/day for the ≤16-day window). Daily high/low is right for
         planning; hourly is useful during the trip ("will it rain at 2 PM?") and for recaps.
         Implementation: add `GetHourlyAsync` to `IWeatherProvider`; cache full day array under one key;
-        surface in the item detail screen (Phase 4) and recap timeline (Phase 5).
+        surface in the item detail screen (Phase 5) and recap timeline (Phase 6).
         See architecture §7 "Hourly weather".
 - [x] **Write to calendar (Apple + Google):**
   - [x] **On-device create** via **`expo-calendar`** (with permission) — `addTripToCalendar()` in
@@ -56,14 +56,14 @@
         Apple has no cloud write API — iCloud sync is on-device only.
 - [x] **Caching layer:** cache Places & Weather responses to control cost/limits.
       _`IMemoryCache` now; upgrade path to Azure Cache for Redis documented in architecture §6 and
-      Phase 2.5 README for when multi-instance App Service is deployed._
+      Phase 3 README for when multi-instance App Service is deployed._
 - [x] Debounce autocomplete; graceful degradation when a provider is down.
       _Place search: 300 ms debounce, per-provider 503 → "Location search unavailable" fallback.
       Weather: `FetchSafe` swallows provider errors per-stop, partial results returned.
       Travel times: `FetchSafe` swallows errors per-segment._
 
 ## Out of scope
-- AI suggestions (Phase 3), in-app booking (Phase 5).
+- AI suggestions (Phase 4), in-app booking (Later / v2).
 
 ## Testing plan
 - [ ] **Unit:** distance/ETA formatting, `.ics` generation, deep-link URL builder, cache key logic.
@@ -143,7 +143,7 @@ No key is required. The test project instantiates `FakePlaceProvider` directly; 
     "Export .ics" (all platforms) and "Add to Calendar" (native only) buttons.
   - **Backend:** `dotnet test` = **49 passing** (41 + 8 new `TravelTimesControllerTests`).
     `tsc` clean. `jest` = **28 passing** (4 suites).
-  - **Remaining:** Google Calendar API two-way sync (optional, later); Redis cache upgrade (Phase 2.5);
+  - **Remaining:** Google Calendar API two-way sync (optional, later); Redis cache upgrade (Phase 3);
     real-device calendar permission + .ics validity manual verification.
 
 - **2026-05-30 (slice 1 — place search + structured location + map view):** Completed the first

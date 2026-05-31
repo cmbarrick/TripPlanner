@@ -1,7 +1,7 @@
-# Phase 7 — Public Recaps & Discovery
+# Phase 8 — Public Recaps & Discovery
 
 > Goal: A searchable, AI-powered travel knowledge layer built from **consented** public recaps.
-> Est: ~4–5 weeks · Depends on: Phase 5 (recaps), Phase 6 (sharing), privacy workstream
+> Est: ~4–5 weeks · Depends on: Phase 6 (recaps), Phase 7 (sharing), privacy workstream
 
 ## Objectives
 - Let users **publish** recaps publicly (explicit opt-in), **only after the trip has ended**, safely moderated.
@@ -15,7 +15,7 @@
   public content reflective rather than live.
 - Enforced **server-side** (not just hidden in the UI): the publish endpoint rejects publishing when
   `today < trip.end_date`. The publish control is disabled with an explanatory message until then.
-- **Private** sharing & co-editing with friends (Phase 6) remain available **before/during** the trip;
+- **Private** sharing & co-editing with friends (Phase 7) remain available **before/during** the trip;
   this restriction applies **only to public publishing**.
 
 ## Scope / tasks
@@ -42,7 +42,7 @@
 - [ ] **Moderation:** content-safety corpus blocks unsafe content; report→queue→takedown.
 - [ ] **Privacy:** unpublish/delete/revoke removes from search **and** vector index; PII redaction works.
 - [ ] **Integration:** publish → index → searchable; filters return relevant results.
-- [ ] **Regression:** Phases 0–6 suites green.
+- [ ] **Regression:** Phases 0–7 suites green.
 
 ## Exit criteria
 - **Public publishing is impossible until after the trip ends** (enforced by the API, not just UI).

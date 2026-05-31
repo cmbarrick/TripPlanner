@@ -11,7 +11,26 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
-builder.Services.AddMemoryCache();
+
+// Distributed cache for the Places/Weather provider decorators (architecture §6).
+// Cloud (Phase 3+): a shared Azure Cache for Redis instance is used when
+// Cache:RedisConnectionString is configured (from Key Vault), so multiple App Service
+// instances share one cache and don't duplicate provider fetches.
+// Local-first / CI: fall back to an in-process IDistributedCache so the app runs with
+// no Redis dependency — the caching decorators are unaware of which backing store is used.
+var redisConnectionString = builder.Configuration["Cache:RedisConnectionString"];
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnectionString;
+        options.InstanceName = "wander:";
+    });
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
 
 // Routing provider — Haversine (no key) by default; Azure Maps when key is configured.
 var azureMapsKey = builder.Configuration["Routing:AzureMapsKey"];
@@ -37,7 +56,7 @@ if (useFakeWeather)
     builder.Services.AddScoped<IWeatherProvider>(sp =>
         new CachingWeatherProvider(
             new FakeWeatherProvider(),
-            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 }
 else
 {
@@ -45,7 +64,7 @@ else
     builder.Services.AddScoped<IWeatherProvider>(sp =>
         new CachingWeatherProvider(
             sp.GetRequiredService<OpenMeteoWeatherProvider>(),
-            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 }
 
 // Place search provider — key stays server-side. Swap MapboxPlaceProvider for
@@ -57,14 +76,14 @@ if (!string.IsNullOrWhiteSpace(mapboxToken))
     builder.Services.AddScoped<IPlaceProvider>(sp =>
         new CachingPlaceProvider(
             sp.GetRequiredService<MapboxPlaceProvider>(),
-            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 }
 else
 {
     builder.Services.AddScoped<IPlaceProvider>(sp =>
         new CachingPlaceProvider(
             new FakePlaceProvider(),
-            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 }
 
 var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];

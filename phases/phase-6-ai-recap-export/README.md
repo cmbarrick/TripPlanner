@@ -1,7 +1,7 @@
-# Phase 5 — AI Recap & Export
+# Phase 6 — AI Recap & Export
 
 > Goal: Turn captured notes into an editable, shareable **recap** — and export it.
-> Est: ~2–3 weeks · Depends on: Phase 4 (notes & transcripts), Phase 3 (AI plumbing)
+> Est: ~2–3 weeks · Depends on: Phase 5 (notes & transcripts), Phase 4 (AI plumbing)
 
 ## Objectives
 - Summarize a trip's notes (text + voice transcripts) into a recap at event/day/trip level.
@@ -25,14 +25,14 @@
 - [ ] **Cost controls:** per-user quotas, caching, cheaper model for drafts.
 
 ## Out of scope
-- Public publishing/searchability and discovery (Phase 7); real-time sharing (Phase 6).
+- Public publishing/searchability and discovery (Phase 8); real-time sharing (Phase 7).
 
 ## Testing plan
 - [ ] **AI evals:** recap **faithfulness** (no facts beyond notes), coverage of key events, tone.
 - [ ] **Unit:** recap assembly, note→section linkage, versioning.
 - [ ] **Integration:** generate → edit → export PDF/web; photo inclusion.
 - [ ] **Cost:** quota enforcement; caching avoids duplicate generation.
-- [ ] **Regression:** Phases 0–4 suites green.
+- [ ] **Regression:** Phases 0–5 suites green.
 
 ## Exit criteria
 - Generate an **editable** trip recap from notes; export a polished PDF/web page.

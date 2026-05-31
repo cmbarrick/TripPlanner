@@ -15,7 +15,7 @@
 - [x] Initialize Expo (React Native + Web) app in TypeScript with Expo Router.
 - [x] Set up the design system (Tamagui/NativeWind): theme, colors, typography, base components.
 - [x] Scaffold **ASP.NET Core (.NET 9) + EF Core (Npgsql)** API; Swagger in dev.
-- [x] Provision local PostgreSQL baseline for all devs (cloud DB deferred to Phase 2.5).
+- [x] Provision local PostgreSQL baseline for all devs (cloud DB deferred to Phase 3).
 - [x] Implement auth via **Microsoft Entra External ID** (email + Google/Apple); API validates JWT.
 - [x] Define base schema: `users`, `preferences`, **`consent_settings`**, `trips`, `days`,
       `itinerary_items`, `packing_items`, **`trip_members` / `trip_shares` (sharing-ready)**,
@@ -29,7 +29,7 @@
 
 ## Out of scope
 - Any real trip-building features (Phase 1).
-- Cloud deployment, app store delivery, and staging/production environments (moved to Phase 2.5).
+- Cloud deployment, app store delivery, and staging/production environments (moved to Phase 3).
 
 ## Testing plan
 - [ ] **Static:** TS/ESLint/Prettier + .NET analyzers pass; pre-commit hook configured.
@@ -65,7 +65,7 @@
   in separate PowerShell windows, and `scripts/stop-local.ps1` to stop both using tracked PIDs.
 - **2026-05-30 (agent):** Added root double-click launchers `start-wander.cmd` / `stop-wander.cmd`
   so local startup/shutdown works without terminal command typing.
-- **2026-05-30 (decision):** Deployment and app-store work moved from Phase 0 to a new Phase 2.5;
+- **2026-05-30 (decision):** Deployment and app-store work moved from Phase 0 to a new Phase 3;
   Phase 0 remains local-first until feature work through Phase 2 stabilizes.
 - **2026-05-30 (agent):** Added `docs/phase-0-local-test-plan.md` to verify startup, DB/migrations,
   local auth/ownership isolation, CORS, CI-equivalent checks, and launcher reliability.
@@ -89,6 +89,6 @@
   `Authorization: Bearer` headers for API calls when signed in (falls back to dev bypass header).
 - **Deferred / blocked:** Azure subscription/resource groups, Entra tenant provisioning, Azure OpenAI
   access request, and Apple/Google developer enrollment + bundle reservation remain pending and are
-  tracked for Phase 2.5 deployment readiness.
+  tracked for Phase 3 deployment readiness.
 - **Open setup item:** local Postgres credentials in checked-in config are placeholders and must be
   provided via user-secrets/environment values before running migrations against your own instance.

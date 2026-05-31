@@ -4,19 +4,19 @@
 > Covers: Apple App Store, Google Play, and web deployment. Build/submit via **EAS** (Expo).
 
 This is the playbook for getting Wander into users' hands on **iOS**, **Android**, and **Web**.
-Execution is planned for **Phase 2.5+** (local-first development before that).
+Execution is planned for **Phase 3+** (local-first development before that).
 
 ---
 
 ## 0. TL;DR sequencing
-- **Phase 2.5:** enroll developer accounts, reserve bundle/package IDs, set up signing, ship a first
+- **Phase 3:** enroll developer accounts, reserve bundle/package IDs, set up signing, ship a first
   **internal/TestFlight** build to prove the pipeline.
 - **Throughout:** keep TestFlight (iOS) + Internal Testing (Android) tracks for every phase.
-- **Phase 8:** final assets, privacy labels, compliance, and **public store submission**.
+- **Phase 9:** final assets, privacy labels, compliance, and **public store submission**.
 
 ---
 
-## 1. Accounts, costs & lead time *(start in Phase 2.5)*
+## 1. Accounts, costs & lead time *(start in Phase 3)*
 | Item | Cost | Lead time / notes |
 |---|---|---|
 | **Apple Developer Program** | **$99 / year** | Enrollment can take **days** (identity/D-U-N-S for orgs). Needed for TestFlight + App Store. |
@@ -54,7 +54,7 @@ Execution is planned for **Phase 2.5+** (local-first development before that).
 - **Account deletion in-app** — Apple **requires** it if users can create an account.
 - **Review time:** typically ~24–48h (can be longer for first submission / UGC apps).
 
-**⚠️ UGC rule (Apple Guideline 1.2) — affects our public recaps (Phase 7):** apps with
+**⚠️ UGC rule (Apple Guideline 1.2) — affects our public recaps (Phase 8):** apps with
 user-generated content must have a **content filter, a way to report/flag, a way to block users, and
 a published contact for reports.** Our moderation pipeline must be live **before** public recaps ship.
 
@@ -76,14 +76,14 @@ a published contact for reports.** Our moderation pipeline must be live **before
 - **Review time:** can range from hours to several days; new accounts may face extra checks.
 
 **UGC:** Play also requires moderation + reporting for user-generated content — same dependency on our
-Phase 7 moderation work.
+Phase 8 moderation work.
 
 ---
 
 ## 5. Web deployment
 - **Expo web export** → **Azure Static Web Apps** (global CDN, free SSL, GitHub Actions deploy).
 - Custom domain + HTTPS; preview environments per PR if desired.
-- Public recap pages (Phase 5/7) are served here and must honor the same consent/visibility rules.
+- Public recap pages (Phase 6/8) are served here and must honor the same consent/visibility rules.
 
 ---
 
@@ -94,7 +94,7 @@ Phase 7 moderation work.
 
 ---
 
-## 7. Cross-store launch checklist (Phase 8 gate)
+## 7. Cross-store launch checklist (Phase 9 gate)
 - [ ] Developer accounts active; app records created; IDs stable.
 - [ ] Signing configured + **keystore backed up**.
 - [ ] Privacy policy published; **Apple App Privacy + Google Data Safety** completed and accurate.

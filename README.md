@@ -26,7 +26,7 @@ Trip planning App/
 ├─ app/                     ← Expo (React Native + Web) client
 │  └─ src/                  ← screens, components, api client, theme
 └─ phases/                  ← one folder per delivery phase, each with tasks + tests
-   ├─ phase-0-foundation/  …  phase-2.5-deployment-release-foundations/  …  phase-8-offline-polish-launch/
+   ├─ phase-0-foundation/  …  phase-3-deployment-release-foundations/  …  phase-9-offline-polish-launch/
 ```
 
 ## Run it locally
@@ -78,7 +78,7 @@ npm run web        # opens http://localhost:8081 (or: npm run android / npm run 
 - **Before building for real:** see the [pre-build checklist](./docs/pre-build-checklist.md)
   (decisions to lock, Azure/Entra/OpenAI provisioning, local Postgres, CI).
 - **Next:** close the Phase 1 exit gaps (test-Postgres run, drag-and-drop, full E2E), then begin
-  **Phase 2** (maps & integrations). Deployment/app-store work is deferred to **Phase 2.5**.
+  **Phase 2** (maps & integrations). Deployment/app-store work is deferred to **Phase 3**.
 
 ## What's next & handoff (read this if you're the next agent)
 

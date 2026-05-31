@@ -110,7 +110,7 @@ and the trade-offs we accepted. It is the single source of truth for technical d
 - **Three AI surfaces, one provider:** (1) planning assistant, (2) recap generation, (3) RAG
   discovery — all behind a single `ILlmClient`/`IEmbeddingClient` so the model is swappable.
 
-### Notes, journaling & media capture (Phase 4)
+### Notes, journaling & media capture (Phase 5)
 - **Notes** are polymorphic: scoped to an **event**, a **day**, or the **trip** (`scope` + `target_id`).
 - **Voice notes:** record on-device → upload audio to **Azure Blob** → **Azure Speech-to-Text**
   produces a transcript (run async via Azure Functions). We keep **both** audio and transcript.
@@ -127,14 +127,14 @@ and the trade-offs we accepted. It is the single source of truth for technical d
   uploads resume on reconnect. **A recording is never lost.**
 - **Photos** attach to notes (Blob), same pipeline.
 
-### AI recap & export (Phase 5)
+### AI recap & export (Phase 6)
 - **Input:** a trip's notes + transcripts (+ itinerary context, optional photos).
 - **Process:** Azure OpenAI summarizes at **event / day / trip** granularity into an editable recap;
   tone/format options; **grounded in the user's own notes** (no invented facts).
 - **Export:** render to **PDF** and a **shareable web page**; optional photo inclusion.
 - **Storage:** recap is a first-class entity (editable, versioned), separate from raw notes.
 
-### Sharing & real-time collaboration (Phase 6)
+### Sharing & real-time collaboration (Phase 7)
 - **Two share modes:** **link** (capability token, viewer needs no account) and **in-app accounts**
   (friends). Access governed by `TripShare` + `TripMember` with roles **owner / editor / viewer**.
 - **Real-time co-edit:** **Azure Web PubSub / SignalR** for presence + live updates.
@@ -142,7 +142,7 @@ and the trade-offs we accepted. It is the single source of truth for technical d
   free-form co-editing needs it. Sync stays behind an interface so the strategy can change.
 - **Reactions** on trips/events/recaps; **shared notes** double as comments.
 
-### Public discovery & RAG (Phase 7)
+### Public discovery & RAG (Phase 8)
 - **Publishing** a recap is an explicit, per-recap **opt-in**, allowed **only after the trip end
   date** (server-enforced safety gate); PII is reviewed/redacted first.
 - **Moderation:** **Azure AI Content Safety** + user reporting + takedown + human review queue.
@@ -194,23 +194,23 @@ User ──< Trip ──< Day ──< ItineraryItem
 User ── Preferences (units, travel style, diet, budget band, pace)
 User ── ConsentSettings (share / publish / ai_training — each opt-in, revocable)
 
-# Capture (Phase 4)
+# Capture (Phase 5)
 Note            { scope: trip|day|event, target_id, author_id,
                   body_text?, kind: text|voice|prompt_response }
   └─ MediaAsset { kind: audio|photo, blob_url, duration?, transcript? }
 JournalPrompt   { text, is_preset, enabled_global, enabled_per_trip }
 PromptResponse  → Note (links a prompt to its answer)
 
-# Recap (Phase 5)
+# Recap (Phase 6)
 Recap { trip_id, scope: trip|day|event, target_id, body (editable),
         generated_from[note_ids], status: draft|final, export_urls[] }
 
-# Sharing & collaboration (Phase 6)
+# Sharing & collaboration (Phase 7)
 TripShare   { trip_id, mode: link|account, token?, role, expires? }
 TripMember  { trip_id, user_id, role: owner|editor|viewer }
 Reaction    { target: trip|event|recap, target_id, user_id, emoji }
 
-# Public discovery (Phase 7)
+# Public discovery (Phase 8)
 PublicRecap { recap_id, visibility: public, consent_verified, moderation_status,
               places[], tags[], season, budget_band }
 EmbeddingChunk { source: public_recap, source_id, vector, text }  # vector index
@@ -228,7 +228,7 @@ ItineraryItem: { type: flight|lodging|food|activity|transport,
 
 ## 5. Environments & delivery (Azure)
 - **Environments:** `local` → `staging` → `production`.
-- **Execution timing:** active deployment rollout is deferred to **Phase 2.5**; Phases 0–2 are local-first.
+- **Execution timing:** active deployment rollout is deferred to **Phase 3**; Phases 0–2 are local-first.
 - **API hosting (locked):** ASP.NET Core on **Azure App Service**.
 - **Database:** **Azure Database for PostgreSQL** (Flexible Server) per environment.
 - **Web hosting:** Expo web export to **Azure Static Web Apps**.
@@ -251,12 +251,12 @@ ItineraryItem: { type: flight|lodging|food|activity|transport,
 | Phase | Cache | Reason |
 |---|---|---|
 | **0–2 (local-first)** | `IMemoryCache` (in-process) | Zero infrastructure; works on a single App Service instance. |
-| **2.5+ (cloud)** | **Azure Cache for Redis** via `IDistributedCache` | Multiple App Service instances each have independent in-process caches; a shared Redis instance eliminates duplicate provider fetches across instances and survives restarts. |
+| **3+ (cloud)** | **Azure Cache for Redis** via `IDistributedCache` | Multiple App Service instances each have independent in-process caches; a shared Redis instance eliminates duplicate provider fetches across instances and survives restarts. |
 
 **Current state:** `CachingPlaceProvider` and `CachingWeatherProvider` both depend on `IMemoryCache`
 injected via `Program.cs`. The decorators contain no cache-technology-specific code.
 
-**Upgrade path (Phase 2.5):**
+**Upgrade path (Phase 3):**
 1. Provision an **Azure Cache for Redis** instance (one per environment).
 2. Add `builder.Services.AddStackExchangeRedisCache(...)` to `Program.cs`.
 3. Update `CachingPlaceProvider` and `CachingWeatherProvider` to take `IDistributedCache`
@@ -310,7 +310,7 @@ encapsulated in the decorator layer.
 - Each located stop fetches its own observation; nearby stops share one cached fetch.
 - Day header is a single representative glance; per-stop badges show the real local conditions.
 
-**Hourly weather (deferred to Phase 4/5 — journaling / recap):**
+**Hourly weather (deferred to Phase 5/6 — journaling / recap):**
 - During active travel, hourly precision matters ("will it rain at 2 PM at the Colosseum?").
   Daily high/low is sufficient for planning; hourly during planning is noise.
 - Open-Meteo supports `hourly=temperature_2m,weather_code,precipitation_probability` on the
@@ -319,12 +319,12 @@ encapsulated in the decorator layer.
   (or a separate `IHourlyWeatherProvider`); cache key adds `+ hour` or caches the full day
   array under one key and slices client-side. No schema changes needed — hourly data is
   display-only, not persisted.
-- **UI home:** the itinerary item detail/edit screen (Phase 4) and the trip recap timeline
-  (Phase 5) are the natural surfaces — not the day-list view.
+- **UI home:** the itinerary item detail/edit screen (Phase 5) and the trip recap timeline
+  (Phase 6) are the natural surfaces — not the day-list view.
 
 **Two regimes for the same location:**
 - *Forecast/climate* for planning (future trips).
-- **Historical actuals per location** for recaps of past trips (Phase 5/7): query the
+- **Historical actuals per location** for recaps of past trips (Phase 6/8): query the
   Open-Meteo archive API for the exact date visited — a multi-town recap then reflects the
   real weather at each town on the day it was visited.
 
@@ -338,7 +338,7 @@ for the prototype.
 2. **One cross-platform client codebase** — occasional platform-specific polish needed, but ~70% effort saved vs. separate apps.
 3. **In-memory fake data first** — lets the full app run locally on day one; the EF Core layer makes the swap to real Postgres a config change.
 4. **Collaboration is now core (not v2)** — identity, sharing, and consent are modeled from Phase 0;
-   real-time co-edit lands in Phase 6. Sync moves from last-write-wins toward operational merge/CRDTs.
+   real-time co-edit lands in Phase 7. Sync moves from last-write-wins toward operational merge/CRDTs.
 5. **RAG before fine-tuning for discovery** — grounded, current, and consent-clean; fine-tuning is a
    later, separately-consented option.
 6. **Keep audio + transcript** — more storage, but preserves authenticity and enables re-transcription.
