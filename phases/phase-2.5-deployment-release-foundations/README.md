@@ -16,6 +16,13 @@
 - [ ] Configure EAS Build/Update for internal mobile builds.
 - [ ] Complete store groundwork: Apple/Google accounts, bundle IDs/package IDs, signing artifacts.
 - [ ] Verify secrets management in Key Vault for environment configs.
+- [ ] **Upgrade API cache from `IMemoryCache` → Azure Cache for Redis** (`IDistributedCache`).
+      Current in-process cache breaks under multiple App Service instances (each instance has its
+      own independent cache, causing duplicate Place/Weather provider fetches and wasted quota).
+      Steps: provision Redis per environment → `AddStackExchangeRedisCache` in `Program.cs` →
+      update `CachingPlaceProvider` + `CachingWeatherProvider` to `IDistributedCache` → add
+      `Cache:RedisConnectionString` to Key Vault. No controller or provider logic changes needed.
+      See architecture §6 "API caching strategy".
 - [ ] Document deployment runbook + rollback steps.
 
 ## Out of scope

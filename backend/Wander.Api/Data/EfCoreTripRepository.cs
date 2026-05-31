@@ -184,7 +184,10 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         item.Type = updated.Type;
         item.Status = updated.Status;
         item.Title = updated.Title;
+        item.FlightNumber = updated.FlightNumber;
         item.LocationName = updated.LocationName;
+        item.Address = updated.Address;
+        item.PlaceId = updated.PlaceId;
         item.Latitude = updated.Latitude;
         item.Longitude = updated.Longitude;
         item.StartTime = updated.StartTime;

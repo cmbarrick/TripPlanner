@@ -119,7 +119,10 @@ export interface ItineraryItemInput {
   type: ItineraryItem['type'];
   status?: ItineraryItem['status'];
   title: string;
+  flightNumber?: string | null;
   locationName?: string | null;
+  address?: string | null;
+  placeId?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   startTime?: string | null;
@@ -129,6 +132,95 @@ export interface ItineraryItemInput {
   confirmationNo?: string | null;
   bookingUrl?: string | null;
   notes?: string | null;
+}
+
+export interface PlaceCandidate {
+  placeId: string;
+  name: string;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface PlaceDetails {
+  placeId: string;
+  name: string;
+  address?: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+export async function searchPlaces(query: string, limit = 5): Promise<PlaceCandidate[]> {
+  if (!query.trim()) return [];
+  try {
+    return await sendJson<PlaceCandidate[]>(
+      `/api/places/autocomplete?q=${encodeURIComponent(query.trim())}&limit=${limit}`,
+      'GET',
+    );
+  } catch {
+    return [];
+  }
+}
+
+// ── Travel times ─────────────────────────────────────────────────────────────
+
+export interface TravelSegment {
+  fromItemId: string;
+  toItemId: string;
+  distanceKm: number;
+  walkingMinutes: number;
+  drivingMinutes: number;
+}
+
+export interface TravelTimesResponse {
+  segments: TravelSegment[];
+}
+
+export async function fetchTravelTimes(tripId: string): Promise<TravelTimesResponse> {
+  try {
+    return await sendJson<TravelTimesResponse>(`/api/trips/${tripId}/travel-times`, 'GET');
+  } catch {
+    return { segments: [] };
+  }
+}
+
+// ── Weather ──────────────────────────────────────────────────────────────────
+
+export interface ItemWeather {
+  itemId: string;
+  highC: number;
+  lowC: number;
+  weatherCode: number;
+  isClimateSummary: boolean;
+}
+
+export interface DayWeather {
+  dayId: string;
+  highC: number;
+  lowC: number;
+  weatherCode: number;
+  isClimateSummary: boolean;
+}
+
+export interface TripWeatherResponse {
+  items: ItemWeather[];
+  days: DayWeather[];
+}
+
+export async function fetchTripWeather(tripId: string): Promise<TripWeatherResponse> {
+  try {
+    return await sendJson<TripWeatherResponse>(`/api/trips/${tripId}/weather`, 'GET');
+  } catch {
+    return { items: [], days: [] };
+  }
+}
+
+export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+  try {
+    return await sendJson<PlaceDetails>(`/api/places/${encodeURIComponent(placeId)}`, 'GET');
+  } catch {
+    return null;
+  }
 }
 
 export async function createItem(tripId: string, dayId: string, input: ItineraryItemInput): Promise<ItineraryItem> {

@@ -18,7 +18,11 @@ export interface ItineraryItem {
   type: ItineraryItemType;
   status: ItineraryItemStatus;
   title: string;
+  /** IATA flight number, e.g. "BA 123". Only set when type === 'Flight'. */
+  flightNumber?: string | null;
   locationName?: string | null;
+  address?: string | null;
+  placeId?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   startTime?: string | null; // "HH:mm:ss"

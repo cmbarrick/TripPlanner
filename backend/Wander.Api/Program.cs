@@ -2,12 +2,70 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Wander.Api.Data;
+using Wander.Api.Places;
+using Wander.Api.Routing;
 using Wander.Api.Security;
+using Wander.Api.Weather;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+builder.Services.AddMemoryCache();
+
+// Routing provider — Haversine (no key) by default; Azure Maps when key is configured.
+var azureMapsKey = builder.Configuration["Routing:AzureMapsKey"];
+if (!string.IsNullOrWhiteSpace(azureMapsKey))
+{
+    builder.Services.AddHttpClient<AzureMapsRoutingProvider>();
+    builder.Services.AddScoped<IRoutingProvider>(sp =>
+        new AzureMapsRoutingProvider(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(AzureMapsRoutingProvider)),
+            azureMapsKey));
+}
+else
+{
+    builder.Services.AddScoped<IRoutingProvider, HaversineRoutingProvider>();
+}
+
+// Weather provider — Open-Meteo needs no key; always available.
+// Swap in FakeWeatherProvider by setting Weather:UseFake=true (e.g. for integration tests
+// that should not hit the network).
+var useFakeWeather = builder.Configuration.GetValue<bool>("Weather:UseFake");
+if (useFakeWeather)
+{
+    builder.Services.AddScoped<IWeatherProvider>(sp =>
+        new CachingWeatherProvider(
+            new FakeWeatherProvider(),
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+}
+else
+{
+    builder.Services.AddHttpClient<OpenMeteoWeatherProvider>();
+    builder.Services.AddScoped<IWeatherProvider>(sp =>
+        new CachingWeatherProvider(
+            sp.GetRequiredService<OpenMeteoWeatherProvider>(),
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+}
+
+// Place search provider — key stays server-side. Swap MapboxPlaceProvider for
+// FakePlaceProvider automatically when no access token is configured (e.g. CI).
+var mapboxToken = builder.Configuration["Places:MapboxAccessToken"];
+if (!string.IsNullOrWhiteSpace(mapboxToken))
+{
+    builder.Services.AddHttpClient<MapboxPlaceProvider>();
+    builder.Services.AddScoped<IPlaceProvider>(sp =>
+        new CachingPlaceProvider(
+            sp.GetRequiredService<MapboxPlaceProvider>(),
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+}
+else
+{
+    builder.Services.AddScoped<IPlaceProvider>(sp =>
+        new CachingPlaceProvider(
+            new FakePlaceProvider(),
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+}
 
 var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
 if (!string.IsNullOrWhiteSpace(appInsightsConnectionString))

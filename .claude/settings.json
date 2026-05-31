@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Stop-Process -Id 50304 -Force -ErrorAction SilentlyContinue)",
+      "Bash(Start-Sleep -Milliseconds 500)",
+      "PowerShell(Stop-Process -Id 50304 -Force -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

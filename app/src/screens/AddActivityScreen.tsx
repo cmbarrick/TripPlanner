@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus } from '../types';
 import { ItineraryItemInput } from '../api';
+import { PlaceSearchField, SelectedPlace } from '../PlaceSearchField';
 import { colors, radius, itemEmoji } from '../theme';
 import { dayLabel } from '../format';
 import { TimeField } from '../pickers';
@@ -44,7 +45,12 @@ export function AddActivityScreen({
   const [type, setType] = useState<ItineraryItemType>(item?.type ?? 'Activity');
   const [status, setStatus] = useState<ItineraryItemStatus>(item?.status ?? 'Confirmed');
   const [title, setTitle] = useState(item?.title ?? '');
+  const [flightNumber, setFlightNumber] = useState(item?.flightNumber ?? '');
   const [place, setPlace] = useState(item?.locationName ?? '');
+  const [address, setAddress] = useState<string | null>(item?.address ?? null);
+  const [placeId, setPlaceId] = useState<string | null>(item?.placeId ?? null);
+  const [latitude, setLatitude] = useState<number | null>(item?.latitude ?? null);
+  const [longitude, setLongitude] = useState<number | null>(item?.longitude ?? null);
   // null = the trip backlog ("Ideas", no date).
   const [dayId, setDayId] = useState<string | null>(item ? item.dayId : trip.days[0]?.id ?? null);
   const [startTime, setStartTime] = useState<string | null>(item?.startTime ?? null);
@@ -71,9 +77,12 @@ export function AddActivityScreen({
       type,
       status,
       title: title.trim(),
+      flightNumber: type === 'Flight' ? (flightNumber.trim().toUpperCase() || null) : null,
       locationName: place.trim() || null,
-      latitude: item?.latitude ?? null,
-      longitude: item?.longitude ?? null,
+      address,
+      placeId,
+      latitude,
+      longitude,
       // Times only make sense for a scheduled (dated) item.
       startTime: scheduled ? startTime : null,
       endTime: scheduled ? endTime : null,
@@ -136,12 +145,31 @@ export function AddActivityScreen({
         </Field>
 
         <Field label="Place">
-          <TextInput
-            style={s.control}
-            placeholder="📍 Search a place"
-            placeholderTextColor={colors.ink400}
+          <PlaceSearchField
             value={place}
-            onChangeText={setPlace}
+            onChange={(text) => {
+              setPlace(text);
+              // Typing manually after a selection clears the structured data.
+              setPlaceId(null);
+              setAddress(null);
+              setLatitude(null);
+              setLongitude(null);
+            }}
+            onSelectPlace={(p: SelectedPlace) => {
+              setPlace(p.name);
+              setAddress(p.address ?? null);
+              setPlaceId(p.placeId);
+              setLatitude(p.latitude ?? null);
+              setLongitude(p.longitude ?? null);
+              // Auto-fill title if still empty.
+              if (!title.trim()) setTitle(p.name);
+            }}
+            onClear={() => {
+              setAddress(null);
+              setPlaceId(null);
+              setLatitude(null);
+              setLongitude(null);
+            }}
           />
         </Field>
 
@@ -175,16 +203,30 @@ export function AddActivityScreen({
           </View>
         ) : null}
 
+        {type === 'Flight' ? (
+          <Field label="Flight number">
+            <TextInput
+              style={s.control}
+              placeholder="e.g. BA 123"
+              placeholderTextColor={colors.ink400}
+              value={flightNumber}
+              onChangeText={(t) => setFlightNumber(t.toUpperCase())}
+              autoCapitalize="characters"
+              accessibilityLabel="Flight number"
+            />
+          </Field>
+        ) : null}
+
         <View style={s.row}>
           <Field label={`Cost (${trip.currency})`} style={{ flex: 1 }}>
             <TextInput style={s.control} placeholder="0" placeholderTextColor={colors.ink400} value={cost} onChangeText={setCost} keyboardType="numeric" />
           </Field>
-          <Field label="Confirmation #" style={{ flex: 1 }}>
+          <Field label={type === 'Flight' ? 'Booking ref' : 'Confirmation #'} style={{ flex: 1 }}>
             <TextInput style={s.control} placeholder="optional" placeholderTextColor={colors.ink400} value={conf} onChangeText={setConf} />
           </Field>
         </View>
 
-        <Field label="Booking / confirmation link">
+        <Field label={type === 'Flight' ? 'Airline booking link' : 'Booking / confirmation link'}>
           <TextInput
             style={s.control}
             placeholder="https://getyourguide.com/…"

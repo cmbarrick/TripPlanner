@@ -1,10 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking, TextInput, Platform } from 'react-native';
+import { WanderMapView } from '../WanderMapView';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { Trip, Day, ItineraryItem, PackingItem } from '../types';
 import { Card, Pill } from '../components';
 import { colors, radius, itemAccent, itemEmoji } from '../theme';
-import { dateRange, dayLabel, formatClock, fmtMoney, weatherEmoji, formatTemp } from '../format';
+import { dateRange, dayLabel, formatClock, fmtMoney, wmoEmoji, formatTemp, fmtMinutes } from '../format';
+import { useWeatherQuery, ItemWeather, DayWeather } from '../queries/weather';
+import { useTravelTimesQuery, TravelSegment } from '../queries/travelTimes';
+import { estimate, buildDirectionsUrl, buildRouteUrl, flightAwareUrl, flightRadar24Url } from '../routing';
+import { exportIcs } from '../ics';
+import { addTripToCalendar } from '../calendar';
 import { ClockPref } from '../store/uiStore';
 import {
   Scope,
@@ -55,12 +61,33 @@ export function TripPlannerScreen({
   const [scope, setScope] = useState<Scope>('trip');
   const [view, setView] = useState<PlannerView>('list');
   const [selectedDayId, setSelectedDayId] = useState(trip.days[0]?.id ?? '');
-  const [panel, setPanel] = useState<'none' | 'packing' | 'ideas'>('none');
+  const [panel, setPanel] = useState<'none' | 'packing' | 'ideas' | 'export'>('none');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const summary = useMemo(() => scopeSummary(trip, scope, selectedDayId), [trip, scope, selectedDayId]);
   const days = scopedDays(trip, scope, selectedDayId);
   const cost = useMemo(() => splitCost(days.flatMap((d) => d.items)), [days]);
+
+  const { data: weatherData } = useWeatherQuery(trip.id);
+  const { data: travelData }  = useTravelTimesQuery(trip.id);
+  const itemWeather = useMemo<Record<string, ItemWeather>>(() => {
+    const map: Record<string, ItemWeather> = {};
+    for (const w of weatherData?.items ?? []) map[w.itemId] = w;
+    return map;
+  }, [weatherData]);
+  const dayWeather = useMemo<Record<string, DayWeather>>(() => {
+    const map: Record<string, DayWeather> = {};
+    for (const w of weatherData?.days ?? []) map[w.dayId] = w;
+    return map;
+  }, [weatherData]);
+
+  // Server segments keyed by fromItemId → toItemId for O(1) lookup.
+  const travelSegments = useMemo<Record<string, TravelSegment>>(() => {
+    const map: Record<string, TravelSegment> = {};
+    for (const s of travelData?.segments ?? []) map[s.fromItemId] = s;
+    return map;
+  }, [travelData]);
 
   const drillIntoDay = (dayId: string) => {
     setSelectedDayId(dayId);
@@ -68,8 +95,10 @@ export function TripPlannerScreen({
   };
 
   const showPacking = panel === 'packing';
-  const showIdeas = panel === 'ideas';
-  const togglePanel = (which: 'packing' | 'ideas') => setPanel((p) => (p === which ? 'none' : which));
+  const showIdeas   = panel === 'ideas';
+  const showExport  = panel === 'export';
+  const togglePanel = (which: 'packing' | 'ideas' | 'export') =>
+    setPanel((p) => (p === which ? 'none' : which));
 
   const fabDayId = scope === 'day' ? selectedDayId : trip.days[0]?.id ?? '';
   const packing = tripPackingItems(trip);
@@ -150,6 +179,9 @@ export function TripPlannerScreen({
         <Pressable onPress={() => togglePanel('packing')} style={[s.packToggle, showPacking && s.packToggleOn]} accessibilityLabel="Toggle packing list">
           <Text style={[s.packToggleText, showPacking && { color: '#fff' }]}>🎒 {packedCount}/{packing.length}</Text>
         </Pressable>
+        <Pressable onPress={() => togglePanel('export')} style={[s.packToggle, showExport && s.packToggleOn]} accessibilityLabel="Toggle export panel">
+          <Text style={[s.packToggleText, showExport && { color: '#fff' }]}>↑ Export</Text>
+        </Pressable>
       </View>
 
       {scope === 'day' && trip.days.length > 0 ? (
@@ -181,13 +213,28 @@ export function TripPlannerScreen({
           onToggle={onTogglePacking}
           onDelete={onDeletePacking}
         />
+      ) : showExport ? (
+        <ExportPanel
+          trip={trip}
+          exporting={exporting}
+          onExportIcs={async () => {
+            setExporting(true);
+            try { await exportIcs(trip); } finally { setExporting(false); }
+          }}
+          onAddToCalendar={async () => {
+            setExporting(true);
+            try { await addTripToCalendar(trip); } finally { setExporting(false); }
+          }}
+        />
       ) : (
         <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
           {view === 'map' ? (
-            <MapPlaceholder days={days} large />
+            <WanderMapView items={days.flatMap((d) => d.items)} onItemPress={onEditItem} large />
           ) : (
             <>
-              {view === 'split' ? <MapPlaceholder days={days} /> : null}
+              {view === 'split' ? (
+                <WanderMapView items={days.flatMap((d) => d.items)} onItemPress={onEditItem} />
+              ) : null}
               {days.length === 0 ? (
                 <Card style={{ marginTop: 12 }}>
                   <Text style={{ color: colors.ink600, fontSize: 13 }}>No days planned yet. Tap + to add your first stop.</Text>
@@ -200,6 +247,9 @@ export function TripPlannerScreen({
                     unit={unit}
                     clock={clock}
                     scope={scope}
+                    dayWeather={dayWeather[day.id]}
+                    itemWeather={itemWeather}
+                    travelSegments={travelSegments}
                     onHeaderPress={scope === 'trip' ? () => drillIntoDay(day.id) : undefined}
                     onEditItem={onEditItem}
                     onReorder={onReorder}
@@ -208,7 +258,7 @@ export function TripPlannerScreen({
               )}
             </>
           )}
-          <AiDock />
+          {view !== 'map' ? <AiDock /> : null}
           <View style={{ height: 90 }} />
         </ScrollView>
       )}
@@ -227,6 +277,9 @@ function DayBlock({
   unit,
   clock,
   scope,
+  dayWeather,
+  itemWeather,
+  travelSegments,
   onHeaderPress,
   onEditItem,
   onReorder,
@@ -235,13 +288,15 @@ function DayBlock({
   unit: 'F' | 'C';
   clock: ClockPref;
   scope: Scope;
+  dayWeather?: DayWeather;
+  itemWeather: Record<string, ItemWeather>;
+  travelSegments: Record<string, TravelSegment>;
   onHeaderPress?: () => void;
   onEditItem: (item: ItineraryItem) => void;
   onReorder: (dayId: string, itemIds: string[]) => void;
 }) {
   const label = dayLabel(day.date, day.dayNumber);
   const conflicts = useMemo(() => conflictIdsForDay(day), [day]);
-  // Timed items order themselves by time; only the untimed "Anytime" group is hand-ordered.
   const { timed, anytime } = useMemo(() => daySchedule(day), [day]);
 
   const moveAnytime = (index: number, dir: -1 | 1) => {
@@ -254,28 +309,49 @@ function DayBlock({
 
   const empty = timed.length === 0 && anytime.length === 0;
 
+  // Live weather from the API takes precedence over seeded/static day weather fields.
+  const liveHigh = dayWeather?.highC ?? day.weatherHighC;
+  const liveCode = dayWeather?.weatherCode;
+
   return (
     <View style={{ marginBottom: 6 }}>
       <Pressable style={s.dayHead} onPress={onHeaderPress} disabled={!onHeaderPress}>
         <Text style={s.dayD}>{label.d}</Text>
         <Text style={s.dayW}>{label.w}</Text>
         <View style={{ flex: 1 }} />
-        {day.weatherHighC != null ? (
-          <Text style={s.weather}>{weatherEmoji(day.weatherIcon)} {formatTemp(day.weatherHighC, unit)}</Text>
+        {liveHigh != null ? (
+          <View style={s.weatherBadge}>
+            <Text style={s.weather}>
+              {liveCode != null ? wmoEmoji(liveCode) : '🌡️'} {formatTemp(liveHigh, unit)}
+            </Text>
+            {dayWeather?.isClimateSummary ? (
+              <Text style={s.climatePill}>typical</Text>
+            ) : null}
+          </View>
         ) : null}
         {onHeaderPress ? <Text style={s.drill}>›</Text> : null}
       </Pressable>
       <View style={s.timeline}>
         {empty ? <Text style={s.emptyDay}>Nothing planned.</Text> : null}
-        {timed.map((item) => (
-          <ItemRow
-            key={item.id}
-            item={item}
-            clock={clock}
-            conflict={conflicts.has(item.id)}
-            showOrder={false}
-            onEdit={() => onEditItem(item)}
-          />
+        {timed.map((item, idx) => (
+          <React.Fragment key={item.id}>
+            <ItemRow
+              item={item}
+              clock={clock}
+              conflict={conflicts.has(item.id)}
+              weather={itemWeather[item.id]}
+              unit={unit}
+              showOrder={false}
+              onEdit={() => onEditItem(item)}
+            />
+            {idx < timed.length - 1 ? (
+              <TravelRow
+                fromItem={item}
+                toItem={timed[idx + 1]!}
+                segment={travelSegments[item.id]}
+              />
+            ) : null}
+          </React.Fragment>
         ))}
         {anytime.length > 0 ? (
           <View style={s.anytimeHead}>
@@ -288,6 +364,8 @@ function DayBlock({
             item={item}
             clock={clock}
             conflict={conflicts.has(item.id)}
+            weather={itemWeather[item.id]}
+            unit={unit}
             showOrder
             canUp={index > 0}
             canDown={index < anytime.length - 1}
@@ -305,6 +383,8 @@ function ItemRow({
   item,
   clock,
   conflict,
+  weather,
+  unit = 'F',
   showOrder,
   canUp = false,
   canDown = false,
@@ -315,6 +395,8 @@ function ItemRow({
   item: ItineraryItem;
   clock: ClockPref;
   conflict: boolean;
+  weather?: ItemWeather;
+  unit?: 'F' | 'C';
   showOrder: boolean;
   canUp?: boolean;
   canDown?: boolean;
@@ -333,7 +415,15 @@ function ItemRow({
         <Card style={[conflict ? s.cardConflict : null, tentative ? s.cardTentative : null] as any}>
           <View style={s.itemHeader}>
             <Text style={[s.itemName, tentative && s.itemNameMuted]} numberOfLines={2}>{itemEmoji[item.type]} {item.title}</Text>
-            {conflict ? <Pill label="Overlap" tone="danger" /> : tentative ? <Pill label="Tentative" tone="orange" /> : null}
+            <View style={s.itemBadges}>
+              {weather ? (
+                <Text style={s.itemWeather}>
+                  {wmoEmoji(weather.weatherCode)} {formatTemp(weather.highC, unit)}
+                  {weather.isClimateSummary ? ' ~' : ''}
+                </Text>
+              ) : null}
+              {conflict ? <Pill label="Overlap" tone="danger" /> : tentative ? <Pill label="Tentative" tone="orange" /> : null}
+            </View>
           </View>
           {item.locationName || item.cost != null || item.confirmationNo ? (
             <Text style={s.itemLoc}>
@@ -342,7 +432,17 @@ function ItemRow({
               {item.confirmationNo ? `  ·  #${item.confirmationNo}` : ''}
             </Text>
           ) : null}
-          {item.bookingUrl ? (
+          {item.type === 'Flight' && item.flightNumber ? (
+            <View style={s.flightLinks}>
+              <Pressable onPress={() => Linking.openURL(flightAwareUrl(item.flightNumber!))} hitSlop={6} accessibilityLabel="Track on FlightAware">
+                <Text style={s.itemLink}>✈ FlightAware</Text>
+              </Pressable>
+              <Text style={s.flightLinkSep}>·</Text>
+              <Pressable onPress={() => Linking.openURL(flightRadar24Url(item.flightNumber!))} hitSlop={6} accessibilityLabel="Track on FlightRadar24">
+                <Text style={s.itemLink}>📡 FR24</Text>
+              </Pressable>
+            </View>
+          ) : item.bookingUrl ? (
             <Pressable onPress={() => Linking.openURL(item.bookingUrl!)} hitSlop={6}>
               <Text style={s.itemLink}>🔗 View booking</Text>
             </Pressable>
@@ -363,15 +463,118 @@ function ItemRow({
   );
 }
 
-function MapPlaceholder({ days, large }: { days: Day[]; large?: boolean }) {
-  const pins = days.flatMap((d) => d.items).filter((i) => i.latitude != null && i.longitude != null).length;
+
+function TravelRow({
+  fromItem,
+  toItem,
+  segment,
+}: {
+  fromItem: ItineraryItem;
+  toItem: ItineraryItem;
+  segment?: TravelSegment;
+}) {
+  // If the departing item is a flight, show tracking links instead of walk/drive.
+  if (fromItem.type === 'Flight') {
+    if (!fromItem.flightNumber) return null;
+    return (
+      <View style={s.travelRow}>
+        <View style={s.travelLine} />
+        <Text style={s.travelText}>✈ {fromItem.flightNumber}</Text>
+        <Pressable
+          onPress={() => Linking.openURL(flightAwareUrl(fromItem.flightNumber!))}
+          style={s.dirBtn}
+          accessibilityLabel="Track on FlightAware"
+        >
+          <Text style={s.dirBtnText}>Track ›</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // Normal ground leg — need coords on both sides.
+  const hasCoords =
+    fromItem.latitude != null && fromItem.longitude != null &&
+    toItem.latitude   != null && toItem.longitude   != null;
+  if (!hasCoords) return null;
+
+  const est = segment ?? estimate(
+    fromItem.latitude!, fromItem.longitude!,
+    toItem.latitude!,   toItem.longitude!,
+  );
+
+  const openDirections = () => Linking.openURL(
+    buildDirectionsUrl(
+      { lat: fromItem.latitude!, lng: fromItem.longitude! },
+      { lat: toItem.latitude!,   lng: toItem.longitude! },
+    ),
+  );
+
   return (
-    <View style={[s.mapPanel, large && { height: 340 }]}>
-      <Text style={s.mapEmoji}>🗺️</Text>
-      <Text style={s.mapTitle}>Map view</Text>
-      <Text style={s.mapSub}>Coming in Phase 2 · {pins} located stop{pins === 1 ? '' : 's'} ready to pin</Text>
-      <View style={s.mapBadge}><Text style={s.mapBadgeText}>Phase 2</Text></View>
+    <View style={s.travelRow}>
+      <View style={s.travelLine} />
+      <Text style={s.travelText}>
+        🚶 {fmtMinutes(est.walkingMinutes)}  ·  🚗 {fmtMinutes(est.drivingMinutes)}
+        {'  '}
+        <Text style={s.travelDist}>({est.distanceKm} km)</Text>
+      </Text>
+      <Pressable onPress={openDirections} style={s.dirBtn} accessibilityLabel="Get directions">
+        <Text style={s.dirBtnText}>Directions ›</Text>
+      </Pressable>
     </View>
+  );
+}
+
+function ExportPanel({
+  trip,
+  exporting,
+  onExportIcs,
+  onAddToCalendar,
+}: {
+  trip: Trip;
+  exporting: boolean;
+  onExportIcs: () => Promise<void>;
+  onAddToCalendar: () => Promise<void>;
+}) {
+  const itemCount = trip.days.reduce((n, d) => n + d.items.length, 0);
+  return (
+    <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false}>
+      <Text style={s.packTitle}>↑ Export & Sync</Text>
+      <Text style={s.packSub}>{itemCount} itinerary items across {trip.days.length} days</Text>
+
+      <Pressable
+        style={[s.exportBtn, exporting && { opacity: 0.6 }]}
+        onPress={onExportIcs}
+        disabled={exporting}
+        accessibilityLabel="Export .ics calendar file"
+      >
+        {exporting
+          ? <ActivityIndicator size="small" color={colors.brand} />
+          : <Text style={s.exportBtnText}>📅  Export .ics</Text>}
+        <Text style={s.exportBtnSub}>
+          Download a calendar file — import into any calendar app
+        </Text>
+      </Pressable>
+
+      {Platform.OS !== 'web' ? (
+        <Pressable
+          style={[s.exportBtn, exporting && { opacity: 0.6 }]}
+          onPress={onAddToCalendar}
+          disabled={exporting}
+          accessibilityLabel="Add to device calendar"
+        >
+          {exporting
+            ? <ActivityIndicator size="small" color={colors.brand} />
+            : <Text style={s.exportBtnText}>
+                {Platform.OS === 'ios' ? '🍎  Add to Apple Calendar' : '📱  Add to Google Calendar'}
+              </Text>}
+          <Text style={s.exportBtnSub}>
+            Writes events directly to your device calendar
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
@@ -614,7 +817,22 @@ const s = StyleSheet.create({
   dayHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, marginBottom: 8 },
   dayD: { fontWeight: '800', fontSize: 14, color: colors.ink },
   dayW: { fontSize: 11, color: colors.ink400 },
+  weatherBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   weather: { fontSize: 12, color: colors.ink600, fontWeight: '600' },
+  climatePill: { fontSize: 9, color: colors.ink400, fontWeight: '700', backgroundColor: colors.brand100, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 999 },
+  itemBadges: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  itemWeather: { fontSize: 11, color: colors.ink400, fontWeight: '600' },
+  flightLinks: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  flightLinkSep: { fontSize: 11, color: colors.ink400 },
+  travelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 50, paddingRight: 4, marginBottom: 8, marginTop: -4 },
+  travelLine: { position: 'absolute', left: 57, top: 0, bottom: 0, width: 1, backgroundColor: colors.line },
+  travelText: { fontSize: 11, color: colors.ink400, flex: 1 },
+  travelDist: { color: colors.ink400, opacity: 0.7 },
+  dirBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.brand100 },
+  dirBtnText: { fontSize: 11, color: colors.brand, fontWeight: '700' },
+  exportBtn: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, padding: 14, marginBottom: 10 },
+  exportBtnText: { fontSize: 14, fontWeight: '800', color: colors.ink, marginBottom: 4 },
+  exportBtnSub: { fontSize: 12, color: colors.ink400 },
   drill: { fontSize: 20, color: colors.ink400, marginLeft: 4 },
   timeline: { paddingLeft: 6 },
   emptyDay: { fontSize: 12, color: colors.ink400, paddingVertical: 6 },
@@ -643,12 +861,6 @@ const s = StyleSheet.create({
   orderBtn: { width: 30, height: 26, borderRadius: 8, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   orderBtnOff: { opacity: 0.35 },
   orderText: { fontSize: 13, fontWeight: '800', color: colors.ink600 },
-  mapPanel: { height: 150, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, backgroundColor: '#eef2f7', alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 6, overflow: 'hidden' },
-  mapEmoji: { fontSize: 30 },
-  mapTitle: { fontSize: 14, fontWeight: '800', color: colors.ink600, marginTop: 4 },
-  mapSub: { fontSize: 11, color: colors.ink400, marginTop: 2 },
-  mapBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: colors.brand100, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  mapBadgeText: { fontSize: 10, fontWeight: '800', color: colors.brand },
   aiDock: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.lg, padding: 10, marginTop: 14 },
   aiSpark: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand600 },
   aiText: { fontSize: 12, color: colors.ink400 },

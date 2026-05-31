@@ -235,6 +235,7 @@ ItineraryItem: { type: flight|lodging|food|activity|transport,
 - **Mobile:** **EAS Build** for native binaries; **EAS Update** for OTA JS updates; app stores.
 - **CI/CD:** GitHub Actions / Azure DevOps — build, test, `dotnet ef` migrations, deploy to Azure.
 - **Secrets:** **Azure Key Vault** + EAS secrets; never committed.
+- **Caching (API):** see §6 below.
 
 ---
 
@@ -244,6 +245,27 @@ ItineraryItem: { type: flight|lodging|food|activity|transport,
 - **Accessibility:** WCAG-minded components, dynamic type, sufficient contrast.
 - **i18n:** copy externalized from day one (travel = international users).
 - **Cost control:** cache Places/Weather responses; cap AI tokens per user/day.
+
+### API caching strategy
+
+| Phase | Cache | Reason |
+|---|---|---|
+| **0–2 (local-first)** | `IMemoryCache` (in-process) | Zero infrastructure; works on a single App Service instance. |
+| **2.5+ (cloud)** | **Azure Cache for Redis** via `IDistributedCache` | Multiple App Service instances each have independent in-process caches; a shared Redis instance eliminates duplicate provider fetches across instances and survives restarts. |
+
+**Current state:** `CachingPlaceProvider` and `CachingWeatherProvider` both depend on `IMemoryCache`
+injected via `Program.cs`. The decorators contain no cache-technology-specific code.
+
+**Upgrade path (Phase 2.5):**
+1. Provision an **Azure Cache for Redis** instance (one per environment).
+2. Add `builder.Services.AddStackExchangeRedisCache(...)` to `Program.cs`.
+3. Update `CachingPlaceProvider` and `CachingWeatherProvider` to take `IDistributedCache`
+   instead of `IMemoryCache` — serialise/deserialise with `System.Text.Json`.
+4. Remove `AddMemoryCache()` (or keep for other consumers).
+5. Add the Redis connection string to Key Vault (`Cache:RedisConnectionString`).
+
+No controller or provider implementation changes are needed — the caching is fully
+encapsulated in the decorator layer.
 
 ---
 
@@ -261,38 +283,50 @@ ItineraryItem: { type: flight|lodging|food|activity|transport,
   **currency** display. Keep all conversion at the presentation layer — never store imperial.
 
 ### Weather data source (Phase 2)
-- **We do not pull live weather yet** — temperatures are seeded fake data (`SeedData.cs`).
-- **Chosen approach:** a provider-agnostic `IWeatherProvider` in the .NET API. The API proxies
-  the call (`GET /api/trips/{id}/weather`) so provider keys stay in **Azure Key Vault**.
+- **Live weather is now implemented** via `IWeatherProvider` / `OpenMeteoWeatherProvider`.
+  The API proxies the call (`GET /api/trips/{id}/weather`) so provider keys stay in **Azure Key Vault**.
 - **Provider plan:**
-  - **Dev / first integration → Open-Meteo.** No API key, free, supports a `temperature_unit`
-    param, and (critically) has a **climate/normals endpoint** for far-future trips.
+  - **Dev / first integration → Open-Meteo.** No API key, free, forecast + historical archive endpoints.
+    Auto-selected when no key is configured; `FakeWeatherProvider` available for CI (`Weather:UseFake=true`).
   - **Production → Azure Maps Weather** (built on AccuWeather): Azure-native billing, Key Vault,
     and SLA. Swappable behind `IWeatherProvider` with no UI changes.
 - **Date-based source selection:** trips can be months out, but forecasts only reach ~16 days.
-  - Trip day **≤ ~16 days away** → live **forecast**.
-  - Further out → **climate normals**, labeled in the UI as "typical for this time of year".
-- **Caching:** cache forecast responses (~1–3h) and climate responses (much longer) to respect
-  rate limits and control cost.
-- **Units:** request/store Celsius from the provider; the client renders °F/°C per preference.
+  - Trip day **≤ ~16 days away** → live **forecast** (`api.open-meteo.com/v1/forecast`).
+  - Further out → **historical archive** for the same calendar date one year prior, labeled
+    "typical for this time of year" (`isClimateSummary: true`).
+- **Caching:** `CachingWeatherProvider` decorator; cache key = `(lat/lng rounded to 2 dp, date)`.
+  Forecast TTL 2 h; climate/historical TTL 24 h.
+- **Units:** store and fetch Celsius; client converts to °F/°C at display time via `formatTemp`.
 
-### Weather granularity — day vs. location *(open design note)*
-**Problem:** today weather lives on the **`Day`** (one summary per day, tied to the trip's main
-destination). That fails for **multi-town days** — e.g. "explored 9 towns in 10 days" across Sicily,
-where a single day can cover the coast and the mountains with very different conditions.
+### Weather granularity — day vs. location vs. hour
 
-**Direction (to build in Phase 2; not yet implemented):**
-- Model weather as a function of **(location, date[/hour])**, not an abstract "day". Itinerary items
-  already carry `lat`/`lng`, so weather is naturally a **per-stop** value.
-- **Cache** keyed by `(rounded lat/lng, date)` so nearby stops/days reuse fetches and we stay within
-  rate limits.
-- Keep a **day-level representative summary** for the header glance, but **derive** it from the day's
-  **primary location** (most time spent / first stop), not the trip destination.
-- For **multi-location days**, surface weather **per stop** in the itinerary; the day header stays a
-  single representative glance.
-- **Two regimes for the same field:** *forecast/climate* for planning (future) vs. **historical
-  actuals per location** for **recaps of past trips** (Phase 5/7). A multi-town recap should reflect
-  the real weather at each town on the day visited.
+**Current state (Phase 2 slice 2):**
+- Weather is modelled as **(location, date)** — fetched per located item, not per "day".
+- Day header shows a **representative summary** from the day's first located item.
+- Items without coordinates show no weather badge.
+- WMO weather codes map to emoji via `wmoEmoji(code)` in `app/src/format.ts`.
+
+**Multi-location days** (e.g. Sicily coast + mountains):
+- Each located stop fetches its own observation; nearby stops share one cached fetch.
+- Day header is a single representative glance; per-stop badges show the real local conditions.
+
+**Hourly weather (deferred to Phase 4/5 — journaling / recap):**
+- During active travel, hourly precision matters ("will it rain at 2 PM at the Colosseum?").
+  Daily high/low is sufficient for planning; hourly during planning is noise.
+- Open-Meteo supports `hourly=temperature_2m,weather_code,precipitation_probability` on the
+  same endpoint — the response gives 24 values per day for the ≤16-day forecast window.
+- Implementation path: add `GetHourlyAsync(lat, lng, date, ct)` to `IWeatherProvider`
+  (or a separate `IHourlyWeatherProvider`); cache key adds `+ hour` or caches the full day
+  array under one key and slices client-side. No schema changes needed — hourly data is
+  display-only, not persisted.
+- **UI home:** the itinerary item detail/edit screen (Phase 4) and the trip recap timeline
+  (Phase 5) are the natural surfaces — not the day-list view.
+
+**Two regimes for the same location:**
+- *Forecast/climate* for planning (future trips).
+- **Historical actuals per location** for recaps of past trips (Phase 5/7): query the
+  Open-Meteo archive API for the exact date visited — a multi-town recap then reflects the
+  real weather at each town on the day it was visited.
 
 **Data-model implication (future, not now):** the canonical store becomes a `WeatherObservation`
 cache keyed by `(lat/lng, date)`; `Day.weather*` fields remain as a cached *representative* summary,

@@ -74,6 +74,29 @@ export function formatTemp(c?: number | null, unit: 'F' | 'C' = 'F'): string {
   return unit === 'F' ? `${cToF(c)}°F` : `${c}°C`;
 }
 
+/** Formats a minute count: "5 min", "1 h 10 min". */
+export function fmtMinutes(minutes: number): string {
+  if (minutes < 1) return '<1 min';
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+/** Maps a WMO weather interpretation code to an emoji. */
+export function wmoEmoji(code: number): string {
+  if (code === 0)                          return '☀️';
+  if (code <= 2)                           return '🌤️';
+  if (code === 3)                          return '☁️';
+  if (code <= 49)                          return '🌫️'; // fog/rime
+  if (code <= 57)                          return '🌦️'; // drizzle
+  if (code <= 67)                          return '🌧️'; // rain
+  if (code <= 77)                          return '❄️'; // snow/ice
+  if (code <= 82)                          return '🌦️'; // showers
+  if (code <= 86)                          return '🌨️'; // snow showers
+  return '⛈️';                                          // thunderstorm 95-99
+}
+
 export function weatherEmoji(icon?: string | null): string {
   switch (icon) {
     case 'sun': return '☀️';

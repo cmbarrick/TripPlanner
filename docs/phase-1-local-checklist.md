@@ -32,7 +32,7 @@ Verifies the Phase 1 slices as they land. **Slice 1 = Trip CRUD + My Trips list 
 - [ ] **Cost rollup** totals item costs for the day and the whole trip.
 - [ ] **Packing list:** add / check / uncheck / delete items; state persists.
 - [ ] **Calendar:** Day, Week (multi-day), and Agenda views render; tapping an item opens the editor.
-- [ ] Map panel shows a "coming in Phase 2" placeholder; AI dock shows a "Phase 3" placeholder.
+- [x] ~~Map panel shows a "coming in Phase 2" placeholder~~ → now replaced by the real `WanderMapView` (Phase 2 slice 1). AI dock still shows a "Phase 3" placeholder.
 - [ ] Map/empty/loading/error states behave across the planner and calendar.
 
 ## Preferences
@@ -57,3 +57,46 @@ Verifies the Phase 1 slices as they land. **Slice 1 = Trip CRUD + My Trips list 
 ## Expected result
 - A user can create/edit/delete trips and see them correctly grouped, searched, and sorted in My Trips,
   with all loading/empty/error states behaving, and per-user ownership enforced end to end.
+
+---
+
+# Phase 2 Local Checklist — Slice 1 (Place search + structured location + Map view)
+
+> See `phases/phase-2-maps-integrations/README.md` for local-dev key setup instructions.
+> The FakePlaceProvider works without any key, returning European landmarks.
+
+## Place search / autocomplete
+
+- [ ] **Add item → Place field**: type at least 2 characters → debounced request fires → autocomplete
+      dropdown appears below the field.
+- [ ] Selecting a result fills: **location name** (shown in field), **address**, **lat/lng**, **placeId**
+      (visible in JSON response when you save the item and reload the trip).
+- [ ] If the item's **title is blank**, selecting a place auto-fills the title.
+- [ ] Typing manually after a selection clears the structured data (placeId / lat / lng go to null).
+- [ ] Tapping ✕ clear button clears the field and resets all structured fields.
+- [ ] **With API stopped / provider unavailable**: Place field stays usable as plain text; dropdown shows
+      "Location search unavailable." (graceful degradation, no crash).
+- [ ] With `Places:MapboxAccessToken` configured in user-secrets, search returns real Mapbox results.
+
+## Map view (WanderMapView)
+
+- [ ] Open a trip with located stops (e.g. Sicily demo data) → switch to **Map** view → numbered pins
+      appear in correct relative positions.
+- [ ] Switch to **Split** view → schematic map panel above the itinerary list; both update when scope changes.
+- [ ] **Tap a pin** → pin enlarges and shows a callout with the item name; also opens the item editor.
+- [ ] In **Map** view, scroll the legend list → tap a legend row → opens that item's editor.
+- [ ] Trip with **no located stops** shows the "No located stops yet" empty state in the canvas.
+- [ ] Unlocated stops are counted in the "… without coordinates" note in the legend.
+
+## No key in client bundle
+
+- [ ] Run `npx expo export --platform web` and inspect the output bundle (`dist/`):
+      `grep -r "pk\." dist/` should return no results (no Mapbox token).
+      `grep -r "MapboxAccessToken" dist/` should return no results.
+
+## Automated checks
+
+- [ ] `dotnet test backend/Wander.sln` → **32 passing** (21 Phase 1 + 11 places tests).
+- [ ] `npm --prefix app run typecheck` → no errors.
+- [ ] `npm --prefix app run test` → **28 passing** across 4 suites.
+- [ ] Web smoke E2E: `npm --prefix app run test:e2e:smoke` → still passes.

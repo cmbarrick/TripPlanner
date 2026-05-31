@@ -46,7 +46,12 @@ public class ItineraryItem : IValidatableObject
 
     [Required(AllowEmptyStrings = false, ErrorMessage = "Title is required.")]
     public string Title { get; set; } = string.Empty;
+    /// <summary>IATA flight number (e.g. "BA 123"). Only meaningful when <see cref="Type"/> is <see cref="ItineraryItemType.Flight"/>.</summary>
+    public string? FlightNumber { get; set; }
+
     public string? LocationName { get; set; }
+    public string? Address { get; set; }
+    public string? PlaceId { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
 

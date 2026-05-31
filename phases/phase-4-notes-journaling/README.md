@@ -18,6 +18,12 @@
 - [ ] **Text notes** scoped to an **event**, a **day**, or the **trip** (`scope` + `target_id`).
 - [ ] **Voice notes:** record audio → upload to Azure Blob → transcribe via **Azure Speech-to-Text**
       (async job) → store **both audio and transcript**; playback + show transcript.
+- [ ] **Hourly weather on item detail:** when viewing or adding a note to an itinerary event,
+      show an hourly forecast for that stop's location and day (e.g. "🌦️ 14°C at 2 PM").
+      Open-Meteo `hourly=temperature_2m,weather_code,precipitation_probability` on the existing
+      `api.open-meteo.com/v1/forecast` endpoint; cache the full day's hourly array under one key
+      and slice client-side. Add `GetHourlyAsync(lat, lng, date, ct)` to `IWeatherProvider`.
+      See architecture §7 "Hourly weather" and Phase 2 weather notes.
 - [ ] **Post-event notifications:** schedule a **local** notification at an event's end time (+ small
       delay) prompting a summary; tapping **deep-links to that event's** note composer / reflection prompt.
 - [ ] **Notification config:** on/off **globally, per trip, and per event type** (e.g., meals &
