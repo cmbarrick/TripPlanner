@@ -199,8 +199,14 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+// Locally (and by default) the app applies migrations on startup for a zero-setup dev loop.
+// In the cloud, migrations are applied by the deploy pipeline instead (so they run once,
+// before code rolls out, rather than racing across multiple App Service instances).
+// Cloud sets Database:MigrateOnStartup=false via app settings.
+var migrateOnStartup = builder.Configuration.GetValue<bool?>("Database:MigrateOnStartup") ?? true;
+if (migrateOnStartup)
 {
+    using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<WanderDbContext>();
     dbContext.Database.Migrate();
 

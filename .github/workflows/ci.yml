@@ -62,3 +62,127 @@ jobs:
           --startup-project backend/Wander.Api/Wander.Api.csproj
           --idempotent
           --no-build
+
+  infra-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Build Bicep template
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      - name: Validate environment parameter files
+        run: |
+          for env in dev staging prod; do
+            echo "Validating infra/env/$env.bicepparam"
+            az bicep build-params --file "infra/env/$env.bicepparam" --stdout > /dev/null
+          done
+
+  # Deploys the dev environment on every push to main: provisions/updates infra (Bicep),
+  # applies EF migrations, deploys the API, and smoke-tests /health. Requires GitHub→Azure
+  # OIDC + the secrets listed in infra/README.md. Skipped on PRs and forks.
+  deploy-dev:
+    needs: [validate, infra-validate]
+    # Only runs once you opt in by setting repo variable DEPLOY_DEV=true (after the
+    # one-time OIDC + secrets setup in infra/README.md). Until then, pushes stay green.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEV == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AZURE_LOCATION: eastus2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy infrastructure (Bicep)
+        env:
+          WANDER_PG_ADMIN_PASSWORD: ${{ secrets.WANDER_PG_ADMIN_PASSWORD }}
+        run: |
+          outputs=$(az deployment sub create \
+            --location "$AZURE_LOCATION" \
+            --name "wander-dev-${{ github.run_number }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/env/dev.bicepparam \
+            --query properties.outputs -o json)
+          echo "RG_NAME=$(echo "$outputs" | jq -r .resourceGroupName.value)" >> "$GITHUB_ENV"
+          echo "APP_NAME=$(echo "$outputs" | jq -r .apiName.value)" >> "$GITHUB_ENV"
+          echo "API_HOST=$(echo "$outputs" | jq -r .apiHostName.value)" >> "$GITHUB_ENV"
+          echo "PG_FQDN=$(echo "$outputs" | jq -r .postgresFqdn.value)" >> "$GITHUB_ENV"
+          echo "PG_LOGIN=$(echo "$outputs" | jq -r .postgresAdminLogin.value)" >> "$GITHUB_ENV"
+
+      - name: Install EF CLI
+        run: dotnet tool install --global dotnet-ef --version 9.0.16
+
+      - name: Open Postgres firewall for runner
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "PG_SERVER=${PG_FQDN%%.*}" >> "$GITHUB_ENV"
+          echo "FW_RULE=gh-${{ github.run_id }}" >> "$GITHUB_ENV"
+          az postgres flexible-server firewall-rule create \
+            --resource-group "$RG_NAME" \
+            --name "${PG_FQDN%%.*}" \
+            --rule-name "gh-${{ github.run_id }}" \
+            --start-ip-address "$RUNNER_IP" \
+            --end-ip-address "$RUNNER_IP"
+
+      - name: Apply database migrations
+        env:
+          PATH: ${{ env.PATH }}:/home/runner/.dotnet/tools
+          PG_PASSWORD: ${{ secrets.WANDER_PG_ADMIN_PASSWORD }}
+        run: |
+          CONN="Host=$PG_FQDN;Port=5432;Database=wander;Username=$PG_LOGIN;Password=$PG_PASSWORD;SSL Mode=Require;Trust Server Certificate=true"
+          dotnet ef database update \
+            --project backend/Wander.Api/Wander.Api.csproj \
+            --startup-project backend/Wander.Api/Wander.Api.csproj \
+            --connection "$CONN"
+
+      - name: Close Postgres firewall for runner
+        if: always()
+        run: |
+          az postgres flexible-server firewall-rule delete \
+            --resource-group "$RG_NAME" \
+            --name "$PG_SERVER" \
+            --rule-name "$FW_RULE" \
+            --yes || true
+
+      - name: Publish API
+        run: dotnet publish backend/Wander.Api/Wander.Api.csproj -c Release -o ./publish
+
+      - name: Package API
+        run: cd publish && zip -r ../api.zip . && cd ..
+
+      - name: Deploy API to App Service
+        run: |
+          az webapp deploy \
+            --resource-group "$RG_NAME" \
+            --name "$APP_NAME" \
+            --src-path api.zip \
+            --type zip
+
+      - name: Smoke test /health
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://$API_HOST/health" || true)
+            if [ "$code" = "200" ]; then echo "API healthy"; exit 0; fi
+            echo "attempt $i: HTTP $code — waiting..."; sleep 15
+          done
+          echo "Health check failed after retries"; exit 1
