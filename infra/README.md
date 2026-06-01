@@ -130,6 +130,15 @@ In the repo: **Settings → Environments → New environment → `dev`**, then a
 | `AZURE_TENANT_ID` | the tenant id printed above |
 | `AZURE_SUBSCRIPTION_ID` | the subscription id printed above |
 | `WANDER_PG_ADMIN_PASSWORD` | a strong Postgres admin password you choose |
+| `AZURE_SWA_TOKEN_DEV` | the dev Static Web App deployment token (for the web deploy) |
+
+The `AZURE_SWA_TOKEN_DEV` value comes from the Static Web App created by the Bicep deploy
+(`swa-wander-dev`). After the first infra deploy, fetch it with:
+
+```bash
+az staticwebapp secrets list --name swa-wander-dev --resource-group rg-wander-dev \
+  --query properties.apiKey -o tsv
+```
 
 > The job uses `environment: dev`, so the OIDC token's subject is
 > `repo:cmbarrick/TripPlanner:environment:dev` — which is exactly what the federated
@@ -143,8 +152,13 @@ ready. Once the secrets above are set, enable it:
 
 **Settings → Secrets and variables → Actions → Variables** → add `DEPLOY_DEV` = `true`.
 
-After that, every push to `main` deploys `dev` automatically. Set it to `false` (or delete
-it) to pause auto-deploy without removing the pipeline.
+After that, every push to `main` deploys the `dev` API automatically. Set it to `false` (or
+delete it) to pause auto-deploy without removing the pipeline.
+
+**Web deploy:** the `deploy-web` job (Expo web → Static Web Apps) is gated separately behind
+`DEPLOY_WEB` = `true`. Enable it only after the first API deploy has created `swa-wander-dev`
+and you've added the `AZURE_SWA_TOKEN_DEV` secret above. It needs both `DEPLOY_DEV` and
+`DEPLOY_WEB` set, since it consumes the API host from the API deploy job.
 
 > Production hardening (VNet integration + private endpoints for Postgres/Redis, HA,
 > geo-redundant backups) is tracked in the deployment runbook and is out of scope for the

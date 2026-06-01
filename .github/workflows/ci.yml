@@ -97,6 +97,8 @@ jobs:
       contents: read
     env:
       AZURE_LOCATION: eastus2
+    outputs:
+      api_host: ${{ steps.infra.outputs.api_host }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -114,6 +116,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy infrastructure (Bicep)
+        id: infra
         env:
           WANDER_PG_ADMIN_PASSWORD: ${{ secrets.WANDER_PG_ADMIN_PASSWORD }}
         run: |
@@ -123,11 +126,13 @@ jobs:
             --template-file infra/main.bicep \
             --parameters infra/env/dev.bicepparam \
             --query properties.outputs -o json)
+          API_HOST=$(echo "$outputs" | jq -r .apiHostName.value)
           echo "RG_NAME=$(echo "$outputs" | jq -r .resourceGroupName.value)" >> "$GITHUB_ENV"
           echo "APP_NAME=$(echo "$outputs" | jq -r .apiName.value)" >> "$GITHUB_ENV"
-          echo "API_HOST=$(echo "$outputs" | jq -r .apiHostName.value)" >> "$GITHUB_ENV"
+          echo "API_HOST=$API_HOST" >> "$GITHUB_ENV"
           echo "PG_FQDN=$(echo "$outputs" | jq -r .postgresFqdn.value)" >> "$GITHUB_ENV"
           echo "PG_LOGIN=$(echo "$outputs" | jq -r .postgresAdminLogin.value)" >> "$GITHUB_ENV"
+          echo "api_host=$API_HOST" >> "$GITHUB_OUTPUT"
 
       - name: Install EF CLI
         run: dotnet tool install --global dotnet-ef --version 9.0.16
@@ -186,3 +191,44 @@ jobs:
             echo "attempt $i: HTTP $code — waiting..."; sleep 15
           done
           echo "Health check failed after retries"; exit 1
+
+  # Exports the Expo web build (pointed at the freshly-deployed dev API) and uploads it to
+  # Azure Static Web Apps. Reuses the SWA deployment-token pattern. Requires the secret
+  # AZURE_SWA_TOKEN_DEV (the dev Static Web App's deployment token) — see infra/README.md.
+  deploy-web:
+    needs: [deploy-dev]
+    # Requires DEPLOY_DEV=true (provides the API host) AND DEPLOY_WEB=true. Enable DEPLOY_WEB
+    # after the first infra deploy creates the Static Web App and you've added its token.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_WEB == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Export Expo web build
+        working-directory: app
+        env:
+          EXPO_PUBLIC_API_URL: https://${{ needs.deploy-dev.outputs.api_host }}
+        run: npx expo export --platform web --output-dir dist
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_SWA_TOKEN_DEV }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: app/dist
+          skip_app_build: true
+          output_location: ''
