@@ -62,6 +62,7 @@ jobs:
           --startup-project backend/Wander.Api/Wander.Api.csproj
           --idempotent
           --no-build
+          --configuration Release
 
   infra-validate:
     runs-on: ubuntu-latest
