@@ -14,8 +14,11 @@ param tags object = {}
 @secure()
 param dbConnectionString string
 
+@description('Whether to create the Redis connection-string secret (only when Managed Redis is deployed).')
+param deployRedisSecret bool = true
+
 @secure()
-param redisConnectionString string
+param redisConnectionString string = ''
 
 param appInsightsConnectionString string
 
@@ -44,7 +47,7 @@ resource dbSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource redisSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource redisSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (deployRedisSecret) {
   parent: keyVault
   name: 'Cache--RedisConnectionString'
   properties: {

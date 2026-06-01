@@ -53,19 +53,11 @@ param postgresSku string = 'Standard_B1ms'
 ])
 param postgresTier string = 'Burstable'
 
-@description('Redis SKU name.')
-@allowed([
-  'Basic'
-  'Standard'
-  'Premium'
-])
-param redisSkuName string = 'Basic'
+@description('Whether to provision Azure Managed Redis for this environment. Azure Managed Redis has no free tier (~$45/mo), so dev defaults to off and the API uses an in-process distributed cache. Multi-instance environments (staging/prod) should enable it.')
+param deployRedis bool = true
 
-@description('Redis SKU family (C = Basic/Standard, P = Premium).')
-param redisSkuFamily string = 'C'
-
-@description('Redis SKU capacity (0 = 250 MB on C family).')
-param redisSkuCapacity int = 0
+@description('Azure Managed Redis SKU (Balanced_B0 is the smallest/cheapest).')
+param redisSkuName string = 'Balanced_B0'
 
 // Short, deterministic suffix for resources that need a globally unique name.
 var suffix = take(uniqueString(subscription().id, environmentName), 6)
@@ -118,15 +110,13 @@ module postgres 'modules/postgres.bicep' = {
   }
 }
 
-module redis 'modules/redis.bicep' = {
+module redis 'modules/redis.bicep' = if (deployRedis) {
   scope: rg
   name: 'redis'
   params: {
     redisName: redisName
     location: location
     skuName: redisSkuName
-    skuFamily: redisSkuFamily
-    skuCapacity: redisSkuCapacity
     tags: commonTags
   }
 }
@@ -149,7 +139,8 @@ module keyVault 'modules/keyVault.bicep' = {
     location: location
     tags: commonTags
     dbConnectionString: postgres.outputs.connectionString
-    redisConnectionString: redis.outputs.connectionString
+    deployRedisSecret: deployRedis
+    redisConnectionString: redis.?outputs.connectionString ?? ''
     appInsightsConnectionString: monitoring.outputs.connectionString
   }
 }
@@ -163,6 +154,7 @@ module appService 'modules/appService.bicep' = {
     location: location
     appServiceSku: appServiceSku
     keyVaultName: kvName
+    useRedis: deployRedis
     authAuthority: authAuthority
     authAudience: authAudience
     webOrigin: 'https://${staticWebApp.outputs.defaultHostname}'

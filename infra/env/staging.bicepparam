@@ -10,10 +10,10 @@ param postgresAdminPassword = readEnvironmentVariable('WANDER_PG_ADMIN_PASSWORD'
 param authAuthority = 'https://wander-staging.ciamlogin.com/wander-staging.onmicrosoft.com/v2.0'
 param authAudience = 'api://wander-api-staging'
 
-// Staging mirrors dev SKUs to keep costs low until prod hardening.
+// Staging mirrors dev SKUs to keep costs low until prod hardening, but enables Redis so the
+// distributed-cache path is exercised before prod.
 param appServiceSku = 'B1'
 param postgresSku = 'Standard_B1ms'
 param postgresTier = 'Burstable'
-param redisSkuName = 'Basic'
-param redisSkuFamily = 'C'
-param redisSkuCapacity = 0
+param deployRedis = true
+param redisSkuName = 'Balanced_B0'

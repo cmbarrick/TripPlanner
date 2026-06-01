@@ -12,7 +12,7 @@ infra/
   modules/
     monitoring.bicep         # Log Analytics + Application Insights
     postgres.bicep           # PostgreSQL Flexible Server + database + firewall
-    redis.bicep              # Azure Cache for Redis
+    redis.bicep              # Azure Managed Redis (optional per environment)
     keyVault.bicep           # Key Vault + secrets (generated + provider-key placeholders)
     keyVaultRoleAssignment.bicep  # grants the API identity "Key Vault Secrets User"
     appService.bicep         # Linux App Service plan + .NET 9 web app (KV-ref app settings)
@@ -29,10 +29,16 @@ infra/
 |---|---|---|
 | App Service plan (Linux) | B1 | P1v3 |
 | PostgreSQL Flexible Server | Burstable B1ms | GeneralPurpose D2ds_v5 |
-| Azure Cache for Redis | Basic C0 | Standard C1 |
+| Azure Managed Redis | off in dev (in-process cache) | Balanced_B0 |
 | Key Vault | standard (RBAC) | standard (RBAC) |
 | Static Web App | Free | Free |
 | Log Analytics + App Insights | PerGB2018 | PerGB2018 |
+
+> **Redis is optional per environment** via the `deployRedis` parameter. Classic "Azure Cache
+> for Redis" is retired for new instances, so the module now provisions **Azure Managed Redis**
+> (`Microsoft.Cache/redisEnterprise`), which has no cheap tier (~$45/mo). Dev keeps `deployRedis = false`
+> and the API uses its in-process `IDistributedCache`; staging/prod enable it. When off, the
+> `Cache--RedisConnectionString` secret and the App Service app setting are simply not created.
 
 Resource names follow `‹type›-wander-‹env›`, with a short `uniqueString` suffix on the
 globally-unique ones (App Service, Postgres, Redis, Key Vault). Key Vault uses the short
@@ -41,8 +47,8 @@ prefix `kv-wndr-‹env›-‹suffix›` to stay within the 24-character limit.
 ## Secrets model (nothing committed)
 
 - **Generated at deploy time** and written to Key Vault by `keyVault.bicep`:
-  `ConnectionStrings--DefaultConnection` (Postgres), `Cache--RedisConnectionString` (Redis),
-  `ApplicationInsights--ConnectionString`.
+  `ConnectionStrings--DefaultConnection` (Postgres), `Cache--RedisConnectionString` (Redis, only
+  when `deployRedis = true`), `ApplicationInsights--ConnectionString`.
 - **Provider keys** are created as **empty placeholders** so the App Service Key Vault
   references resolve. An empty value makes the API fall back to its Fake/no-key provider
   seam (see `Program.cs`). Fill the real values out-of-band, e.g.:

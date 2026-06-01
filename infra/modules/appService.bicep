@@ -13,6 +13,9 @@ param appServiceSku string = 'B1'
 @description('Key Vault name used to build secret references.')
 param keyVaultName string
 
+@description('Whether the API should use Redis (adds the Cache:RedisConnectionString Key Vault reference). When false, the API falls back to an in-process distributed cache.')
+param useRedis bool = true
+
 param authAuthority string
 param authAudience string
 
@@ -22,6 +25,58 @@ param webOrigin string
 param tags object = {}
 
 var kvSecretUriPrefix = 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/'
+
+var baseAppSettings = [
+  {
+    // Cloud always runs as Production so the dev auth bypass + seeding stay off.
+    name: 'ASPNETCORE_ENVIRONMENT'
+    value: 'Production'
+  }
+  {
+    // Migrations are applied by the deploy pipeline, not on app startup.
+    name: 'Database__MigrateOnStartup'
+    value: 'false'
+  }
+  {
+    name: 'ConnectionStrings__DefaultConnection'
+    value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}ConnectionStrings--DefaultConnection)'
+  }
+  {
+    name: 'ApplicationInsights__ConnectionString'
+    value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}ApplicationInsights--ConnectionString)'
+  }
+  {
+    name: 'Places__MapboxAccessToken'
+    value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Places--MapboxAccessToken)'
+  }
+  {
+    name: 'Routing__AzureMapsKey'
+    value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Routing--AzureMapsKey)'
+  }
+  {
+    name: 'Authentication__EntraExternalId__Authority'
+    value: authAuthority
+  }
+  {
+    name: 'Authentication__EntraExternalId__Audience'
+    value: authAudience
+  }
+  {
+    name: 'Cors__AllowedOrigins__0'
+    value: webOrigin
+  }
+]
+
+// Only wire the Redis connection when Managed Redis is provisioned for this environment;
+// otherwise the API falls back to its in-process IDistributedCache (see Program.cs).
+var redisAppSettings = useRedis ? [
+  {
+    name: 'Cache__RedisConnectionString'
+    value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Cache--RedisConnectionString)'
+  }
+] : []
+
+var appSettings = concat(baseAppSettings, redisAppSettings)
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: planName
@@ -52,50 +107,7 @@ resource app 'Microsoft.Web/sites@2023-12-01' = {
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
       healthCheckPath: '/health'
-      appSettings: [
-        {
-          // Cloud always runs as Production so the dev auth bypass + seeding stay off.
-          name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Production'
-        }
-        {
-          // Migrations are applied by the deploy pipeline, not on app startup.
-          name: 'Database__MigrateOnStartup'
-          value: 'false'
-        }
-        {
-          name: 'ConnectionStrings__DefaultConnection'
-          value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}ConnectionStrings--DefaultConnection)'
-        }
-        {
-          name: 'Cache__RedisConnectionString'
-          value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Cache--RedisConnectionString)'
-        }
-        {
-          name: 'ApplicationInsights__ConnectionString'
-          value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}ApplicationInsights--ConnectionString)'
-        }
-        {
-          name: 'Places__MapboxAccessToken'
-          value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Places--MapboxAccessToken)'
-        }
-        {
-          name: 'Routing__AzureMapsKey'
-          value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Routing--AzureMapsKey)'
-        }
-        {
-          name: 'Authentication__EntraExternalId__Authority'
-          value: authAuthority
-        }
-        {
-          name: 'Authentication__EntraExternalId__Audience'
-          value: authAudience
-        }
-        {
-          name: 'Cors__AllowedOrigins__0'
-          value: webOrigin
-        }
-      ]
+      appSettings: appSettings
     }
   }
 }

@@ -1,34 +1,42 @@
-// Azure Cache for Redis — shared distributed cache for the API (architecture §6).
+// Azure Managed Redis — shared distributed cache for the API (architecture §6).
+//
+// Replaces the retired classic "Azure Cache for Redis" (Microsoft.Cache/redis), which can no
+// longer be created on new subscriptions. Azure Managed Redis (Microsoft.Cache/redisEnterprise)
+// is Redis-protocol compatible, so StackExchange.Redis / IDistributedCache work unchanged.
 
-@description('Redis cache name (globally unique).')
+@description('Managed Redis cluster name (globally unique).')
 param redisName string
 
 param location string
 
-param skuName string = 'Basic'
-param skuFamily string = 'C'
-param skuCapacity int = 0
+@description('Azure Managed Redis SKU. Balanced_B0 is the smallest/cheapest entry tier.')
+param skuName string = 'Balanced_B0'
 
 param tags object = {}
 
-resource redis 'Microsoft.Cache/redis@2024-11-01' = {
+resource cluster 'Microsoft.Cache/redisEnterprise@2025-04-01' = {
   name: redisName
   location: location
   tags: tags
-  properties: {
-    sku: {
-      name: skuName
-      family: skuFamily
-      capacity: skuCapacity
-    }
-    enableNonSslPort: false
-    minimumTlsVersion: '1.2'
-    redisVersion: '6'
+  sku: {
+    name: skuName
   }
 }
 
-output hostName string = redis.properties.hostName
+resource database 'Microsoft.Cache/redisEnterprise/databases@2025-04-01' = {
+  parent: cluster
+  name: 'default'
+  properties: {
+    clientProtocol: 'Encrypted'
+    port: 10000
+    // Single logical endpoint (non-cluster-aware clients like IDistributedCache work simply).
+    clusteringPolicy: 'EnterpriseCluster'
+    evictionPolicy: 'NoEviction'
+  }
+}
+
+output hostName string = cluster.properties.hostName
 
 @description('StackExchange.Redis connection string for IDistributedCache (stored in Key Vault by the caller).')
 @secure()
-output connectionString string = '${redis.properties.hostName}:6380,password=${redis.listKeys().primaryKey},ssl=True,abortConnect=False'
+output connectionString string = '${cluster.properties.hostName}:10000,password=${database.listKeys().primaryKey},ssl=True,abortConnect=False'

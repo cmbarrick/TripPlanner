@@ -81,7 +81,8 @@ curl -s -o /dev/null -w "%{http_code}\n" "https://$(az webapp show -g $RG -n $AP
 ## 4. Secrets
 
 - **Generated** by Bicep at deploy time: `ConnectionStrings--DefaultConnection`,
-  `Cache--RedisConnectionString`, `ApplicationInsights--ConnectionString`.
+  `ApplicationInsights--ConnectionString`, and `Cache--RedisConnectionString` (only when
+  `deployRedis = true`; dev runs without Redis and uses the API's in-process cache).
 - **Provider keys** start as empty placeholders (API falls back to Fake/no-key providers).
   Fill when available:
   ```bash

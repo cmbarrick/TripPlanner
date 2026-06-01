@@ -14,6 +14,8 @@ param authAudience = 'api://wander-api-dev'
 param appServiceSku = 'B1'
 param postgresSku = 'Standard_B1ms'
 param postgresTier = 'Burstable'
-param redisSkuName = 'Basic'
-param redisSkuFamily = 'C'
-param redisSkuCapacity = 0
+
+// Azure Managed Redis has no cheap tier (~$45/mo); dev runs without it and uses the API's
+// in-process distributed cache. Flip to true to exercise Redis in dev.
+param deployRedis = false
+param redisSkuName = 'Balanced_B0'
