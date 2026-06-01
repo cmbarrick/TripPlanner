@@ -86,8 +86,15 @@ else
             sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 }
 
+// Application Insights (SDK 3.x is OpenTelemetry-based and validates the connection string
+// eagerly at startup). Only enable it for a *valid* connection string: a non-empty but invalid
+// value — e.g. an unresolved "@Microsoft.KeyVault(...)" reference during the brief RBAC
+// propagation window on a brand-new environment — would otherwise crash the Azure Monitor
+// exporter and take the whole app down. Skipping lets the app start; App Service re-resolves
+// the reference shortly after and telemetry comes online on the next refresh/restart.
 var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
-if (!string.IsNullOrWhiteSpace(appInsightsConnectionString))
+if (!string.IsNullOrWhiteSpace(appInsightsConnectionString)
+    && appInsightsConnectionString.Contains("InstrumentationKey=", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddApplicationInsightsTelemetry(options =>
     {

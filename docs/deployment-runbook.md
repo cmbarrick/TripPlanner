@@ -149,7 +149,7 @@ soft-delete means the vault name is reserved for 7 days; `--purge` if you must r
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| First deploy `/health` times out | Key Vault references not yet resolved after the identity's role assignment propagated | Wait a few minutes and re-run `deploy-dev`; then `az webapp restart` |
+| First deploy `/health` times out; container exits with `InstrumentationKey is missing` | On a brand-new environment the App Service identity's `Key Vault Secrets User` grant hasn't propagated to the vault's data plane yet, so `@Microsoft.KeyVault(...)` references resolve to **AccessToKeyVaultDenied** and the app gets the literal reference strings. (The app no longer crashes on this — App Insights is skipped when its connection string is invalid — but data secrets are still unresolved.) | Wait ~5–10 min for RBAC to propagate, then force re-resolution: change/add any app setting (e.g. `az webapp config appsettings set --settings KV_REFRESH=1`) or `az webapp restart`. Verify with `az rest GET .../config/configreferences/appsettings` → all should be `Resolved`. |
 | `deps.json does not exist` in EF step | EF `--no-build` looking in `bin/Debug` after a Release-only build | Already fixed: EF step passes `--configuration Release` |
 | Migration step can't reach Postgres | Runner IP not allowed | The pipeline adds/removes a temp firewall rule; for manual runs add your IP to the PG firewall |
 | API 500s on data calls | `Cache--RedisConnectionString` or DB secret wrong | Check Key Vault values; confirm the App Service identity has **Key Vault Secrets User** |
