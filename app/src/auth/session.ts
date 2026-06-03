@@ -1,5 +1,43 @@
 import * as AuthSession from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+// expo-secure-store is native-only; on web it has no implementation and calls
+// like setItemAsync throw. Fall back to localStorage for the web target.
+const sessionStorage = {
+  async getItem(key: string): Promise<string | null> {
+    if (Platform.OS === 'web') {
+      try {
+        return globalThis.localStorage?.getItem(key) ?? null;
+      } catch {
+        return null;
+      }
+    }
+    return SecureStore.getItemAsync(key);
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      try {
+        globalThis.localStorage?.setItem(key, value);
+      } catch {
+        // Storage may be unavailable (private mode); session stays in-memory.
+      }
+      return;
+    }
+    await SecureStore.setItemAsync(key, value);
+  },
+  async removeItem(key: string): Promise<void> {
+    if (Platform.OS === 'web') {
+      try {
+        globalThis.localStorage?.removeItem(key);
+      } catch {
+        // Ignore storage errors on web.
+      }
+      return;
+    }
+    await SecureStore.deleteItemAsync(key);
+  },
+};
 
 const STORAGE_KEY = 'wander.auth.session.v1';
 const FALLBACK_SUBJECT = 'authenticated-user';
@@ -63,7 +101,7 @@ export async function initializeAuthState(): Promise<AuthState> {
   }
 
   try {
-    const serialized = await SecureStore.getItemAsync(STORAGE_KEY);
+    const serialized = await sessionStorage.getItem(STORAGE_KEY);
     if (!serialized) {
       currentState = defaultState();
       return currentState;
@@ -72,7 +110,7 @@ export async function initializeAuthState(): Promise<AuthState> {
     const parsed = JSON.parse(serialized) as StoredAuthSession;
     const now = Math.floor(Date.now() / 1000);
     if (parsed.expiresAtUnixSeconds && parsed.expiresAtUnixSeconds <= now) {
-      await SecureStore.deleteItemAsync(STORAGE_KEY);
+      await sessionStorage.removeItem(STORAGE_KEY);
       currentState = defaultState();
       return currentState;
     }
@@ -94,7 +132,7 @@ export async function initializeAuthState(): Promise<AuthState> {
 }
 
 async function persistSession(next: StoredAuthSession): Promise<void> {
-  await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(next));
+  await sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
 export async function signInWithEntra(): Promise<AuthState> {
@@ -181,7 +219,7 @@ export async function signInWithEntra(): Promise<AuthState> {
 }
 
 export async function signOut(): Promise<AuthState> {
-  await SecureStore.deleteItemAsync(STORAGE_KEY);
+  await sessionStorage.removeItem(STORAGE_KEY);
   currentState = defaultState();
   return currentState;
 }

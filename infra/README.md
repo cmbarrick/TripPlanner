@@ -166,6 +166,19 @@ delete it) to pause auto-deploy without removing the pipeline.
 and you've added the `AZURE_SWA_TOKEN_DEV` secret above. It needs both `DEPLOY_DEV` and
 `DEPLOY_WEB` set, since it consumes the API host from the API deploy job.
 
+The web build also bakes in the Entra sign-in config (non-secret, must match
+`infra/env/dev.bicepparam`). Add these under **Actions → Variables** so the deployed Static
+Web App can authenticate against the API:
+
+| Variable | Value (dev) |
+| --- | --- |
+| `EXPO_PUBLIC_AUTH_ISSUER` | `https://login.microsoftonline.com/<tenantId>/v2.0` |
+| `EXPO_PUBLIC_AUTH_CLIENT_ID` | the SPA app registration client id |
+| `EXPO_PUBLIC_AUTH_SCOPES` | `openid profile email offline_access api://<clientId>/access_as_user` |
+
+The Static Web App's URL must also be a registered SPA redirect URI on the app registration
+(it already is) and is allowed by the API's CORS list (`Cors__AllowedOrigins__0 = webOrigin`).
+
 > Production hardening (VNet integration + private endpoints for Postgres/Redis, HA,
 > geo-redundant backups) is tracked in the deployment runbook and is out of scope for the
 > initial Phase 3 topology.

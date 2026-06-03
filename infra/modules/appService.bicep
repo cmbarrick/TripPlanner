@@ -22,6 +22,9 @@ param authAudience string
 @description('Web origin allowed by CORS (the Static Web App URL).')
 param webOrigin string
 
+@description('Additional CORS origins (e.g. localhost dev ports for the Expo web client). Appended after webOrigin.')
+param extraCorsOrigins array = []
+
 param tags object = {}
 
 var kvSecretUriPrefix = 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/'
@@ -61,11 +64,15 @@ var baseAppSettings = [
     name: 'Authentication__EntraExternalId__Audience'
     value: authAudience
   }
-  {
-    name: 'Cors__AllowedOrigins__0'
-    value: webOrigin
-  }
 ]
+
+// CORS origins are indexed app settings (Cors__AllowedOrigins__N). The Static Web App URL
+// is always first; dev environments append localhost ports for the local Expo web client.
+var corsOrigins = concat([webOrigin], extraCorsOrigins)
+var corsAppSettings = [for (origin, i) in corsOrigins: {
+  name: 'Cors__AllowedOrigins__${i}'
+  value: origin
+}]
 
 // Only wire the Redis connection when Managed Redis is provisioned for this environment;
 // otherwise the API falls back to its in-process IDistributedCache (see Program.cs).
@@ -76,7 +83,7 @@ var redisAppSettings = useRedis ? [
   }
 ] : []
 
-var appSettings = concat(baseAppSettings, redisAppSettings)
+var appSettings = concat(baseAppSettings, corsAppSettings, redisAppSettings)
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: planName

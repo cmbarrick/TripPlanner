@@ -38,6 +38,9 @@ param authAuthority string
 @description('Entra External ID API audience for this environment.')
 param authAudience string
 
+@description('Extra CORS origins (e.g. localhost dev ports). Typically only set for the dev environment.')
+param extraCorsOrigins array = []
+
 // --- SKUs (overridden per environment in the .bicepparam files) ---
 @description('App Service plan SKU.')
 param appServiceSku string = 'B1'
@@ -158,6 +161,7 @@ module appService 'modules/appService.bicep' = {
     authAuthority: authAuthority
     authAudience: authAudience
     webOrigin: 'https://${staticWebApp.outputs.defaultHostname}'
+    extraCorsOrigins: extraCorsOrigins
     tags: commonTags
   }
   // App settings reference Key Vault secrets, so the secrets must already exist.

@@ -220,8 +220,15 @@ jobs:
 
       - name: Export Expo web build
         working-directory: app
+        # EXPO_PUBLIC_* values are baked into the bundle at build time. The API URL is the
+        # freshly-deployed dev API; the auth values are the (non-secret) dev Entra app
+        # registration and must match infra/env/dev.bicepparam. The SWA origin is already a
+        # registered SPA redirect URI on the app registration and an allowed CORS origin.
         env:
           EXPO_PUBLIC_API_URL: https://${{ needs.deploy-dev.outputs.api_host }}
+          EXPO_PUBLIC_AUTH_ISSUER: ${{ vars.EXPO_PUBLIC_AUTH_ISSUER }}
+          EXPO_PUBLIC_AUTH_CLIENT_ID: ${{ vars.EXPO_PUBLIC_AUTH_CLIENT_ID }}
+          EXPO_PUBLIC_AUTH_SCOPES: ${{ vars.EXPO_PUBLIC_AUTH_SCOPES }}
         run: npx expo export --platform web --output-dir dist
 
       - name: Deploy to Azure Static Web Apps
