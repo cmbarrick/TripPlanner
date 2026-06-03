@@ -1,4 +1,4 @@
-# Phase 4 — AI Assistant
+# Phase 5 — AI Assistant
 
 > Goal: Accelerate planning with an AI that **edits the real trip** (not just chats).
 > Est: ~3 weeks · Depends on: Phase 3 (cloud infra for AI orchestration)

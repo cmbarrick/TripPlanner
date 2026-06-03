@@ -187,7 +187,7 @@ is unavailable.
 
 | Item | Deferred to | Notes |
 |---|---|---|
-| Hourly weather | Phase 5/6 | `GetHourlyAsync` extension point on `IWeatherProvider`; same Open-Meteo endpoint |
+| Hourly weather | Phase 4/6 | `GetHourlyAsync` extension point on `IWeatherProvider`; same Open-Meteo endpoint |
 | Google Calendar two-way sync | Later / optional | `.ics` + `expo-calendar` cover the use case |
 | Redis cache | Phase 3 | Upgrade path documented in architecture §6 and Phase 3 README |
 | Real map tiles on native | Future Phase 2 slice | `react-native-maps` or Mapbox; web already has Leaflet/OSM |
@@ -201,5 +201,5 @@ is unavailable.
 PostgreSQL environments, CI/CD pipeline, EAS Build/Update, Redis cache upgrade, Key Vault
 wiring for all Phase 2 provider keys.
 
-**Phase 4 — AI Planning Assistant:** generate/refine itineraries via chat, tool-calling
-(search places, add/move items, gap-fill), preference-aware, per-user quotas.
+**Phase 4 — Notes & Journaling:** capture the trip as it happens — text + voice notes
+(audio + transcript), reflection prompts, offline-first capture, photos.

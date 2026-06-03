@@ -14,7 +14,7 @@
 - [ ] **Real-time co-edit:** Azure Web PubSub / SignalR for presence + live itinerary updates.
 - [ ] **Conflict handling:** move beyond last-write-wins toward operational merge; evaluate CRDTs.
 - [ ] **Reactions** on trips/events/recaps.
-- [ ] **Shared notes as comments** (reuse Phase 5 notes within shared trips).
+- [ ] **Shared notes as comments** (reuse Phase 4 notes within shared trips).
 - [ ] **Consent enforcement:** sharing is explicit opt-in; revocation unshares immediately.
 
 ## Out of scope

@@ -1,7 +1,7 @@
 # Phase 6 — AI Recap & Export
 
 > Goal: Turn captured notes into an editable, shareable **recap** — and export it.
-> Est: ~2–3 weeks · Depends on: Phase 5 (notes & transcripts), Phase 4 (AI plumbing)
+> Est: ~2–3 weeks · Depends on: Phase 4 (notes & transcripts), Phase 5 (AI plumbing)
 
 ## Objectives
 - Summarize a trip's notes (text + voice transcripts) into a recap at event/day/trip level.

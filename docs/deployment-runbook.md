@@ -236,9 +236,22 @@ Set `MOBILE_API_URL` (repo variable) to point the mobile bundle at the right API
 | Secret | `EXPO_TOKEN` | Expo access token (expo.dev → Account → Access tokens) |
 | Variable | `DEPLOY_MOBILE` | `true` to enable the OTA job |
 | Variable | `MOBILE_API_URL` | API base URL the mobile bundle calls (defaults to dev API) |
-| Variable | `EXPO_PUBLIC_AUTH_ISSUER` / `EXPO_PUBLIC_AUTH_CLIENT_ID` / `EXPO_PUBLIC_AUTH_SCOPES` | Entra config baked into the bundle |
+| Variable (optional) | `EXPO_PUBLIC_AUTH_ISSUER` / `EXPO_PUBLIC_AUTH_CLIENT_ID` / `EXPO_PUBLIC_AUTH_SCOPES` | Entra config baked into the bundle. **Default to the dev app registration in `ci.yml`**; only set to override for a different tenant. |
 
 > **Native sign-in follow-up:** native (iOS/Android) Entra sign-in needs a mobile redirect URI
 > (`wander://auth` and/or the Expo proxy) registered on the app registration as a *mobile/native*
 > redirect. Web sign-in (current) uses the SPA redirect URIs. Add the native redirect before
 > shipping a build that must authenticate.
+
+---
+
+## 10. Deferred (not in Phase 3)
+
+- **Responsive layout for web + iPad** — web currently renders inside a fixed 400×760 "phone"
+  frame (`styles.phone` in `app/App.tsx`); the shared layout is phone-width. For the companion
+  web app and iPad (`ios.supportsTablet: true`), do a small width-aware pass: drop the web phone
+  frame, center content at a ~720–820px max width above a ~700px breakpoint (via
+  `useWindowDimensions`), constrain the tab bar to the content column, and decide iPad orientation
+  (portrait-lock vs allow landscape). Cosmetic only — no impact on API/auth/native phone build.
+- **App Store / Google Play submission** — paid developer accounts, store listings, signing, and
+  review. The EAS build/submit plumbing (Section 9) is ready; actual publishing is a launch-phase task.

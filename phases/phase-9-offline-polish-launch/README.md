@@ -2,7 +2,7 @@
 
 > Goal: Reliable **in the field** and **production-ready** for launch.
 > Est: ~2–3 weeks · Depends on: Phases 0–8
-> (Offline capture foundations begin in Phase 5; this phase **hardens** them across the app.)
+> (Offline capture foundations begin in Phase 4; this phase **hardens** them across the app.)
 
 ## Objectives
 - Make the full plan + **capture** flow work offline with robust background sync (incl. media).

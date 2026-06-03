@@ -110,7 +110,7 @@ and the trade-offs we accepted. It is the single source of truth for technical d
 - **Three AI surfaces, one provider:** (1) planning assistant, (2) recap generation, (3) RAG
   discovery — all behind a single `ILlmClient`/`IEmbeddingClient` so the model is swappable.
 
-### Notes, journaling & media capture (Phase 5)
+### Notes, journaling & media capture (Phase 4)
 - **Notes** are polymorphic: scoped to an **event**, a **day**, or the **trip** (`scope` + `target_id`).
 - **Voice notes:** record on-device → upload audio to **Azure Blob** → **Azure Speech-to-Text**
   produces a transcript (run async via Azure Functions). We keep **both** audio and transcript.
@@ -194,7 +194,7 @@ User ──< Trip ──< Day ──< ItineraryItem
 User ── Preferences (units, travel style, diet, budget band, pace)
 User ── ConsentSettings (share / publish / ai_training — each opt-in, revocable)
 
-# Capture (Phase 5)
+# Capture (Phase 4)
 Note            { scope: trip|day|event, target_id, author_id,
                   body_text?, kind: text|voice|prompt_response }
   └─ MediaAsset { kind: audio|photo, blob_url, duration?, transcript? }
@@ -310,7 +310,7 @@ encapsulated in the decorator layer.
 - Each located stop fetches its own observation; nearby stops share one cached fetch.
 - Day header is a single representative glance; per-stop badges show the real local conditions.
 
-**Hourly weather (deferred to Phase 5/6 — journaling / recap):**
+**Hourly weather (deferred to Phase 4/6 — journaling / recap):**
 - During active travel, hourly precision matters ("will it rain at 2 PM at the Colosseum?").
   Daily high/low is sufficient for planning; hourly during planning is noise.
 - Open-Meteo supports `hourly=temperature_2m,weather_code,precipitation_probability` on the
@@ -319,7 +319,7 @@ encapsulated in the decorator layer.
   (or a separate `IHourlyWeatherProvider`); cache key adds `+ hour` or caches the full day
   array under one key and slices client-side. No schema changes needed — hourly data is
   display-only, not persisted.
-- **UI home:** the itinerary item detail/edit screen (Phase 5) and the trip recap timeline
+- **UI home:** the itinerary item detail/edit screen (Phase 4) and the trip recap timeline
   (Phase 6) are the natural surfaces — not the day-list view.
 
 **Two regimes for the same location:**

@@ -242,7 +242,7 @@ function AppShell() {
       <PlaceholderScreen
         title="Assistant"
         emoji="✨"
-        phase="Phase 4"
+        phase="Phase 5"
         blurb="An AI travel assistant that generates and refines your itinerary by editing the real trip."
       />
     );

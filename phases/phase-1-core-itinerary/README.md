@@ -23,7 +23,7 @@
       validation (title, 3-letter currency, end ≥ start)._
 - [x] **Unified Trip Planner shell:** single trip screen with a `List | Split | Map` **view toggle**
       and a `Day | Trip` **scope toggle**. List/Timeline is fully functional; the Map panel renders a
-      labeled placeholder (Phase 2) and an **AI dock** placeholder (Phase 4). Drill-down:
+      labeled placeholder (Phase 2) and an **AI dock** placeholder (Phase 5). Drill-down:
       `Trip` scope → tap a day → `Day` scope.
 - [x] **Scope-aware data layer:** itinerary selectors work at both **day** and **whole-trip** scope
       (cost rollup, conflict checks, item lists) so map and AI in later phases are purely additive.
@@ -36,7 +36,7 @@
 - [x] Empty, loading, and error states across the new screens.
 
 ## Out of scope
-- **Map rendering & place autocomplete (Phase 2)** and **AI proposals (Phase 4)** — only the
+- **Map rendering & place autocomplete (Phase 2)** and **AI proposals (Phase 5)** — only the
   forward-compatible **shell** (view/scope toggles + placeholder panels) lands in Phase 1; the
   actual map tiles, routing, and AI proposal/preview/undo flows are built in their phases.
 - Offline sync (Phase 9).
@@ -138,7 +138,7 @@
 - **2026-05-30 (decision):** Adopted the unified **Map + AI Planner** direction (mockups
   `option-4` + `option-5`). Phase 1 now includes the planner **shell** — `List | Split | Map` view
   toggle and `Day | Trip` scope toggle with placeholder Map/AI panels — and a **scope-aware data
-  layer** so Phase 2 (maps) and Phase 4 (AI) are additive rather than a redesign.
+  layer** so Phase 2 (maps) and Phase 5 (AI) are additive rather than a redesign.
 - **2026-05-30 (status):** Phase 0 local-first hardening completed in-repo (Router, observability,
   web smoke E2E, and client auth-session scaffolding). Phase 1 implementation can begin while
   remaining Phase 0 manual checks (real-device OAuth round-trip and external account provisioning)

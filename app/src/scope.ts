@@ -12,7 +12,7 @@ export interface CostRollup {
 
 /**
  * Returns the days in view for a scope: a single day (Day scope) or every day (Trip scope).
- * Drives the scope-aware itinerary so Map (Phase 2) and AI (Phase 4) are purely additive.
+ * Drives the scope-aware itinerary so Map (Phase 2) and AI (Phase 5) are purely additive.
  */
 export function scopedDays(trip: Trip, scope: Scope, dayId?: string): Day[] {
   if (scope === 'trip') return trip.days;

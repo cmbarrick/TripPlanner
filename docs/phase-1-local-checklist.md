@@ -32,7 +32,7 @@ Verifies the Phase 1 slices as they land. **Slice 1 = Trip CRUD + My Trips list 
 - [ ] **Cost rollup** totals item costs for the day and the whole trip.
 - [ ] **Packing list:** add / check / uncheck / delete items; state persists.
 - [ ] **Calendar:** Day, Week (multi-day), and Agenda views render; tapping an item opens the editor.
-- [x] ~~Map panel shows a "coming in Phase 2" placeholder~~ → now replaced by the real `WanderMapView` (Phase 2 slice 1). AI dock still shows a "Phase 4" placeholder.
+- [x] ~~Map panel shows a "coming in Phase 2" placeholder~~ → now replaced by the real `WanderMapView` (Phase 2 slice 1). AI dock still shows a "Phase 5" placeholder.
 - [ ] Map/empty/loading/error states behave across the planner and calendar.
 
 ## Preferences

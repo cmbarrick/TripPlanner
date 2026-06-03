@@ -585,7 +585,7 @@ function AiDock() {
       <View style={{ flex: 1 }}>
         <Text style={s.aiText}>Ask Wander to plan or tweak this trip…</Text>
       </View>
-      <View style={s.aiBadge}><Text style={s.aiBadgeText}>Phase 4</Text></View>
+      <View style={s.aiBadge}><Text style={s.aiBadgeText}>Phase 5</Text></View>
     </View>
   );
 }

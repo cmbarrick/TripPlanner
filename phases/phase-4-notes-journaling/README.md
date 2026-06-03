@@ -1,4 +1,4 @@
-# Phase 5 — Notes & Journaling
+# Phase 4 — Notes & Journaling
 
 > Goal: Capture the trip **as it happens** — text and **voice notes** — low-friction and offline.
 > Est: ~3–4 weeks · Depends on: Phase 3 (cloud + media infra for voice/photos), Phase 1 itinerary
@@ -34,6 +34,35 @@
 - [ ] **Offline-first capture:** create notes/recordings offline; **schedule notifications locally**
       (no server needed); queue mutations in the sync outbox; resume media upload + transcription on reconnect.
 - [ ] Ownership checks; signed URLs for media.
+
+## Delivery plan (slices)
+Each slice is independently shippable, testable, and green before the next.
+
+1. **Data model + text notes (backend-first).** `Note` (`scope` trip/day/event + `target_id`,
+   `kind` text/voice/prompt_response, `body_text?`, `author_id`) and `MediaAsset`
+   (`kind` audio/photo, `blob_url`, `duration?`, `transcript?`) entities + EF migration;
+   `NotesController` CRUD with per-user ownership. App: note composer on item-detail + a
+   "has notes" indicator on the itinerary timeline (the timeline is the journal).
+2. **Media infra + photos.** Add an **Azure Storage account + container to dev infra (Bicep)**;
+   `BlobService` + signed-URL (SAS) endpoints in the API; photo attach/upload from the app.
+3. **Voice notes + transcription.** Record audio → upload to Blob → **Azure Speech-to-Text** →
+   persist **both** audio and transcript; playback + transcript display. Transcription runs behind
+   an `ITranscriptionService` (v1: API hosted/background service; swappable to an Azure Function
+   later). Web records via `MediaRecorder`; native via `expo-audio`.
+4. **Reflection prompts + post-event local notifications.** `JournalPrompt` library + global/per-trip
+   toggles; `expo-notifications` (native) and the Web Notifications API (web, best-effort) scheduled
+   from event end-times (+ delay), deep-linking to that event's composer; per-event-type filter +
+   quiet hours.
+5. **Offline-first capture.** Lightweight sync outbox so notes/recordings created offline queue and
+   resync; media upload + transcription resume on reconnect. (Full hardening is Phase 9.)
+6. **Hourly weather on item detail.** `GetHourlyAsync(lat, lng, date, ct)` on `IWeatherProvider`;
+   cache the day's hourly array under one key, slice client-side.
+
+### Decisions (locked)
+- **Transcription engine:** always **Azure Speech-to-Text**, behind `ITranscriptionService`.
+- **Web scope:** companion web also gets **voice recording + notifications** (best-effort browser
+  APIs), in addition to text/photo/playback.
+- **Storage:** add a real **Azure Storage account to the dev environment** (cheap), not just a fake.
 
 ## Out of scope
 - AI recap generation (Phase 6), sharing/publishing (Phases 7–8).

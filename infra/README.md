@@ -167,10 +167,12 @@ and you've added the `AZURE_SWA_TOKEN_DEV` secret above. It needs both `DEPLOY_D
 `DEPLOY_WEB` set, since it consumes the API host from the API deploy job.
 
 The web build also bakes in the Entra sign-in config (non-secret, must match
-`infra/env/dev.bicepparam`). Add these under **Actions → Variables** so the deployed Static
-Web App can authenticate against the API:
+`infra/env/dev.bicepparam`). **These already default to the dev Entra app registration inside
+`ci.yml`**, so a dev `deploy-web` ships a working sign-in with no extra setup. Only add the
+variables below (under **Actions → Variables**) if you need to point the deployed Static Web App
+at a *different* Entra app/tenant — they override the in-workflow defaults:
 
-| Variable | Value (dev) |
+| Variable (optional override) | Value |
 | --- | --- |
 | `EXPO_PUBLIC_AUTH_ISSUER` | `https://login.microsoftonline.com/<tenantId>/v2.0` |
 | `EXPO_PUBLIC_AUTH_CLIENT_ID` | the SPA app registration client id |

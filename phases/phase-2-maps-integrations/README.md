@@ -38,11 +38,11 @@
   - [x] Store/fetch Celsius; client renders °F/°C per user preference via `formatTemp`.
   - [x] Cache: `CachingWeatherProvider` — 2 h forecast TTL, 24 h climate TTL, key = `(lat/lng ±1 km, date)`.
   - [x] **Granularity:** per-stop weather (items with lat/lng); day header = first located item; unlocated items show no badge. Multi-town days get per-stop conditions. See architecture §7.
-  - [ ] **Hourly weather** *(deferred to Phase 5/6)*: Open-Meteo supports `hourly=temperature_2m,weather_code,precipitation_probability`
+  - [ ] **Hourly weather** *(deferred to Phase 4/6)*: Open-Meteo supports `hourly=temperature_2m,weather_code,precipitation_probability`
         on the same endpoint (24 values/day for the ≤16-day window). Daily high/low is right for
         planning; hourly is useful during the trip ("will it rain at 2 PM?") and for recaps.
         Implementation: add `GetHourlyAsync` to `IWeatherProvider`; cache full day array under one key;
-        surface in the item detail screen (Phase 5) and recap timeline (Phase 6).
+        surface in the item detail screen (Phase 4) and recap timeline (Phase 6).
         See architecture §7 "Hourly weather".
 - [x] **Write to calendar (Apple + Google):**
   - [x] **On-device create** via **`expo-calendar`** (with permission) — `addTripToCalendar()` in
@@ -63,7 +63,7 @@
       Travel times: `FetchSafe` swallows errors per-segment._
 
 ## Out of scope
-- AI suggestions (Phase 4), in-app booking (Later / v2).
+- AI suggestions (Phase 5), in-app booking (Later / v2).
 
 ## Testing plan
 - [ ] **Unit:** distance/ETA formatting, `.ics` generation, deep-link URL builder, cache key logic.
