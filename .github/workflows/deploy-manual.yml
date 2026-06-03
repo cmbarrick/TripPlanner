@@ -1,0 +1,119 @@
+name: deploy-manual
+
+# Manual, on-demand deploy for any environment (dev / staging / prod). Unlike the dev
+# auto-deploy in ci.yml, this only runs when you trigger it from the Actions tab, so it
+# never deploys (or spends) on its own. Staging/prod additionally require their GitHub
+# Environment secrets + an Entra/CIAM tenant — see docs/deployment-runbook.md.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Pulls the environment-scoped secrets (AZURE_*, WANDER_PG_ADMIN_PASSWORD). For prod,
+    # configure required reviewers on the GitHub Environment to gate the deploy with approval.
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AZURE_LOCATION: eastus2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy infrastructure (Bicep)
+        id: infra
+        env:
+          WANDER_PG_ADMIN_PASSWORD: ${{ secrets.WANDER_PG_ADMIN_PASSWORD }}
+        run: |
+          outputs=$(az deployment sub create \
+            --location "$AZURE_LOCATION" \
+            --name "wander-${{ inputs.environment }}-${{ github.run_number }}" \
+            --template-file infra/main.bicep \
+            --parameters "infra/env/${{ inputs.environment }}.bicepparam" \
+            --query properties.outputs -o json)
+          echo "RG_NAME=$(echo "$outputs" | jq -r .resourceGroupName.value)" >> "$GITHUB_ENV"
+          echo "APP_NAME=$(echo "$outputs" | jq -r .apiName.value)" >> "$GITHUB_ENV"
+          echo "API_HOST=$(echo "$outputs" | jq -r .apiHostName.value)" >> "$GITHUB_ENV"
+          echo "PG_FQDN=$(echo "$outputs" | jq -r .postgresFqdn.value)" >> "$GITHUB_ENV"
+          echo "PG_LOGIN=$(echo "$outputs" | jq -r .postgresAdminLogin.value)" >> "$GITHUB_ENV"
+
+      - name: Install EF CLI
+        run: dotnet tool install --global dotnet-ef --version 9.0.16
+
+      - name: Open Postgres firewall for runner
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "PG_SERVER=${PG_FQDN%%.*}" >> "$GITHUB_ENV"
+          echo "FW_RULE=gh-${{ github.run_id }}" >> "$GITHUB_ENV"
+          az postgres flexible-server firewall-rule create \
+            --resource-group "$RG_NAME" \
+            --name "${PG_FQDN%%.*}" \
+            --rule-name "gh-${{ github.run_id }}" \
+            --start-ip-address "$RUNNER_IP" \
+            --end-ip-address "$RUNNER_IP"
+
+      - name: Apply database migrations
+        env:
+          PATH: ${{ env.PATH }}:/home/runner/.dotnet/tools
+          PG_PASSWORD: ${{ secrets.WANDER_PG_ADMIN_PASSWORD }}
+        run: |
+          CONN="Host=$PG_FQDN;Port=5432;Database=wander;Username=$PG_LOGIN;Password=$PG_PASSWORD;SSL Mode=Require;Trust Server Certificate=true"
+          dotnet ef database update \
+            --project backend/Wander.Api/Wander.Api.csproj \
+            --startup-project backend/Wander.Api/Wander.Api.csproj \
+            --connection "$CONN"
+
+      - name: Close Postgres firewall for runner
+        if: always()
+        run: |
+          az postgres flexible-server firewall-rule delete \
+            --resource-group "$RG_NAME" \
+            --name "$PG_SERVER" \
+            --rule-name "$FW_RULE" \
+            --yes || true
+
+      - name: Publish API
+        run: dotnet publish backend/Wander.Api/Wander.Api.csproj -c Release -o ./publish
+
+      - name: Package API
+        run: cd publish && zip -r ../api.zip . && cd ..
+
+      - name: Deploy API to App Service
+        run: |
+          az webapp deploy \
+            --resource-group "$RG_NAME" \
+            --name "$APP_NAME" \
+            --src-path api.zip \
+            --type zip
+
+      - name: Smoke test /health
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://$API_HOST/health" || true)
+            if [ "$code" = "200" ]; then echo "API healthy"; exit 0; fi
+            echo "attempt $i: HTTP $code — waiting..."; sleep 15
+          done
+          echo "Health check failed after retries"; exit 1

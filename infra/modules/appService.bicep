@@ -41,6 +41,13 @@ var baseAppSettings = [
     value: 'false'
   }
   {
+    // The .NET cold start on smaller SKUs (B1) can exceed the default 230s warmup-probe
+    // limit, which makes `az webapp deploy` report a false "site failed to start". Raise the
+    // limit so the (slow) first start finishes within the probe window.
+    name: 'WEBSITES_CONTAINER_START_TIME_LIMIT'
+    value: '600'
+  }
+  {
     name: 'ConnectionStrings__DefaultConnection'
     value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}ConnectionStrings--DefaultConnection)'
   }

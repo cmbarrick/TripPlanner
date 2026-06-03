@@ -1,8 +1,9 @@
 # Deployment & Rollback Runbook — Wander
 
-> Status: **Active** · Phase 3 · Last updated: 2026-05-31
-> Scope: the `dev` Azure environment (the proven Phase 3 path). `staging`/`prod` use the
-> same Bicep + pipeline with their own `.bicepparam` and secrets.
+> Status: **Active** · Phase 3 · Last updated: 2026-06-03
+> Scope: the `dev` Azure environment (the proven Phase 3 path) + web Entra sign-in. `staging`/
+> `prod` use the same Bicep + pipeline with their own `.bicepparam` and secrets (Section 3b);
+> mobile ships via EAS (Section 9).
 
 This is the operational companion to [`../infra/README.md`](../infra/README.md) (which covers
 the IaC layout and one-time OIDC setup). Read that first for first-time setup.
@@ -78,6 +79,37 @@ curl -s -o /dev/null -w "%{http_code}\n" "https://$(az webapp show -g $RG -n $AP
 
 ---
 
+## 3b. On-demand deploy for any environment (`deploy-manual` workflow)
+
+`.github/workflows/deploy-manual.yml` runs the same steps as `deploy-dev` but is triggered
+manually for a chosen environment, so it never deploys (or spends) on its own:
+
+**Actions → `deploy-manual` → Run workflow → pick `dev` / `staging` / `prod`.**
+
+It reads environment-scoped secrets from the matching **GitHub Environment**, so each
+environment needs its own `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+and `WANDER_PG_ADMIN_PASSWORD`. For `prod`, add **required reviewers** on the GitHub
+Environment to gate the run behind manual approval.
+
+### Staging / prod prerequisites (before the first run)
+
+1. **OIDC federation per environment** — repeat the federated-credential step in
+   `infra/README.md` for the `staging` and `prod` GitHub Environments (the subject differs
+   per environment).
+2. **Identity / auth tenant** — `staging.bicepparam` / `prod.bicepparam` point `authAuthority`
+   at Entra **External ID (CIAM)** tenants (`*.ciamlogin.com`) that must be created first, or
+   switched to a workforce app registration like dev. The deploy will succeed without it, but
+   sign-in won't work until `authAuthority`/`authAudience` are real. Confirm `authAudience`
+   matches the token `aud` (dev uses the **bare client id**, not the `api://` URI — verify by
+   decoding a real token).
+3. **Quota** — `prod` uses `P1v3` App Service + `Standard_D2ds_v5` Postgres; request quota in
+   the target region first (dev hit this on `B1`).
+4. **Cost** — `staging` and `prod` both set `deployRedis = true` (~$45/mo Managed Redis each)
+   plus dedicated compute. Don't stand these up until you intend to pay for them; tear down
+   with `az group delete` (Section 6) when idle.
+
+---
+
 ## 4. Secrets
 
 - **Generated** by Bicep at deploy time: `ConnectionStrings--DefaultConnection`,
@@ -149,11 +181,14 @@ soft-delete means the vault name is reserved for 7 days; `--purge` if you must r
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| `az webapp deploy` reports "site failed to start within 10 mins" but the app is actually up | B1's .NET cold start (~120–220s, mostly container/runtime init before "Now listening") exceeds the default **230s** warmup-probe limit, so the first start attempt is marked failed even though App Service retries and succeeds. | Set `WEBSITES_CONTAINER_START_TIME_LIMIT=600` (now in `appService.bicep`) and enable **Always On** so the slow first start fits the probe window and the container stays warm. Verify with `GET /health`. For genuinely faster starts, scale the App Service plan up. |
 | First deploy `/health` times out; container exits with `InstrumentationKey is missing` | On a brand-new environment the App Service identity's `Key Vault Secrets User` grant hasn't propagated to the vault's data plane yet, so `@Microsoft.KeyVault(...)` references resolve to **AccessToKeyVaultDenied** and the app gets the literal reference strings. (The app no longer crashes on this — App Insights is skipped when its connection string is invalid — but data secrets are still unresolved.) | Wait ~5–10 min for RBAC to propagate, then force re-resolution: change/add any app setting (e.g. `az webapp config appsettings set --settings KV_REFRESH=1`) or `az webapp restart`. Verify with `az rest GET .../config/configreferences/appsettings` → all should be `Resolved`. |
 | `deps.json does not exist` in EF step | EF `--no-build` looking in `bin/Debug` after a Release-only build | Already fixed: EF step passes `--configuration Release` |
 | Migration step can't reach Postgres | Runner IP not allowed | The pipeline adds/removes a temp firewall rule; for manual runs add your IP to the PG firewall |
 | API 500s on data calls | `Cache--RedisConnectionString` or DB secret wrong | Check Key Vault values; confirm the App Service identity has **Key Vault Secrets User** |
-| Web calls fail (CORS) | `Cors__AllowedOrigins__0` ≠ the SWA URL | Confirm the app setting matches the Static Web App hostname; redeploy infra |
+| Web calls fail (CORS) | `Cors__AllowedOrigins__0` ≠ the SWA URL, or local web port not allowed | Confirm the SWA hostname matches; for local Expo web add the port to `extraCorsOrigins` in `dev.bicepparam` (8081/8082/19006 are included) |
+| Signed in but API returns 401 | `Authentication__EntraExternalId__Audience` ≠ token `aud`, or expired token | Decode the access token (`aud`, `iss`); set Audience to the exact `aud` (dev = bare client id, **not** `api://…`); re-sign-in if the token expired |
+| Web sign-in popup shows "Unmatched Route" and never returns | `WebBrowser.maybeCompleteAuthSession()` not called on the redirect page | Already fixed in `app/app/_layout.tsx`; ensure `expo-web-browser` is installed |
 | Provider returns fake data in cloud | Provider key secret still empty | Set the real key in Key Vault (Section 4) and restart |
 
 ---
@@ -161,3 +196,49 @@ soft-delete means the vault name is reserved for 7 days; `--purge` if you must r
 ## 8. Health & observability
 - Liveness: `GET /health` → `{ "status": "ok", "service": "wander-api" }` (no DB dependency).
 - Logs/metrics: Application Insights (`appi-wander-dev`) + Log Analytics (`log-wander-dev`).
+
+---
+
+## 9. Mobile (EAS Build & Update)
+
+The Expo app ships to stores via **EAS Build** (native binaries) and patches them over-the-air
+via **EAS Update**. Config lives in `app/eas.json` (build profiles + channels) and `app/app.json`
+(`runtimeVersion.policy = fingerprint`, iOS `bundleIdentifier` / Android `package` = `com.wander.app`).
+
+### One-time setup
+```bash
+cd app
+npm i -g eas-cli         # or use npx eas-cli
+eas login                # the Expo account that owns the project
+eas init                 # creates the EAS project; writes extra.eas.projectId + updates.url
+```
+
+### Builds (creates native binaries — costs build minutes)
+```bash
+eas build --profile development --platform all   # dev client for local testing
+eas build --profile preview     --platform all   # internal distribution (TestFlight / APK)
+eas build --profile production  --platform all   # store-ready
+```
+Each profile bakes its `EXPO_PUBLIC_*` env from `eas.json`. Update those values (API URL,
+Entra issuer/client/scopes) per profile as real environments come online.
+
+### OTA updates (JS-only, cheap/instant)
+```bash
+eas update --branch production --message "fix: ..."   # patches installed builds w/ matching runtimeVersion
+```
+CI does this automatically: the `mobile-update` job in `ci.yml` runs `eas update --branch
+production` on push to `main` when `DEPLOY_MOBILE=true` and the `EXPO_TOKEN` secret is set.
+Set `MOBILE_API_URL` (repo variable) to point the mobile bundle at the right API.
+
+### Required GitHub config for `mobile-update`
+| Kind | Name | Purpose |
+|---|---|---|
+| Secret | `EXPO_TOKEN` | Expo access token (expo.dev → Account → Access tokens) |
+| Variable | `DEPLOY_MOBILE` | `true` to enable the OTA job |
+| Variable | `MOBILE_API_URL` | API base URL the mobile bundle calls (defaults to dev API) |
+| Variable | `EXPO_PUBLIC_AUTH_ISSUER` / `EXPO_PUBLIC_AUTH_CLIENT_ID` / `EXPO_PUBLIC_AUTH_SCOPES` | Entra config baked into the bundle |
+
+> **Native sign-in follow-up:** native (iOS/Android) Entra sign-in needs a mobile redirect URI
+> (`wander://auth` and/or the Expo proxy) registered on the app registration as a *mobile/native*
+> redirect. Web sign-in (current) uses the SPA redirect URIs. Add the native redirect before
+> shipping a build that must authenticate.

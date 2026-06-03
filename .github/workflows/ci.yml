@@ -240,3 +240,44 @@ jobs:
           app_location: app/dist
           skip_app_build: true
           output_location: ''
+
+  # Publishes an over-the-air (OTA) EAS Update to the `production` channel on every push to
+  # main. This patches the JS bundle of already-installed native builds with a matching
+  # runtimeVersion — it does NOT create new native binaries (use `eas build` / the manual
+  # deploy for that). Gated behind DEPLOY_MOBILE=true and requires the EXPO_TOKEN secret
+  # (an Expo access token from expo.dev → Account settings → Access tokens).
+  mobile-update:
+    needs: [validate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_MOBILE == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install app dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish OTA update
+        working-directory: app
+        # EXPO_PUBLIC_* values are inlined into the JS bundle at update time. Point at whichever
+        # API the production mobile channel should consume (repo variable; falls back to dev API).
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.MOBILE_API_URL || 'https://app-wander-dev-azgnto.azurewebsites.net' }}
+          EXPO_PUBLIC_AUTH_ISSUER: ${{ vars.EXPO_PUBLIC_AUTH_ISSUER }}
+          EXPO_PUBLIC_AUTH_CLIENT_ID: ${{ vars.EXPO_PUBLIC_AUTH_CLIENT_ID }}
+          EXPO_PUBLIC_AUTH_SCOPES: ${{ vars.EXPO_PUBLIC_AUTH_SCOPES }}
+        run: eas update --branch production --message "ci ${{ github.sha }}" --non-interactive
