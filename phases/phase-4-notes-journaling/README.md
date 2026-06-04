@@ -96,6 +96,19 @@ Each slice is independently shippable, testable, and green before the next.
     (slice 2 SAS endpoints), reflection prompts + notifications (slice 4), offline outbox (slice 5),
     hourly weather on item detail (slice 6), and an end-to-end deploy of the transcription stack.
 
+- **2026-06-04 — Frontend slice 1 (text journaling UI):**
+  - **API client + query layer:** `Note`/`MediaAsset` types, `getTripNotes`/`createNote`/`deleteNote`
+    in `api.ts` (notes fall back to `[]` when offline), and `queries/notes.ts`
+    (`useTripNotesQuery` + create/delete mutations that invalidate the trip's notes).
+  - **Itinerary = journal:** `TripPlannerScreen` shows a **📝 count** "has notes" indicator on each
+    event row (event-scoped notes counted per item).
+  - **Event journal composer:** the item editor (`AddActivityScreen`) gains a **Journal** section
+    (only when editing an existing event) — add/list/delete timestamped text entries anchored to that
+    event. Voice + photos come in later slices.
+  - Type-check + lint clean; 48/48 app tests pass.
+  - **Next:** trip/day-scoped journal surface, voice recording + playback (slice 3 frontend), photos
+    (slice 2), reflection prompts + notifications (slice 4).
+
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See
 > `docs/deployment-runbook.md` → "Open item to revisit".

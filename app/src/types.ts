@@ -54,6 +54,43 @@ export interface Day {
   packingItems?: PackingItem[];
 }
 
+// ── Notes & journaling (Phase 4) ─────────────────────────────────────────────
+
+export type NoteScope = 'Trip' | 'Day' | 'Event';
+export type NoteKind = 'Text' | 'Voice' | 'PromptResponse';
+export type MediaAssetKind = 'Audio' | 'Photo';
+export type TranscriptionStatus = 'None' | 'Pending' | 'Completed' | 'Failed';
+
+export interface MediaAsset {
+  id: string;
+  noteId: string;
+  kind: MediaAssetKind;
+  blobName: string;
+  blobUrl?: string | null;
+  contentType?: string | null;
+  durationSeconds?: number | null;
+  transcript?: string | null;
+  transcriptionStatus: TranscriptionStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Note {
+  id: string;
+  tripId: string;
+  ownerId: string;
+  scope: NoteScope;
+  /** Day or itinerary-item id for Day/Event scope; null for Trip scope. */
+  targetId?: string | null;
+  kind: NoteKind;
+  bodyText?: string | null;
+  promptId?: string | null;
+  mediaAssets: MediaAsset[];
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
 export interface Trip {
   id: string;
   ownerId: string;

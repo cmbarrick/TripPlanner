@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { Trip, ItineraryItem, PackingItem } from './types';
+import { Trip, ItineraryItem, PackingItem, Note, NoteScope, NoteKind } from './types';
 import { mockTrips } from './mockData';
 import { getAuthStateSnapshot } from './auth/session';
 
@@ -272,6 +272,35 @@ export async function setPackingItemPacked(tripId: string, packingItemId: string
 
 export async function deletePackingItem(tripId: string, packingItemId: string): Promise<void> {
   await sendJson<void>(`/api/trips/${tripId}/packing/${packingItemId}`, 'DELETE');
+}
+
+// ── Notes & journaling (Phase 4) ─────────────────────────────────────────────
+
+export interface CreateNoteInput {
+  scope: NoteScope;
+  targetId?: string | null;
+  kind?: NoteKind;
+  bodyText?: string | null;
+  promptId?: string | null;
+}
+
+/** Notes for a trip (newest first). Falls back to an empty list when the API is unreachable. */
+export async function getTripNotes(tripId: string): Promise<{ data: Note[]; live: boolean }> {
+  return tryFetch<Note[]>(`/api/trips/${tripId}/notes`, []);
+}
+
+export async function createNote(tripId: string, input: CreateNoteInput): Promise<Note> {
+  return sendJson<Note>(`/api/trips/${tripId}/notes`, 'POST', {
+    scope: input.scope,
+    targetId: input.targetId ?? null,
+    kind: input.kind ?? 'Text',
+    bodyText: input.bodyText ?? null,
+    promptId: input.promptId ?? null,
+  });
+}
+
+export async function deleteNote(noteId: string): Promise<void> {
+  await sendJson<void>(`/api/notes/${noteId}`, 'DELETE');
 }
 
 /** Generates one day per date in the (inclusive) range so a new trip is immediately plannable. */

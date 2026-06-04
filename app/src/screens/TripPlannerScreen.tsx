@@ -8,6 +8,7 @@ import { colors, radius, itemAccent, itemEmoji } from '../theme';
 import { dateRange, dayLabel, formatClock, fmtMoney, wmoEmoji, formatTemp, fmtMinutes } from '../format';
 import { useWeatherQuery, ItemWeather, DayWeather } from '../queries/weather';
 import { useTravelTimesQuery, TravelSegment } from '../queries/travelTimes';
+import { useTripNotesQuery } from '../queries/notes';
 import { estimate, buildDirectionsUrl, buildRouteUrl, flightAwareUrl, flightRadar24Url } from '../routing';
 import { exportIcs } from '../ics';
 import { addTripToCalendar } from '../calendar';
@@ -71,6 +72,18 @@ export function TripPlannerScreen({
 
   const { data: weatherData } = useWeatherQuery(trip.id);
   const { data: travelData }  = useTravelTimesQuery(trip.id);
+  const { data: notesData }   = useTripNotesQuery(trip.id);
+
+  // Count of journal notes per itinerary event, so the timeline can flag "has notes".
+  const notesByItem = useMemo<Record<string, number>>(() => {
+    const map: Record<string, number> = {};
+    for (const note of notesData?.data ?? []) {
+      if (note.scope === 'Event' && note.targetId) {
+        map[note.targetId] = (map[note.targetId] ?? 0) + 1;
+      }
+    }
+    return map;
+  }, [notesData]);
   const itemWeather = useMemo<Record<string, ItemWeather>>(() => {
     const map: Record<string, ItemWeather> = {};
     for (const w of weatherData?.items ?? []) map[w.itemId] = w;
@@ -250,6 +263,7 @@ export function TripPlannerScreen({
                     dayWeather={dayWeather[day.id]}
                     itemWeather={itemWeather}
                     travelSegments={travelSegments}
+                    notesByItem={notesByItem}
                     onHeaderPress={scope === 'trip' ? () => drillIntoDay(day.id) : undefined}
                     onEditItem={onEditItem}
                     onReorder={onReorder}
@@ -280,6 +294,7 @@ function DayBlock({
   dayWeather,
   itemWeather,
   travelSegments,
+  notesByItem,
   onHeaderPress,
   onEditItem,
   onReorder,
@@ -291,6 +306,7 @@ function DayBlock({
   dayWeather?: DayWeather;
   itemWeather: Record<string, ItemWeather>;
   travelSegments: Record<string, TravelSegment>;
+  notesByItem: Record<string, number>;
   onHeaderPress?: () => void;
   onEditItem: (item: ItineraryItem) => void;
   onReorder: (dayId: string, itemIds: string[]) => void;
@@ -340,6 +356,7 @@ function DayBlock({
               clock={clock}
               conflict={conflicts.has(item.id)}
               weather={itemWeather[item.id]}
+              noteCount={notesByItem[item.id] ?? 0}
               unit={unit}
               showOrder={false}
               onEdit={() => onEditItem(item)}
@@ -365,6 +382,7 @@ function DayBlock({
             clock={clock}
             conflict={conflicts.has(item.id)}
             weather={itemWeather[item.id]}
+            noteCount={notesByItem[item.id] ?? 0}
             unit={unit}
             showOrder
             canUp={index > 0}
@@ -384,6 +402,7 @@ function ItemRow({
   clock,
   conflict,
   weather,
+  noteCount = 0,
   unit = 'F',
   showOrder,
   canUp = false,
@@ -396,6 +415,7 @@ function ItemRow({
   clock: ClockPref;
   conflict: boolean;
   weather?: ItemWeather;
+  noteCount?: number;
   unit?: 'F' | 'C';
   showOrder: boolean;
   canUp?: boolean;
@@ -416,6 +436,11 @@ function ItemRow({
           <View style={s.itemHeader}>
             <Text style={[s.itemName, tentative && s.itemNameMuted]} numberOfLines={2}>{itemEmoji[item.type]} {item.title}</Text>
             <View style={s.itemBadges}>
+              {noteCount > 0 ? (
+                <Text style={s.noteBadge} accessibilityLabel={`${noteCount} ${noteCount === 1 ? 'note' : 'notes'}`}>
+                  📝 {noteCount}
+                </Text>
+              ) : null}
               {weather ? (
                 <Text style={s.itemWeather}>
                   {wmoEmoji(weather.weatherCode)} {formatTemp(weather.highC, unit)}
@@ -822,6 +847,7 @@ const s = StyleSheet.create({
   climatePill: { fontSize: 9, color: colors.ink400, fontWeight: '700', backgroundColor: colors.brand100, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 999 },
   itemBadges: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   itemWeather: { fontSize: 11, color: colors.ink400, fontWeight: '600' },
+  noteBadge: { fontSize: 11, color: colors.brand, fontWeight: '800' },
   flightLinks: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   flightLinkSep: { fontSize: 11, color: colors.ink400 },
   travelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 50, paddingRight: 4, marginBottom: 8, marginTop: -4 },

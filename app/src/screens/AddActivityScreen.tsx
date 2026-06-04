@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
-import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus } from '../types';
+import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus, Note } from '../types';
 import { ItineraryItemInput } from '../api';
 import { PlaceSearchField, SelectedPlace } from '../PlaceSearchField';
 import { colors, radius, itemEmoji } from '../theme';
 import { dayLabel } from '../format';
 import { TimeField } from '../pickers';
 import { ClockPref } from '../store/uiStore';
+import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation } from '../queries/notes';
 
 const TYPES: { key: ItineraryItemType; label: string }[] = [
   { key: 'Flight', label: 'Flight' },
@@ -252,6 +253,8 @@ export function AddActivityScreen({
         {error ? <Text style={s.error}>{error}</Text> : null}
         {serverError ? <Text style={s.error}>{serverError}</Text> : null}
 
+        {editing && item ? <EventJournal tripId={trip.id} item={item} /> : null}
+
         {editing && onDelete ? (
           <Pressable style={s.delete} onPress={onDelete} accessibilityLabel="Delete item">
             <Text style={s.deleteText}>Delete item</Text>
@@ -261,6 +264,100 @@ export function AddActivityScreen({
       </ScrollView>
     </View>
   );
+}
+
+/**
+ * Journal-as-you-go: text notes anchored to this specific itinerary event. The itinerary timeline
+ * doubles as the journal, so capture happens right where the event lives. (Voice + photos arrive in
+ * later Phase 4 slices.)
+ */
+function EventJournal({ tripId, item }: { tripId: string; item: ItineraryItem }) {
+  const { data: notesData, isLoading } = useTripNotesQuery(tripId);
+  const createNote = useCreateNoteMutation(tripId);
+  const deleteNote = useDeleteNoteMutation(tripId);
+  const [draft, setDraft] = useState('');
+
+  const notes = (notesData?.data ?? []).filter(
+    (n) => n.scope === 'Event' && n.targetId === item.id && !n.deletedAt,
+  );
+
+  const add = () => {
+    const body = draft.trim();
+    if (!body || createNote.isPending) return;
+    createNote.mutate(
+      { scope: 'Event', targetId: item.id, kind: 'Text', bodyText: body },
+      { onSuccess: () => setDraft('') },
+    );
+  };
+
+  return (
+    <View style={s.journal}>
+      <View style={s.journalHead}>
+        <Text style={s.journalTitle}>📝 Journal</Text>
+        {notes.length > 0 ? <Text style={s.journalCount}>{notes.length}</Text> : null}
+      </View>
+      <Text style={s.journalHint}>Capture how this {item.type.toLowerCase()} went — saved against this event.</Text>
+
+      <View style={s.journalAddRow}>
+        <TextInput
+          style={[s.control, s.journalInput]}
+          placeholder="Add a journal entry…"
+          placeholderTextColor={colors.ink400}
+          value={draft}
+          onChangeText={setDraft}
+          multiline
+          accessibilityLabel="New journal entry"
+        />
+        <Pressable
+          style={[s.journalAddBtn, (!draft.trim() || createNote.isPending) && { opacity: 0.5 }]}
+          onPress={add}
+          disabled={!draft.trim() || createNote.isPending}
+          accessibilityLabel="Save journal entry"
+        >
+          {createNote.isPending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.journalAddText}>Add</Text>}
+        </Pressable>
+      </View>
+
+      {createNote.isError ? <Text style={s.error}>Couldn't save the note. Try again.</Text> : null}
+
+      {isLoading ? (
+        <Text style={s.journalEmpty}>Loading…</Text>
+      ) : notes.length === 0 ? (
+        <Text style={s.journalEmpty}>No entries yet.</Text>
+      ) : (
+        notes.map((note) => (
+          <NoteRow key={note.id} note={note} onDelete={() => deleteNote.mutate(note.id)} />
+        ))
+      )}
+    </View>
+  );
+}
+
+function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
+  return (
+    <View style={s.noteRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={s.noteBody}>{note.bodyText}</Text>
+        <Text style={s.noteMeta}>{formatNoteTime(note.createdAt)}</Text>
+      </View>
+      <Pressable onPress={onDelete} hitSlop={8} accessibilityLabel="Delete journal entry">
+        <Text style={s.noteDelete}>✕</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Platform-safe short timestamp (avoids Intl/toLocaleString gaps on Hermes). */
+function formatNoteTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  let h = d.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${MONTHS[d.getMonth()]} ${d.getDate()} · ${h}:${min} ${ampm}`;
 }
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: any }) {
@@ -304,4 +401,18 @@ const s = StyleSheet.create({
   error: { color: colors.danger, fontSize: 12, fontWeight: '600', marginTop: 4 },
   delete: { marginTop: 18, alignItems: 'center', paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2' },
   deleteText: { color: colors.danger, fontWeight: '800', fontSize: 13 },
+  journal: { marginTop: 18, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 16 },
+  journalHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  journalTitle: { fontSize: 15, fontWeight: '800', color: colors.ink },
+  journalCount: { fontSize: 11, fontWeight: '800', color: colors.brand, backgroundColor: colors.brand100, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
+  journalHint: { fontSize: 11, color: colors.ink400, marginTop: 2, marginBottom: 10 },
+  journalAddRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },
+  journalInput: { flex: 1, minHeight: 44, maxHeight: 110, textAlignVertical: 'top' },
+  journalAddBtn: { backgroundColor: colors.brand, paddingHorizontal: 16, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', minWidth: 56 },
+  journalAddText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  journalEmpty: { fontSize: 12, color: colors.ink400, marginTop: 12 },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10 },
+  noteBody: { fontSize: 13, color: colors.ink, lineHeight: 18 },
+  noteMeta: { fontSize: 10, color: colors.ink400, fontWeight: '700', marginTop: 4 },
+  noteDelete: { color: colors.ink400, fontSize: 14, fontWeight: '700', marginTop: 2 },
 });
