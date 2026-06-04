@@ -10,6 +10,21 @@ the IaC layout and one-time OIDC setup). Read that first for first-time setup.
 
 ---
 
+## ⚠️ Open item to revisit (2026-06-03)
+
+**Verify live web sign-in end-to-end.** The deployed web bundle now ships with the Entra config
+(auth defaults baked into `ci.yml`) and a SWA navigation-fallback (`app/public/staticwebapp.config.json`,
+so `/auth?code=…` no longer 404s). A one-off bundle with both fixes was deployed to
+`swa-wander-dev`. **Still to confirm when back:** click **Sign in** on the live SWA
+(`lemon-smoke-0a389bf0f.7.azurestaticapps.net`), complete the Entra popup, and confirm the
+"Showing demo data" banner is replaced by real trips (the `401` on `/api/trips` seen in the
+console is just the signed-out state — it should disappear once a bearer token is attached).
+If sign-in still fails: check (a) the bundle is the latest (hard refresh / private window),
+(b) the token's `aud` matches the API's `Authentication:EntraExternalId:Audience`, and
+(c) the access token hasn't expired (~1h). See §7 (web auth troubleshooting).
+
+---
+
 ## 1. What gets deployed
 
 | Component | Target | How |

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemas.azure.com/staticwebapp.config.json",
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/_expo/*",
+      "/assets/*",
+      "/*.js",
+      "/*.css",
+      "/*.json",
+      "/*.map",
+      "/*.png",
+      "/*.jpg",
+      "/*.svg",
+      "/*.ico",
+      "/*.woff",
+      "/*.woff2",
+      "/*.ttf"
+    ]
+  }
+}

@@ -2,9 +2,11 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Wander.Api.Data;
+using Wander.Api.Media;
 using Wander.Api.Places;
 using Wander.Api.Routing;
 using Wander.Api.Security;
+using Wander.Api.Transcription;
 using Wander.Api.Weather;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -110,6 +112,25 @@ builder.Services.AddDbContext<WanderDbContext>(options =>
 });
 
 builder.Services.AddScoped<ITripRepository, EfCoreTripRepository>();
+
+// Notes & journaling (Phase 4): media blobs + async voice-note transcription.
+// Cloud: Azure Blob Storage + an Azure Storage queue (drained by the transcription Function) when
+// Storage:ConnectionString is set. Local-first / CI: a filesystem blob store and a no-op queue so
+// the app runs with no Azure Storage dependency (audio is stored, just not transcribed).
+builder.Services.AddScoped<INoteRepository, EfCoreNoteRepository>();
+var storageConnectionString = builder.Configuration["Storage:ConnectionString"];
+var mediaContainer = builder.Configuration["Storage:MediaContainer"] ?? "media";
+if (!string.IsNullOrWhiteSpace(storageConnectionString))
+{
+    builder.Services.AddSingleton<IBlobStore>(_ => new AzureBlobStore(storageConnectionString, mediaContainer));
+    builder.Services.AddSingleton<ITranscriptionQueue>(_ => new AzureStorageTranscriptionQueue(storageConnectionString));
+}
+else
+{
+    var mediaRoot = Path.Combine(builder.Environment.ContentRootPath, "_media");
+    builder.Services.AddSingleton<IBlobStore>(_ => new LocalBlobStore(mediaRoot));
+    builder.Services.AddSingleton<ITranscriptionQueue, NullTranscriptionQueue>();
+}
 
 var authority = builder.Configuration["Authentication:EntraExternalId:Authority"];
 var audience = builder.Configuration["Authentication:EntraExternalId:Audience"];

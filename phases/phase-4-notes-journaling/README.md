@@ -46,9 +46,9 @@ Each slice is independently shippable, testable, and green before the next.
 2. **Media infra + photos.** Add an **Azure Storage account + container to dev infra (Bicep)**;
    `BlobService` + signed-URL (SAS) endpoints in the API; photo attach/upload from the app.
 3. **Voice notes + transcription.** Record audio → upload to Blob → **Azure Speech-to-Text** →
-   persist **both** audio and transcript; playback + transcript display. Transcription runs behind
-   an `ITranscriptionService` (v1: API hosted/background service; swappable to an Azure Function
-   later). Web records via `MediaRecorder`; native via `expo-audio`.
+   persist **both** audio and transcript; playback + transcript display. Transcription runs in a
+   dedicated **Azure Function** (queue-triggered), decided up front (no in-API interim). Web records
+   via `MediaRecorder`; native via `expo-audio`.
 4. **Reflection prompts + post-event local notifications.** `JournalPrompt` library + global/per-trip
    toggles; `expo-notifications` (native) and the Web Notifications API (web, best-effort) scheduled
    from event end-times (+ delay), deep-linking to that event's composer; per-event-type filter +
@@ -59,13 +59,46 @@ Each slice is independently shippable, testable, and green before the next.
    cache the day's hourly array under one key, slice client-side.
 
 ### Decisions (locked)
-- **Transcription engine:** always **Azure Speech-to-Text**, behind `ITranscriptionService`.
+- **Transcription engine:** always **Azure Speech-to-Text**, behind `ITranscriptionService`, hosted
+  in a dedicated **Azure Function** (queue-triggered) — built now, not deferred.
 - **Web scope:** companion web also gets **voice recording + notifications** (best-effort browser
   APIs), in addition to text/photo/playback.
 - **Storage:** add a real **Azure Storage account to the dev environment** (cheap), not just a fake.
 
 ## Out of scope
 - AI recap generation (Phase 6), sharing/publishing (Phases 7–8).
+
+## Progress log
+- **2026-06-03 — Backend foundation (slice 1) + transcription Function (slice 3 backend):**
+  - **Models:** `Note` (`scope` trip/day/event + `target_id`, `kind` text/voice/prompt_response,
+    `body_text?`, `prompt_id?`, soft-delete) and `MediaAsset` (`kind` audio/photo, `blob_name`/`blob_url`,
+    `duration?`, `transcript?`, `transcription_status`); DbContext config + EF migration `AddNotesAndMedia`.
+  - **API:** `NotesController` — list/create text notes, create **voice note** (multipart audio →
+    blob → `MediaAsset` pending → enqueue transcription job), soft-delete; all with per-user trip
+    ownership. `InternalTranscriptionController` — service-to-service transcript callback authorized
+    by `Functions:CallbackKey` (constant-time compare).
+  - **Abstractions (local-first):** `IBlobStore` (`LocalBlobStore` filesystem for dev/CI,
+    `AzureBlobStore` for cloud) and `ITranscriptionQueue` (`NullTranscriptionQueue` no-op for dev/CI,
+    `AzureStorageTranscriptionQueue` for cloud). Wired in `Program.cs` by presence of
+    `Storage:ConnectionString` — the app still runs with **zero Azure dependency** locally.
+  - **`Wander.Functions`** (.NET 9 isolated): `TranscribeAudioFunction` (queue trigger
+    `transcription-jobs`) → download blob → `AzureSpeechTranscriptionService` (Speech **fast
+    transcription** REST) → POST transcript back to the API callback; retry/poison via host. Added to
+    the solution with `Wander.Functions.Tests`.
+  - **Infra (Bicep, deploy toggle OFF):** `storage.bicep` (account + `media` container +
+    `transcription-jobs` queue), `speech.bicep` (Azure AI Speech), `functionApp.bicep` (Linux
+    Consumption, .NET 9 isolated). Gated behind `deployTranscription=false` in `main.bicep`; the API
+    gets `Storage__ConnectionString` + `Functions__CallbackKey` app settings only when enabled.
+    Nothing is provisioned/charged until the toggle is flipped.
+  - **Tests:** 61 API tests (12 new: notes CRUD, ownership, voice→enqueue, callback key paths) +
+    3 Function parsing tests — all green. `az bicep build` clean.
+  - **Not yet done (next):** app UI (composer, "has notes" indicator, recorder, playback), photos
+    (slice 2 SAS endpoints), reflection prompts + notifications (slice 4), offline outbox (slice 5),
+    hourly weather on item detail (slice 6), and an end-to-end deploy of the transcription stack.
+
+> **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
+> dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See
+> `docs/deployment-runbook.md` → "Open item to revisit".
 
 ## Testing plan
 - [ ] **Unit:** note scoping, prompt enable/disable logic, notification scheduling rules

@@ -14,6 +14,8 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
     public DbSet<PackingItem> PackingItems => Set<PackingItem>();
     public DbSet<TripMember> TripMembers => Set<TripMember>();
     public DbSet<TripShare> TripShares => Set<TripShare>();
+    public DbSet<Note> Notes => Set<Note>();
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -103,6 +105,28 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
                 .WithMany()
                 .HasForeignKey(x => x.TripId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Note>(entity =>
+        {
+            entity.ToTable("notes");
+            // Event/day journaling queries filter by (trip, scope, target); owner index guards listing.
+            entity.HasIndex(x => new { x.TripId, x.Scope, x.TargetId });
+            entity.HasIndex(x => x.OwnerId);
+            entity.HasOne<Trip>()
+                .WithMany()
+                .HasForeignKey(x => x.TripId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.MediaAssets)
+                .WithOne()
+                .HasForeignKey(x => x.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MediaAsset>(entity =>
+        {
+            entity.ToTable("media_assets");
+            entity.HasIndex(x => x.NoteId);
         });
     }
 }

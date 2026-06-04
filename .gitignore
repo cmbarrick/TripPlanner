@@ -21,6 +21,10 @@ artifacts/
 # .NET local secrets (defense in depth; user-secrets live outside the repo anyway)
 secrets.json
 
+# Azure Functions local config (may hold storage/speech keys) + local blob store
+local.settings.json
+_media/
+
 # ---------------------------------------------------------------------------
 # Node / Expo / React Native (app)
 # ---------------------------------------------------------------------------

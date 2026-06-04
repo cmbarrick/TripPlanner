@@ -62,6 +62,16 @@ param deployRedis bool = true
 @description('Azure Managed Redis SKU (Balanced_B0 is the smallest/cheapest).')
 param redisSkuName string = 'Balanced_B0'
 
+@description('Whether to provision the Phase 4 voice-note transcription stack (media Storage + Azure AI Speech + Function App). Off by default — enable per environment when voice notes go live. When off, the API uses a local filesystem blob store and skips transcription.')
+param deployTranscription bool = false
+
+@description('Azure AI Speech SKU (S0 standard pay-as-you-go, F0 free tier).')
+param speechSku string = 'S0'
+
+@description('Shared key the transcription Function uses to call the API transcript callback. Defaults to a generated GUID; override (and keep stable) so API + Function agree across separate deploys.')
+@secure()
+param functionsCallbackKey string = newGuid()
+
 // Short, deterministic suffix for resources that need a globally unique name.
 var suffix = take(uniqueString(subscription().id, environmentName), 6)
 
@@ -75,6 +85,12 @@ var kvName = 'kv-wndr-${environmentName}-${suffix}'
 var swaName = 'swa-${namePrefix}-${environmentName}'
 var logName = 'log-${namePrefix}-${environmentName}'
 var aiName = 'appi-${namePrefix}-${environmentName}'
+// Storage account names: 3-24 chars, lowercase alphanumeric only.
+var storageName = toLower(replace('st${namePrefix}${environmentName}${suffix}', '-', ''))
+var speechName = 'spch-${namePrefix}-${environmentName}-${suffix}'
+var funcAppName = 'func-${namePrefix}-${environmentName}-${suffix}'
+var funcPlanName = 'plan-func-${namePrefix}-${environmentName}'
+var funcContentShare = toLower('func${environmentName}${suffix}')
 
 var commonTags = {
   app: namePrefix
@@ -124,6 +140,28 @@ module redis 'modules/redis.bicep' = if (deployRedis) {
   }
 }
 
+module storage 'modules/storage.bicep' = if (deployTranscription) {
+  scope: rg
+  name: 'storage'
+  params: {
+    storageAccountName: storageName
+    location: location
+    mediaContainer: 'media'
+    tags: commonTags
+  }
+}
+
+module speech 'modules/speech.bicep' = if (deployTranscription) {
+  scope: rg
+  name: 'speech'
+  params: {
+    speechAccountName: speechName
+    location: location
+    skuName: speechSku
+    tags: commonTags
+  }
+}
+
 module staticWebApp 'modules/staticWebApp.bicep' = {
   scope: rg
   name: 'staticWebApp'
@@ -162,6 +200,8 @@ module appService 'modules/appService.bicep' = {
     authAudience: authAudience
     webOrigin: 'https://${staticWebApp.outputs.defaultHostname}'
     extraCorsOrigins: extraCorsOrigins
+    mediaStorageConnectionString: deployTranscription ? (storage.?outputs.connectionString ?? '') : ''
+    functionsCallbackKey: deployTranscription ? functionsCallbackKey : ''
     tags: commonTags
   }
   // App settings reference Key Vault secrets, so the secrets must already exist.
@@ -183,6 +223,27 @@ module kvAccess 'modules/keyVaultRoleAssignment.bicep' = {
   ]
 }
 
+// Transcription Function App (Phase 4): drains the transcription-jobs queue and posts transcripts
+// back to the API. Provisioned only when deployTranscription is true.
+module functionApp 'modules/functionApp.bicep' = if (deployTranscription) {
+  scope: rg
+  name: 'functionApp'
+  params: {
+    functionAppName: funcAppName
+    planName: funcPlanName
+    location: location
+    storageConnectionString: storage.?outputs.connectionString ?? ''
+    speechEndpoint: speech.?outputs.endpoint ?? ''
+    speechKey: speech.?outputs.key ?? ''
+    apiBaseUrl: 'https://${appService.outputs.defaultHostName}'
+    callbackKey: functionsCallbackKey
+    appInsightsConnectionString: monitoring.outputs.connectionString
+    mediaContainer: 'media'
+    contentShareName: funcContentShare
+    tags: commonTags
+  }
+}
+
 output resourceGroupName string = rg.name
 output apiHostName string = appService.outputs.defaultHostName
 output apiName string = appName
@@ -191,3 +252,6 @@ output keyVaultName string = kvName
 output postgresServerName string = pgName
 output postgresFqdn string = postgres.outputs.fullyQualifiedDomainName
 output postgresAdminLogin string = postgresAdminLogin
+output transcriptionEnabled bool = deployTranscription
+output mediaStorageAccountName string = deployTranscription ? storageName : ''
+output functionAppHostName string = functionApp.?outputs.defaultHostName ?? ''

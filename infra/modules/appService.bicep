@@ -25,6 +25,14 @@ param webOrigin string
 @description('Additional CORS origins (e.g. localhost dev ports for the Expo web client). Appended after webOrigin.')
 param extraCorsOrigins array = []
 
+@description('Media storage connection string. When set, the API stores media in Azure Blob and queues voice notes for transcription; empty = local/no-op (Phase 4).')
+@secure()
+param mediaStorageConnectionString string = ''
+
+@description('Shared key the transcription Function presents on its transcript callback. Empty = callback rejected.')
+@secure()
+param functionsCallbackKey string = ''
+
 param tags object = {}
 
 var kvSecretUriPrefix = 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/'
@@ -90,7 +98,24 @@ var redisAppSettings = useRedis ? [
   }
 ] : []
 
-var appSettings = concat(baseAppSettings, corsAppSettings, redisAppSettings)
+// Notes & journaling (Phase 4): only wired when a media storage account is provisioned for this
+// environment; otherwise the API falls back to its local filesystem blob store + no-op queue.
+var transcriptionAppSettings = empty(mediaStorageConnectionString) ? [] : [
+  {
+    name: 'Storage__ConnectionString'
+    value: mediaStorageConnectionString
+  }
+  {
+    name: 'Storage__MediaContainer'
+    value: 'media'
+  }
+  {
+    name: 'Functions__CallbackKey'
+    value: functionsCallbackKey
+  }
+]
+
+var appSettings = concat(baseAppSettings, corsAppSettings, redisAppSettings, transcriptionAppSettings)
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: planName
