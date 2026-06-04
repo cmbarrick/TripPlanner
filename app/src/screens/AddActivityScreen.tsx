@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
-import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus, Note } from '../types';
+import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus } from '../types';
 import { ItineraryItemInput } from '../api';
 import { PlaceSearchField, SelectedPlace } from '../PlaceSearchField';
 import { colors, radius, itemEmoji } from '../theme';
 import { dayLabel } from '../format';
 import { TimeField } from '../pickers';
 import { ClockPref } from '../store/uiStore';
-import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation } from '../queries/notes';
+import {
+  useTripNotesQuery,
+  useCreateNoteMutation,
+  useDeleteNoteMutation,
+} from '../queries/notes';
+import { VoiceControls } from '../voice/VoiceControls';
+import { PhotoControls } from '../media/PhotoControls';
+import { NoteCard } from '../notes/NoteCard';
 
 const TYPES: { key: ItineraryItemType; label: string }[] = [
   { key: 'Flight', label: 'Flight' },
@@ -320,44 +327,20 @@ function EventJournal({ tripId, item }: { tripId: string; item: ItineraryItem })
 
       {createNote.isError ? <Text style={s.error}>Couldn't save the note. Try again.</Text> : null}
 
+      <VoiceControls tripId={tripId} scope="Event" targetId={item.id} />
+      <PhotoControls tripId={tripId} scope="Event" targetId={item.id} />
+
       {isLoading ? (
         <Text style={s.journalEmpty}>Loading…</Text>
       ) : notes.length === 0 ? (
         <Text style={s.journalEmpty}>No entries yet.</Text>
       ) : (
         notes.map((note) => (
-          <NoteRow key={note.id} note={note} onDelete={() => deleteNote.mutate(note.id)} />
+          <NoteCard key={note.id} note={note} tripId={tripId} onDelete={() => deleteNote.mutate(note.id)} />
         ))
       )}
     </View>
   );
-}
-
-function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
-  return (
-    <View style={s.noteRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={s.noteBody}>{note.bodyText}</Text>
-        <Text style={s.noteMeta}>{formatNoteTime(note.createdAt)}</Text>
-      </View>
-      <Pressable onPress={onDelete} hitSlop={8} accessibilityLabel="Delete journal entry">
-        <Text style={s.noteDelete}>✕</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** Platform-safe short timestamp (avoids Intl/toLocaleString gaps on Hermes). */
-function formatNoteTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  let h = d.getHours();
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${MONTHS[d.getMonth()]} ${d.getDate()} · ${h}:${min} ${ampm}`;
 }
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: any }) {
@@ -411,8 +394,4 @@ const s = StyleSheet.create({
   journalAddBtn: { backgroundColor: colors.brand, paddingHorizontal: 16, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', minWidth: 56 },
   journalAddText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   journalEmpty: { fontSize: 12, color: colors.ink400, marginTop: 12 },
-  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10 },
-  noteBody: { fontSize: 13, color: colors.ink, lineHeight: 18 },
-  noteMeta: { fontSize: 10, color: colors.ink400, fontWeight: '700', marginTop: 4 },
-  noteDelete: { color: colors.ink400, fontSize: 14, fontWeight: '700', marginTop: 2 },
 });

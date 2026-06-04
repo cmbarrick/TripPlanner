@@ -26,4 +26,15 @@ public sealed class LocalBlobStore : IBlobStore
 
         return new BlobResult(blobName, new Uri(path).AbsoluteUri);
     }
+
+    public Task<Stream> OpenReadAsync(string blobName, CancellationToken ct)
+    {
+        var relative = blobName.Replace('/', Path.DirectorySeparatorChar);
+        var path = Path.Combine(_root, relative);
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Media blob not found.", blobName);
+
+        Stream stream = File.OpenRead(path);
+        return Task.FromResult(stream);
+    }
 }

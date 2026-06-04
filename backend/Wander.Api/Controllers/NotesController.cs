@@ -21,6 +21,9 @@ public class NotesController : ControllerBase
     /// <summary>Cap on uploaded audio size (~50 MB) — generous for short voice memos.</summary>
     public const long MaxAudioBytes = 50L * 1024 * 1024;
 
+    /// <summary>Cap on uploaded photo size (~25 MB) — well above a phone JPEG.</summary>
+    public const long MaxImageBytes = 25L * 1024 * 1024;
+
     private readonly INoteRepository _notes;
     private readonly IBlobStore _blobs;
     private readonly ITranscriptionQueue _queue;
@@ -122,6 +125,85 @@ public class NotesController : ControllerBase
         return Ok(created);
     }
 
+    [HttpPost("trips/{tripId:guid}/notes/photo")]
+    [RequestSizeLimit(MaxImageBytes)]
+    public async Task<ActionResult<Note>> CreatePhotoNote(
+        Guid tripId,
+        [FromForm] CreatePhotoNoteRequest request,
+        CancellationToken ct)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        if (request.Image is null || request.Image.Length == 0)
+            return BadRequest(new { error = "An image file is required." });
+        if (request.Image.Length > MaxImageBytes)
+            return BadRequest(new { error = "Image file is too large." });
+        if (Validate(request.Scope, request.TargetId, request.BodyText) is { } error)
+            return BadRequest(new { error });
+
+        var mediaId = Guid.NewGuid();
+        var ext = Path.GetExtension(request.Image.FileName);
+        var blobName = $"{ownerId}/{tripId}/{mediaId}{ext}";
+        var contentType = string.IsNullOrWhiteSpace(request.Image.ContentType)
+            ? "image/jpeg"
+            : request.Image.ContentType;
+
+        await using (var stream = request.Image.OpenReadStream())
+        {
+            await _blobs.SaveAsync(blobName, stream, contentType, ct);
+        }
+
+        var note = new Note
+        {
+            Scope = request.Scope,
+            TargetId = request.TargetId,
+            Kind = NoteKind.Text,
+            BodyText = request.BodyText,
+            MediaAssets =
+            [
+                new MediaAsset
+                {
+                    Id = mediaId,
+                    Kind = MediaAssetKind.Photo,
+                    BlobName = blobName,
+                    BlobUrl = blobName,
+                    ContentType = contentType,
+                    TranscriptionStatus = TranscriptionStatus.None,
+                },
+            ],
+        };
+
+        var created = _notes.Add(tripId, ownerId, note);
+        return created is null ? NotFound() : Ok(created);
+    }
+
+    [HttpGet("trips/{tripId:guid}/notes/media/{mediaAssetId:guid}")]
+    public async Task<IActionResult> GetMedia(Guid tripId, Guid mediaAssetId, CancellationToken ct)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        var asset = _notes.GetMediaAsset(mediaAssetId);
+        if (asset is null || asset.OwnerId != ownerId)
+            return NotFound();
+
+        Stream stream;
+        try
+        {
+            stream = await _blobs.OpenReadAsync(asset.BlobName, ct);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound();
+        }
+
+        // Range processing enables seeking/scrubbing in audio players.
+        return File(stream, asset.ContentType ?? "application/octet-stream", enableRangeProcessing: true);
+    }
+
     [HttpDelete("notes/{noteId:guid}")]
     public IActionResult Delete(Guid noteId)
     {
@@ -157,4 +239,12 @@ public class CreateVoiceNoteRequest
     public int? DurationSeconds { get; set; }
     public string? Locale { get; set; }
     public IFormFile? Audio { get; set; }
+}
+
+public class CreatePhotoNoteRequest
+{
+    public NoteScope Scope { get; set; } = NoteScope.Trip;
+    public Guid? TargetId { get; set; }
+    public string? BodyText { get; set; }
+    public IFormFile? Image { get; set; }
 }

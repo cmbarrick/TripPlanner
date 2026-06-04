@@ -23,6 +23,14 @@ async function buildHeaders(): Promise<HeadersInit | undefined> {
   return undefined;
 }
 
+/** Synchronous auth headers for places that can't await (e.g. native `Image`/`expo-audio` sources). */
+export function authHeadersSnapshot(): Record<string, string> {
+  const auth = getAuthStateSnapshot();
+  if (auth.accessToken) return { Authorization: `Bearer ${auth.accessToken}` };
+  if (DEV_USER_ID) return { 'X-Dev-User-Id': DEV_USER_ID };
+  return {};
+}
+
 async function tryFetch<T>(path: string, fallback: T): Promise<{ data: T; live: boolean }> {
   try {
     const controller = new AbortController();
@@ -301,6 +309,90 @@ export async function createNote(tripId: string, input: CreateNoteInput): Promis
 
 export async function deleteNote(noteId: string): Promise<void> {
   await sendJson<void>(`/api/notes/${noteId}`, 'DELETE');
+}
+
+export interface CreateVoiceNoteFields {
+  scope: NoteScope;
+  targetId?: string | null;
+  bodyText?: string | null;
+  durationSeconds?: number | null;
+  locale?: string | null;
+}
+
+export interface CreatePhotoNoteFields {
+  scope: NoteScope;
+  targetId?: string | null;
+  bodyText?: string | null;
+}
+
+/**
+ * A file to upload. On web this is a `Blob`/`File`; on native it's the
+ * `{ uri, name, type }` shape React Native's `FormData` understands.
+ */
+export type UploadFile = Blob | { uri: string; name: string; type: string };
+
+function appendFile(form: FormData, field: string, file: UploadFile, fileName: string) {
+  if ((file as any)?.uri) {
+    // Native: the filename/type travel inside the object.
+    form.append(field, file as any);
+  } else {
+    form.append(field, file as any, fileName);
+  }
+}
+
+async function postMultipart(path: string, form: FormData): Promise<Note> {
+  // Don't set Content-Type — the platform adds the multipart boundary automatically.
+  const headers = (await buildHeaders()) ?? {};
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: form as any });
+  if (!res.ok) throw new ApiError(await readError(res), res.status);
+  return (await res.json()) as Note;
+}
+
+/** Uploads a recorded audio clip as a voice note (multipart). The API stores the audio and queues
+ *  it for transcription; the transcript arrives asynchronously (visible after a refetch). */
+export async function createVoiceNote(
+  tripId: string,
+  fields: CreateVoiceNoteFields,
+  audio: UploadFile,
+  fileName: string,
+): Promise<Note> {
+  const form = new FormData();
+  form.append('Scope', fields.scope);
+  if (fields.targetId) form.append('TargetId', fields.targetId);
+  if (fields.bodyText) form.append('BodyText', fields.bodyText);
+  if (fields.durationSeconds != null) form.append('DurationSeconds', String(Math.round(fields.durationSeconds)));
+  if (fields.locale) form.append('Locale', fields.locale);
+  appendFile(form, 'Audio', audio, fileName);
+  return postMultipart(`/api/trips/${tripId}/notes/voice`, form);
+}
+
+/** Uploads a photo as a photo note (multipart). No transcription is queued for images. */
+export async function createPhotoNote(
+  tripId: string,
+  fields: CreatePhotoNoteFields,
+  image: UploadFile,
+  fileName: string,
+): Promise<Note> {
+  const form = new FormData();
+  form.append('Scope', fields.scope);
+  if (fields.targetId) form.append('TargetId', fields.targetId);
+  if (fields.bodyText) form.append('BodyText', fields.bodyText);
+  appendFile(form, 'Image', image, fileName);
+  return postMultipart(`/api/trips/${tripId}/notes/photo`, form);
+}
+
+/** Absolute URL for a media asset (used directly by native `Image`/`expo-audio` with auth headers). */
+export function mediaUrl(tripId: string, mediaAssetId: string): string {
+  return `${API_BASE}/api/trips/${tripId}/notes/media/${mediaAssetId}`;
+}
+
+/** Fetches media bytes with auth and returns a playable/displayable object URL (web only). */
+export async function fetchMediaObjectUrl(tripId: string, mediaAssetId: string): Promise<string> {
+  const headers = await buildHeaders();
+  const res = await fetch(mediaUrl(tripId, mediaAssetId), { headers });
+  if (!res.ok) throw new ApiError(await readError(res), res.status);
+  const blob = await res.blob();
+  return (URL as any).createObjectURL(blob) as string;
 }
 
 /** Generates one day per date in the (inclusive) range so a new trip is immediately plannable. */

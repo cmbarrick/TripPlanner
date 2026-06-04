@@ -128,6 +128,78 @@ public class NotesControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task GetMedia_OwnVoiceNoteAudio_ReturnsFileStream()
+    {
+        var (ctrl, _, trip) = Build();
+        var voice = await ctrl.CreateVoiceNote(
+            trip.Id, new CreateVoiceNoteRequest { Scope = NoteScope.Trip, Audio = FakeAudioFile() }, CancellationToken.None);
+        var note = (Note)((OkObjectResult)voice.Result!).Value!;
+
+        var result = await ctrl.GetMedia(trip.Id, note.MediaAssets[0].Id, CancellationToken.None);
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Equal("audio/m4a", file.ContentType);
+    }
+
+    [Fact]
+    public async Task GetMedia_OtherUser_ReturnsNotFound()
+    {
+        var (ctrl, _, trip) = Build();
+        var voice = await ctrl.CreateVoiceNote(
+            trip.Id, new CreateVoiceNoteRequest { Scope = NoteScope.Trip, Audio = FakeAudioFile() }, CancellationToken.None);
+        var note = (Note)((OkObjectResult)voice.Result!).Value!;
+
+        ctrl.ControllerContext = FakeAuth.ForUser(OtherUserId);
+        var result = await ctrl.GetMedia(trip.Id, note.MediaAssets[0].Id, CancellationToken.None);
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    // ── Photo notes ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreatePhotoNote_StoresPhotoMediaWithoutTranscription()
+    {
+        var (ctrl, _, trip) = Build(out var queue);
+        var request = new CreatePhotoNoteRequest
+        {
+            Scope = NoteScope.Event,
+            TargetId = Guid.NewGuid(),
+            BodyText = "Sunset over the Tiber",
+            Image = FakeImageFile(),
+        };
+
+        var result = await ctrl.CreatePhotoNote(trip.Id, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var note = Assert.IsType<Note>(ok.Value);
+        var media = Assert.Single(note.MediaAssets);
+        Assert.Equal(MediaAssetKind.Photo, media.Kind);
+        Assert.Equal(TranscriptionStatus.None, media.TranscriptionStatus);
+        Assert.Empty(queue.Jobs);
+    }
+
+    [Fact]
+    public async Task CreatePhotoNote_WithoutImage_ReturnsBadRequest()
+    {
+        var (ctrl, _, trip) = Build();
+        var result = await ctrl.CreatePhotoNote(
+            trip.Id, new CreatePhotoNoteRequest { Scope = NoteScope.Trip }, CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetMedia_OwnPhoto_ReturnsFileStream()
+    {
+        var (ctrl, _, trip) = Build();
+        var photo = await ctrl.CreatePhotoNote(
+            trip.Id, new CreatePhotoNoteRequest { Scope = NoteScope.Trip, Image = FakeImageFile() }, CancellationToken.None);
+        var note = (Note)((OkObjectResult)photo.Result!).Value!;
+
+        var result = await ctrl.GetMedia(trip.Id, note.MediaAssets[0].Id, CancellationToken.None);
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Equal("image/jpeg", file.ContentType);
+    }
+
     // ── Transcript callback (service-to-service) ──────────────────────────────
 
     [Fact]
@@ -242,10 +314,34 @@ public class NotesControllerTests
         };
     }
 
+    private static FormFile FakeImageFile()
+    {
+        var bytes = new byte[] { 9, 8, 7, 6, 5 };
+        return new FormFile(new MemoryStream(bytes), 0, bytes.Length, "Image", "photo.jpg")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "image/jpeg",
+        };
+    }
+
     private sealed class FakeBlobStore : IBlobStore
     {
-        public Task<BlobResult> SaveAsync(string blobName, Stream content, string contentType, CancellationToken ct) =>
-            Task.FromResult(new BlobResult(blobName, $"https://fake.blob/{blobName}"));
+        public Dictionary<string, byte[]> Blobs { get; } = [];
+
+        public async Task<BlobResult> SaveAsync(string blobName, Stream content, string contentType, CancellationToken ct)
+        {
+            using var ms = new MemoryStream();
+            await content.CopyToAsync(ms, ct);
+            Blobs[blobName] = ms.ToArray();
+            return new BlobResult(blobName, $"https://fake.blob/{blobName}");
+        }
+
+        public Task<Stream> OpenReadAsync(string blobName, CancellationToken ct)
+        {
+            if (!Blobs.TryGetValue(blobName, out var bytes))
+                throw new FileNotFoundException("Media blob not found.", blobName);
+            return Task.FromResult<Stream>(new MemoryStream(bytes));
+        }
     }
 
     private sealed class FakeTranscriptionQueue : ITranscriptionQueue

@@ -1,5 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createNote, deleteNote, getTripNotes, CreateNoteInput } from '../api';
+import {
+  createNote,
+  createPhotoNote,
+  createVoiceNote,
+  deleteNote,
+  getTripNotes,
+  CreateNoteInput,
+  CreatePhotoNoteFields,
+  CreateVoiceNoteFields,
+  UploadFile,
+} from '../api';
 
 export const tripNotesQueryKey = (tripId: string) => ['notes', tripId] as const;
 
@@ -18,6 +28,24 @@ export function useCreateNoteMutation(tripId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateNoteInput) => createNote(tripId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) }),
+  });
+}
+
+export function useCreateVoiceNoteMutation(tripId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ fields, audio, fileName }: { fields: CreateVoiceNoteFields; audio: UploadFile; fileName: string }) =>
+      createVoiceNote(tripId, fields, audio, fileName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) }),
+  });
+}
+
+export function useCreatePhotoNoteMutation(tripId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ fields, image, fileName }: { fields: CreatePhotoNoteFields; image: UploadFile; fileName: string }) =>
+      createPhotoNote(tripId, fields, image, fileName),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) }),
   });
 }

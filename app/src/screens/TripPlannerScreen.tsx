@@ -2,13 +2,16 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking, TextInput, Platform } from 'react-native';
 import { WanderMapView } from '../WanderMapView';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
-import { Trip, Day, ItineraryItem, PackingItem } from '../types';
+import { Trip, Day, ItineraryItem, PackingItem, Note, NoteScope } from '../types';
 import { Card, Pill } from '../components';
 import { colors, radius, itemAccent, itemEmoji } from '../theme';
 import { dateRange, dayLabel, formatClock, fmtMoney, wmoEmoji, formatTemp, fmtMinutes } from '../format';
 import { useWeatherQuery, ItemWeather, DayWeather } from '../queries/weather';
 import { useTravelTimesQuery, TravelSegment } from '../queries/travelTimes';
-import { useTripNotesQuery } from '../queries/notes';
+import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation } from '../queries/notes';
+import { NoteCard } from '../notes/NoteCard';
+import { VoiceControls } from '../voice/VoiceControls';
+import { PhotoControls } from '../media/PhotoControls';
 import { estimate, buildDirectionsUrl, buildRouteUrl, flightAwareUrl, flightRadar24Url } from '../routing';
 import { exportIcs } from '../ics';
 import { addTripToCalendar } from '../calendar';
@@ -62,7 +65,7 @@ export function TripPlannerScreen({
   const [scope, setScope] = useState<Scope>('trip');
   const [view, setView] = useState<PlannerView>('list');
   const [selectedDayId, setSelectedDayId] = useState(trip.days[0]?.id ?? '');
-  const [panel, setPanel] = useState<'none' | 'packing' | 'ideas' | 'export'>('none');
+  const [panel, setPanel] = useState<'none' | 'packing' | 'ideas' | 'export' | 'journal'>('none');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -110,8 +113,11 @@ export function TripPlannerScreen({
   const showPacking = panel === 'packing';
   const showIdeas   = panel === 'ideas';
   const showExport  = panel === 'export';
-  const togglePanel = (which: 'packing' | 'ideas' | 'export') =>
+  const showJournal = panel === 'journal';
+  const togglePanel = (which: 'packing' | 'ideas' | 'export' | 'journal') =>
     setPanel((p) => (p === which ? 'none' : which));
+
+  const journalCount = (notesData?.data ?? []).filter((n) => !n.deletedAt).length;
 
   const fabDayId = scope === 'day' ? selectedDayId : trip.days[0]?.id ?? '';
   const packing = tripPackingItems(trip);
@@ -186,6 +192,9 @@ export function TripPlannerScreen({
         ) : null}
         {summary.conflicts > 0 ? <Pill label={`${summary.conflicts} overlap${summary.conflicts > 1 ? 's' : ''}`} tone="danger" /> : null}
         <View style={{ flex: 1 }} />
+        <Pressable onPress={() => togglePanel('journal')} style={[s.packToggle, showJournal && s.packToggleOn]} accessibilityLabel="Toggle trip journal">
+          <Text style={[s.packToggleText, showJournal && { color: '#fff' }]}>📓 {journalCount}</Text>
+        </Pressable>
         <Pressable onPress={() => togglePanel('ideas')} style={[s.packToggle, showIdeas && s.packToggleOn]} accessibilityLabel="Toggle ideas list">
           <Text style={[s.packToggleText, showIdeas && { color: '#fff' }]}>💡 {backlog.length}</Text>
         </Pressable>
@@ -212,7 +221,9 @@ export function TripPlannerScreen({
         </ScrollView>
       ) : null}
 
-      {showIdeas ? (
+      {showJournal ? (
+        <JournalPanel trip={trip} notes={notesData?.data ?? []} selectedDayId={selectedDayId} />
+      ) : showIdeas ? (
         <IdeasPanel
           items={backlog}
           onAdd={onAddIdea}
@@ -615,6 +626,117 @@ function AiDock() {
   );
 }
 
+/**
+ * Trip recap & journal: every note across the trip in one place, plus a composer to capture a
+ * trip-level or day-level entry (text, voice, or photo). Event notes are added from the item editor.
+ */
+function JournalPanel({
+  trip,
+  notes,
+  selectedDayId,
+}: {
+  trip: Trip;
+  notes: Note[];
+  selectedDayId: string;
+}) {
+  const createNote = useCreateNoteMutation(trip.id);
+  const deleteNote = useDeleteNoteMutation(trip.id);
+  const [draft, setDraft] = useState('');
+  const [target, setTarget] = useState<'trip' | 'day'>('trip');
+
+  const selectedDay = trip.days.find((d) => d.id === selectedDayId) ?? trip.days[0];
+  const scope: NoteScope = target === 'day' && selectedDay ? 'Day' : 'Trip';
+  const targetId = scope === 'Day' ? selectedDay?.id ?? null : null;
+
+  // Resolve a note's anchor (Trip / Day N / event title) for display.
+  const labelFor = (note: Note): string => {
+    if (note.scope === 'Trip') return 'Whole trip';
+    if (note.scope === 'Day') {
+      const day = trip.days.find((d) => d.id === note.targetId);
+      return day ? `Day ${day.dayNumber}` : 'Day';
+    }
+    for (const d of trip.days) {
+      const it = d.items.find((i) => i.id === note.targetId);
+      if (it) return it.title;
+    }
+    const idea = (trip.unscheduledItems ?? []).find((i) => i.id === note.targetId);
+    return idea ? idea.title : 'Event';
+  };
+
+  const visible = notes.filter((n) => !n.deletedAt);
+
+  const add = () => {
+    const body = draft.trim();
+    if (!body || createNote.isPending) return;
+    createNote.mutate(
+      { scope, targetId, kind: 'Text', bodyText: body },
+      { onSuccess: () => setDraft('') },
+    );
+  };
+
+  return (
+    <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <Text style={s.packTitle}>📓 Journal</Text>
+      <Text style={s.packSub}>{visible.length === 0 ? 'No entries yet — capture how the trip is going.' : `${visible.length} ${visible.length === 1 ? 'entry' : 'entries'} across this trip`}</Text>
+
+      <View style={s.journalScopeRow}>
+        <Pressable
+          style={[s.journalScopeBtn, target === 'trip' && s.journalScopeBtnOn]}
+          onPress={() => setTarget('trip')}
+          accessibilityLabel="Attach to whole trip"
+        >
+          <Text style={[s.journalScopeText, target === 'trip' && { color: '#fff' }]}>Whole trip</Text>
+        </Pressable>
+        {selectedDay ? (
+          <Pressable
+            style={[s.journalScopeBtn, target === 'day' && s.journalScopeBtnOn]}
+            onPress={() => setTarget('day')}
+            accessibilityLabel={`Attach to day ${selectedDay.dayNumber}`}
+          >
+            <Text style={[s.journalScopeText, target === 'day' && { color: '#fff' }]}>Day {selectedDay.dayNumber}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View style={s.packAddRow}>
+        <TextInput
+          style={[s.packInput, { minHeight: 44, maxHeight: 110, textAlignVertical: 'top' }]}
+          placeholder="Write a journal entry…"
+          placeholderTextColor={colors.ink400}
+          value={draft}
+          onChangeText={setDraft}
+          multiline
+          accessibilityLabel="New journal entry"
+        />
+        <Pressable
+          style={[s.packAddBtn, (!draft.trim() || createNote.isPending) && { opacity: 0.5 }]}
+          onPress={add}
+          disabled={!draft.trim() || createNote.isPending}
+          accessibilityLabel="Save journal entry"
+        >
+          {createNote.isPending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.packAddText}>Add</Text>}
+        </Pressable>
+      </View>
+
+      <VoiceControls tripId={trip.id} scope={scope} targetId={targetId} />
+      <PhotoControls tripId={trip.id} scope={scope} targetId={targetId} />
+
+      {visible.length === 0 ? null : (
+        visible.map((note) => (
+          <NoteCard
+            key={note.id}
+            note={note}
+            tripId={trip.id}
+            anchorLabel={labelFor(note)}
+            onDelete={() => deleteNote.mutate(note.id)}
+          />
+        ))
+      )}
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
 function PackingPanel({
   items,
   onAdd,
@@ -904,4 +1026,8 @@ const s = StyleSheet.create({
   checkboxOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   packName: { flex: 1, fontSize: 14, color: colors.ink, fontWeight: '600' },
   packNameDone: { color: colors.ink400, textDecorationLine: 'line-through' },
+  journalScopeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  journalScopeBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  journalScopeBtnOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  journalScopeText: { fontSize: 12, fontWeight: '700', color: colors.ink600 },
 });

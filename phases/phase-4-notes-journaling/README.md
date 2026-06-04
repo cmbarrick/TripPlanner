@@ -12,12 +12,13 @@
 - Make capture reliable offline — never lose a note or recording.
 
 ## Scope / tasks
-- [ ] **Event-anchored journaling (primary surface):** every itinerary item is a journal anchor —
+- [x] **Event-anchored journaling (primary surface):** every itinerary item is a journal anchor —
       add text/voice/photo before, during, or after it. The itinerary timeline doubles as the journal;
       events show a "has notes" indicator.
-- [ ] **Text notes** scoped to an **event**, a **day**, or the **trip** (`scope` + `target_id`).
-- [ ] **Voice notes:** record audio → upload to Azure Blob → transcribe via **Azure Speech-to-Text**
+- [x] **Text notes** scoped to an **event**, a **day**, or the **trip** (`scope` + `target_id`).
+- [x] **Voice notes:** record audio → upload to Azure Blob → transcribe via **Azure Speech-to-Text**
       (async job) → store **both audio and transcript**; playback + show transcript.
+      *(capture/upload/playback done web + native; transcript pending the deployed Function stack.)*
 - [ ] **Hourly weather on item detail:** when viewing or adding a note to an itinerary event,
       show an hourly forecast for that stop's location and day (e.g. "🌦️ 14°C at 2 PM").
       Open-Meteo `hourly=temperature_2m,weather_code,precipitation_probability` on the existing
@@ -30,7 +31,8 @@
       activities only; skip transport/lodging); **quiet hours**; respects "prompts can be turned off".
 - [ ] **Reflection prompts:** preset library + custom; **toggle on/off globally and per trip**;
       fire at end of **event/day/trip**; responses saved as notes linked to the prompt.
-- [ ] **Photos** attached to notes (Blob).
+- [x] **Photos** attached to notes (Blob). *(SAS signed-URL serving deferred; media is streamed
+      through the ownership-checked API endpoint for now.)*
 - [ ] **Offline-first capture:** create notes/recordings offline; **schedule notifications locally**
       (no server needed); queue mutations in the sync outbox; resume media upload + transcription on reconnect.
 - [ ] Ownership checks; signed URLs for media.
@@ -108,6 +110,42 @@ Each slice is independently shippable, testable, and green before the next.
   - Type-check + lint clean; 48/48 app tests pass.
   - **Next:** trip/day-scoped journal surface, voice recording + playback (slice 3 frontend), photos
     (slice 2), reflection prompts + notifications (slice 4).
+- **2026-06-04 — Voice notes (slice 3, web-first):**
+  - **API:** `IBlobStore.OpenReadAsync` (Local + Azure) and a `GET /api/trips/{tripId}/notes/media/{id}`
+    streaming endpoint (ownership-checked, range-enabled for audio scrubbing). Voice upload + enqueue
+    already existed from the backend foundation. 63 API tests (+2 media) green.
+  - **API client:** `createVoiceNote` (multipart) + `fetchMediaObjectUrl` (auth fetch → object URL).
+  - **Recording:** `audioRecording.ts` — browser `MediaRecorder` capture (no new deps), picks a
+    supported mime (webm/opus, mp4…). Recorder UI in the event journal: **🎤 Record → ■ Stop** with a
+    live timer, then uploads. Native shows a "record on web for now" hint (expo-audio is a follow-up).
+  - **Playback + transcript:** voice notes render a ▶/⏸ player (authenticated object URL) plus the
+    transcript when present, or **⏳ Transcribing…** / "unavailable" based on `transcriptionStatus`.
+  - Locally the audio records, uploads (filesystem blob store), and plays back; transcription stays
+    pending until the Function stack is deployed (`deployTranscription=true`). tsc + lint clean, 48/48 app tests.
+  - **Codec note:** browser recordings are typically webm/opus; confirm Azure fast-transcription
+    accepts the chosen container once deployed, or transcode/force `audio/mp4` if needed.
+- **2026-06-04 — Native audio, photos (slice 2), and the trip Journal surface:**
+  - **Deps:** `expo-audio` (~56) and `expo-image-picker` (~56) via `expo install`.
+  - **Native voice (no more "web-only" hint):** voice capture/playback split into platform files —
+    `voice/VoiceControls.web.tsx` + `voice/VoicePlayer.web.tsx` keep the browser `MediaRecorder` path;
+    `voice/VoiceControls.tsx` + `voice/VoicePlayer.tsx` use `expo-audio` (`useAudioRecorder` /
+    `useAudioPlayer` with auth headers) on iOS/Android. Metro picks the right one per platform; the
+    upload helper now accepts either a web `Blob` or a native `{ uri, name, type }`.
+  - **Photos (slice 2):** `POST /api/trips/{tripId}/notes/photo` (multipart image → blob →
+    `MediaAsset` kind `Photo`, **no** transcription) reusing the existing media-streaming endpoint;
+    `PhotoControls` (expo-image-picker, web file dialog + native picker) and `PhotoView` (web object
+    URL / native `Image` with auth headers). 66 API tests (+3 photo) green.
+  - **Trip recap / Journal panel:** `TripPlannerScreen` gains a **📓 Journal** toggle — every note
+    across the trip in one place with its anchor (Whole trip / Day N / event title), plus a composer
+    that attaches a **trip- or day-level** entry (text, voice, or photo). Event notes are still added
+    from the item editor. Shared `notes/NoteCard` renders audio + body + photos + transcript.
+  - **Tests/setup:** mocked `expo-audio`/`expo-image-picker` in `jest.setup.ts` (native modules don't
+    init under Jest). tsc + lint clean; 48/48 app tests, 66/66 API tests.
+  - **Native caveat:** the `expo-audio`/picker paths compile and are type-checked but need a **dev
+    build** to verify on a device (web — the current target — is fully exercised). Confirm recording
+    container/upload on iOS/Android when a dev build is cut.
+  - **Not yet done (next):** reflection prompts + notifications (slice 4), offline outbox (slice 5),
+    hourly weather on item detail (slice 6), end-to-end deploy of the transcription stack.
 
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See

@@ -24,4 +24,10 @@ public sealed class AzureBlobStore : IBlobStore
             ct);
         return new BlobResult(blobName, blob.Uri.ToString());
     }
+
+    public async Task<Stream> OpenReadAsync(string blobName, CancellationToken ct)
+    {
+        var blob = _container.GetBlobClient(blobName);
+        return await blob.OpenReadAsync(position: 0, cancellationToken: ct);
+    }
 }
