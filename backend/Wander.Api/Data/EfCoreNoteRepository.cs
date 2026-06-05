@@ -46,6 +46,20 @@ public class EfCoreNoteRepository : INoteRepository
         return note;
     }
 
+    public Note? UpdateBody(Guid noteId, string ownerId, string? bodyText)
+    {
+        var note = _ctx.Notes
+            .Include(n => n.MediaAssets)
+            .FirstOrDefault(n => n.Id == noteId && n.OwnerId == ownerId && n.DeletedAt == null);
+        if (note is null)
+            return null;
+
+        note.BodyText = bodyText;
+        note.UpdatedAt = DateTimeOffset.UtcNow;
+        _ctx.SaveChanges();
+        return note;
+    }
+
     public bool Delete(Guid noteId, string ownerId)
     {
         var note = _ctx.Notes.FirstOrDefault(n => n.Id == noteId && n.OwnerId == ownerId && n.DeletedAt == null);

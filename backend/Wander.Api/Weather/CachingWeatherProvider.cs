@@ -38,4 +38,27 @@ public class CachingWeatherProvider(IWeatherProvider inner, IDistributedCache ca
             ct);
         return obs;
     }
+
+    public async Task<HourlyWeather?> GetHourlyAsync(
+        double latitude, double longitude, DateOnly date, CancellationToken ct)
+    {
+        // The whole day's hourly array is cached under one key (rounded to ~1 km) and sliced
+        // client-side, so nearby stops on the same day share a single network fetch.
+        var lat2 = Math.Round(latitude,  2);
+        var lng2 = Math.Round(longitude, 2);
+        var key  = $"weatherh:{lat2}:{lng2}:{date:yyyyMMdd}";
+
+        var cached = await cache.GetStringAsync(key, ct);
+        if (cached is not null)
+            return JsonSerializer.Deserialize<HourlyWeather?>(cached);
+
+        var hourly = await inner.GetHourlyAsync(latitude, longitude, date, ct);
+        var ttl = hourly?.IsClimateSummary == true ? ClimateTtl : ForecastTtl;
+        await cache.SetStringAsync(
+            key,
+            JsonSerializer.Serialize(hourly),
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl },
+            ct);
+        return hourly;
+    }
 }

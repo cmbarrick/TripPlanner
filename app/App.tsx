@@ -309,10 +309,15 @@ function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSess
   }
 
   return (
-    <>
-      <View style={styles.screen}>{content}</View>
-      <TabBar active={tab} onChange={(k: TabKey) => setTab(k)} />
-    </>
+    <View style={styles.page}>
+      <View style={styles.phone}>
+        <SafeAreaView style={styles.safe}>
+          <StatusBar style="dark" />
+          <View style={styles.screen}>{content}</View>
+          <TabBar active={tab} onChange={(k: TabKey) => setTab(k)} />
+        </SafeAreaView>
+      </View>
+    </View>
   );
 }
 

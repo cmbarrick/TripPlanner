@@ -17,6 +17,9 @@ public class OpenMeteoWeatherProvider(HttpClient http) : IWeatherProvider
     private const string ArchiveBase  = "https://archive-api.open-meteo.com/v1/archive";
     private const int    ForecastWindow = 16;
     private const string DailyFields  = "temperature_2m_max,temperature_2m_min,weather_code";
+    // Archive has no precipitation *probability*, so it's only requested for live forecasts.
+    private const string HourlyForecastFields = "temperature_2m,weather_code,precipitation_probability";
+    private const string HourlyArchiveFields  = "temperature_2m,weather_code";
 
     public async Task<WeatherObservation?> GetWeatherAsync(
         double latitude, double longitude, DateOnly date, CancellationToken ct)
@@ -35,6 +38,52 @@ public class OpenMeteoWeatherProvider(HttpClient http) : IWeatherProvider
         if (archiveDate > latestArchive) archiveDate = latestArchive;
 
         return await FetchArchiveAsync(latitude, longitude, archiveDate, ct);
+    }
+
+    public async Task<HourlyWeather?> GetHourlyAsync(
+        double latitude, double longitude, DateOnly date, CancellationToken ct)
+    {
+        var today   = DateOnly.FromDateTime(DateTime.UtcNow);
+        var daysOut = date.DayNumber - today.DayNumber;
+
+        if (daysOut >= -1 && daysOut <= ForecastWindow)
+            return await FetchHourlyAsync(ForecastBase, latitude, longitude, date, HourlyForecastFields, isClimateSummary: false, ct);
+
+        var archiveDate = date.AddYears(-1);
+        var latestArchive = today.AddDays(-5);
+        if (archiveDate > latestArchive) archiveDate = latestArchive;
+
+        return await FetchHourlyAsync(ArchiveBase, latitude, longitude, archiveDate, HourlyArchiveFields, isClimateSummary: true, ct);
+    }
+
+    private async Task<HourlyWeather?> FetchHourlyAsync(
+        string baseUrl, double lat, double lng, DateOnly date, string hourlyFields, bool isClimateSummary, CancellationToken ct)
+    {
+        // timezone=auto returns the hourly "time" array in the location's local time so the UI can
+        // line each hour up with the event's local start time.
+        var url = $"{baseUrl}?latitude={lat}&longitude={lng}" +
+                  $"&hourly={hourlyFields}&timezone=auto" +
+                  $"&start_date={date:yyyy-MM-dd}&end_date={date:yyyy-MM-dd}";
+
+        var root = await http.GetFromJsonAsync<OpenMeteoHourly>(url, ct);
+        var times = root?.Hourly?.Time;
+        var temps = root?.Hourly?.Temperature;
+        if (times is null || temps is null || times.Length == 0) return null;
+
+        var codes  = root!.Hourly!.WeatherCode;
+        var precip = root.Hourly.PrecipitationProbability;
+
+        var points = new List<HourlyPoint>(times.Length);
+        for (var i = 0; i < times.Length && i < temps.Length; i++)
+        {
+            points.Add(new HourlyPoint(
+                times[i],
+                Math.Round(temps[i], 1),
+                codes is not null && i < codes.Length ? codes[i] : 0,
+                precip is not null && i < precip.Length ? precip[i] : null));
+        }
+
+        return new HourlyWeather(isClimateSummary, points);
     }
 
     private async Task<WeatherObservation?> FetchForecastAsync(
@@ -78,4 +127,13 @@ public class OpenMeteoWeatherProvider(HttpClient http) : IWeatherProvider
         [property: JsonPropertyName("temperature_2m_max")] double[]? TemperatureMax,
         [property: JsonPropertyName("temperature_2m_min")] double[]? TemperatureMin,
         [property: JsonPropertyName("weather_code")]       int[]?    WeatherCode);
+
+    private record OpenMeteoHourly(
+        [property: JsonPropertyName("hourly")] HourlyBlock? Hourly);
+
+    private record HourlyBlock(
+        [property: JsonPropertyName("time")]                     string[]? Time,
+        [property: JsonPropertyName("temperature_2m")]           double[]? Temperature,
+        [property: JsonPropertyName("weather_code")]            int[]?    WeatherCode,
+        [property: JsonPropertyName("precipitation_probability")] int[]?  PrecipitationProbability);
 }

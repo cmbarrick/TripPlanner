@@ -11,11 +11,13 @@ import {
   useTripNotesQuery,
   useCreateNoteMutation,
   useDeleteNoteMutation,
+  useUpdateNoteMutation,
 } from '../queries/notes';
 import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
 import { NoteCard } from '../notes/NoteCard';
 import { ReflectFlow, isEventPast } from '../prompts/ReflectFlow';
+import { HourlyWeatherStrip } from '../weather/HourlyWeatherStrip';
 
 const TYPES: { key: ItineraryItemType; label: string }[] = [
   { key: 'Flight', label: 'Flight' },
@@ -298,6 +300,8 @@ export function AddActivityScreen({
         {error ? <Text style={s.error}>{error}</Text> : null}
         {serverError ? <Text style={s.error}>{serverError}</Text> : null}
 
+        {editing && item ? <HourlyWeatherStrip trip={trip} item={item} /> : null}
+
         {editing && item ? <EventJournal trip={trip} item={item} /> : null}
 
         {editing && onDelete ? (
@@ -322,6 +326,7 @@ function EventJournal({ trip, item }: { trip: Trip; item: ItineraryItem }) {
   const { data: notesData, isLoading } = useTripNotesQuery(tripId);
   const createNote = useCreateNoteMutation(tripId);
   const deleteNote = useDeleteNoteMutation(tripId);
+  const updateNote = useUpdateNoteMutation(tripId);
   const [draft, setDraft] = useState('');
 
   const notes = (notesData?.data ?? []).filter(
@@ -390,7 +395,14 @@ function EventJournal({ trip, item }: { trip: Trip; item: ItineraryItem }) {
         <Text style={s.journalEmpty}>No entries yet.</Text>
       ) : (
         notes.map((note) => (
-          <NoteCard key={note.id} note={note} tripId={tripId} onDelete={() => deleteNote.mutate(note.id)} />
+          <NoteCard
+            key={note.id}
+            note={note}
+            tripId={tripId}
+            onDelete={() => deleteNote.mutate(note.id)}
+            onEdit={(bodyText) => updateNote.mutate({ noteId: note.id, bodyText })}
+            savingEdit={updateNote.isPending && updateNote.variables?.noteId === note.id}
+          />
         ))
       )}
     </View>

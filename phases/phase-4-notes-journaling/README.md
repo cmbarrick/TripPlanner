@@ -19,7 +19,7 @@
 - [x] **Voice notes:** record audio → upload to Azure Blob → transcribe via **Azure Speech-to-Text**
       (async job) → store **both audio and transcript**; playback + show transcript.
       *(capture/upload/playback done web + native; transcript pending the deployed Function stack.)*
-- [ ] **Hourly weather on item detail:** when viewing or adding a note to an itinerary event,
+- [x] **Hourly weather on item detail:** when viewing or adding a note to an itinerary event,
       show an hourly forecast for that stop's location and day (e.g. "🌦️ 14°C at 2 PM").
       Open-Meteo `hourly=temperature_2m,weather_code,precipitation_probability` on the existing
       `api.open-meteo.com/v1/forecast` endpoint; cache the full day's hourly array under one key
@@ -217,6 +217,29 @@ Each slice is independently shippable, testable, and green before the next.
   - **Deferred (noted in `docs/deployment-runbook.md` §11):** consumer **login expansion** (Entra
     External ID + Google) and **Sign in with Apple** (Apple Guideline 4.8) are pre-public-launch gates,
     **not** required for dev/TestFlight testing — decoupled so native feature work isn't blocked.
+
+- **2026-06-05 — Locations fix (place coordinates) + Slice 6 hourly weather:**
+  - **Root cause found:** items only got coordinates when a place was picked from the search dropdown,
+    and dev's place search was on the **`FakePlaceProvider`** (8 hardcoded landmarks) because the
+    Mapbox key was an **empty** Key Vault placeholder — so most stops had no lat/lng and never hit the
+    map (or per-item weather/travel-times). Verified via `Program.cs` provider seam + `keyVault.bicep`.
+  - **Durable infra:** Mapbox/Azure Maps keys now come from `@secure()` deploy params
+    (`main.bicep` → `keyVault.bicep`, read from `WANDER_MAPBOX_TOKEN` / `WANDER_AZURE_MAPS_KEY` in the
+    `.bicepparam` + CI) instead of hardcoded `''` — deploys no longer clobber a configured key. Real
+    dev Mapbox token written to Key Vault (targeted control-plane deploy) + API restarted.
+  - **Capture UX:** a typed place with no coordinates is forward-geocoded on save; the editor shows
+    pin status (`📍 Pinned to map · <address>`), and itinerary rows flag coordinate-less stops
+    (`· not on map`).
+  - **Slice 6 — hourly weather on item detail:** added `GetHourlyAsync(lat, lng, date, ct)` to
+    `IWeatherProvider` (`HourlyWeather`/`HourlyPoint` records); Open-Meteo
+    `hourly=temperature_2m,weather_code,precipitation_probability` with `timezone=auto` (forecast ≤16d,
+    historical archive otherwise → "typical for this date"). `CachingWeatherProvider` caches the full
+    day's array under one key (`weatherh:lat:lng:date`); new endpoint
+    `GET /api/trips/{tripId}/weather/hourly/{itemId}` resolves the item's coords + day. Frontend
+    `HourlyWeatherStrip` renders a horizontal hour-by-hour strip (emoji + temp + 💧%, respecting
+    °C/°F + 12h/24h prefs) on the edit/journal screen, highlighting the event's hour. Display-only,
+    no schema change.
+  - Backend **72/72**, app **69/69**, tsc + lint clean.
 
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See

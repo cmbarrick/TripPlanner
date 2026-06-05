@@ -70,6 +70,54 @@ public class WeatherController(ITripRepository repo, IWeatherProvider weather) :
         return Ok(new TripWeatherResponse(itemResults, dayResults));
     }
 
+    /// <summary>
+    /// GET /api/trips/{tripId}/weather/hourly/{itemId}
+    ///
+    /// Returns the full day's hourly forecast for a single located, dated itinerary item
+    /// (times in the stop's local zone). Returns an empty list when the item has no coordinates
+    /// or isn't assigned to a day (so the client can render nothing gracefully). Display-only —
+    /// hourly data is never persisted.
+    /// </summary>
+    [HttpGet("hourly/{itemId:guid}")]
+    public async Task<ActionResult<ItemHourlyWeatherResponse>> GetHourly(
+        Guid tripId, Guid itemId, CancellationToken ct)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null) return Unauthorized();
+
+        var trip = repo.GetById(tripId, ownerId);
+        if (trip is null) return NotFound();
+
+        var match = trip.Days
+            .Where(d => d.DeletedAt is null)
+            .SelectMany(d => d.Items
+                .Where(i => i.DeletedAt is null)
+                .Select(i => new { Item = i, d.Date }))
+            .FirstOrDefault(x => x.Item.Id == itemId);
+
+        if (match is null) return NotFound();
+
+        var empty = new ItemHourlyWeatherResponse(false, []);
+        if (match.Item.Latitude is null || match.Item.Longitude is null)
+            return Ok(empty);
+
+        HourlyWeather? hourly;
+        try
+        {
+            hourly = await weather.GetHourlyAsync(
+                match.Item.Latitude.Value, match.Item.Longitude.Value, match.Date, ct);
+        }
+        catch { hourly = null; }
+
+        if (hourly is null) return Ok(empty);
+
+        return Ok(new ItemHourlyWeatherResponse(
+            hourly.IsClimateSummary,
+            hourly.Hours
+                .Select(h => new HourlyWeatherPoint(h.Time, h.TemperatureC, h.WeatherCode, h.PrecipitationProbability))
+                .ToList()));
+    }
+
     private async Task<WeatherObservation?> FetchSafe(
         double lat, double lng, DateOnly date, CancellationToken ct)
     {
@@ -97,3 +145,13 @@ public record DayWeatherResult(
     double LowC,
     int WeatherCode,
     bool IsClimateSummary);
+
+public record ItemHourlyWeatherResponse(
+    bool IsClimateSummary,
+    IReadOnlyList<HourlyWeatherPoint> Hours);
+
+public record HourlyWeatherPoint(
+    string Time,
+    double TempC,
+    int WeatherCode,
+    int? PrecipitationProbability);

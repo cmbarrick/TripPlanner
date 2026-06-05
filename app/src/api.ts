@@ -223,6 +223,34 @@ export async function fetchTripWeather(tripId: string): Promise<TripWeatherRespo
   }
 }
 
+export interface HourlyWeatherPoint {
+  /** Local ISO time, e.g. "2026-07-01T14:00". */
+  time: string;
+  tempC: number;
+  weatherCode: number;
+  /** Chance of precipitation 0–100, or null when unavailable (historical archive). */
+  precipitationProbability: number | null;
+}
+
+export interface ItemHourlyWeather {
+  isClimateSummary: boolean;
+  hours: HourlyWeatherPoint[];
+}
+
+export async function fetchItemHourlyWeather(
+  tripId: string,
+  itemId: string,
+): Promise<ItemHourlyWeather> {
+  try {
+    return await sendJson<ItemHourlyWeather>(
+      `/api/trips/${tripId}/weather/hourly/${itemId}`,
+      'GET',
+    );
+  } catch {
+    return { isClimateSummary: false, hours: [] };
+  }
+}
+
 export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
   try {
     return await sendJson<PlaceDetails>(`/api/places/${encodeURIComponent(placeId)}`, 'GET');
@@ -315,6 +343,10 @@ export async function createNote(tripId: string, input: CreateNoteInput): Promis
 
 export async function deleteNote(noteId: string): Promise<void> {
   await sendJson<void>(`/api/notes/${noteId}`, 'DELETE');
+}
+
+export async function updateNote(noteId: string, bodyText: string): Promise<Note> {
+  return sendJson<Note>(`/api/notes/${noteId}`, 'PUT', { bodyText });
 }
 
 export interface CreateVoiceNoteFields {

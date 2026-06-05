@@ -4,6 +4,7 @@ import {
   createPhotoNote,
   createVoiceNote,
   deleteNote,
+  updateNote,
   getTripNotes,
   CreateNoteInput,
   CreatePhotoNoteFields,
@@ -63,6 +64,15 @@ export function useDeleteNoteMutation(tripId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (noteId: string) => deleteNote(noteId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) }),
+  });
+}
+
+export function useUpdateNoteMutation(tripId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId, bodyText }: { noteId: string; bodyText: string }) =>
+      updateNote(noteId, bodyText),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) }),
   });
 }

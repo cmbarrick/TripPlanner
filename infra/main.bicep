@@ -80,6 +80,13 @@ param speechSku string = 'S0'
 @secure()
 param functionsCallbackKey string = newGuid()
 
+@description('Wire the API to a PRE-EXISTING media storage account + transcription Function that are managed OUTSIDE this template (e.g. the imperatively-created Flex Consumption function), without provisioning the storage/speech/function modules here. Use when deployTranscription is false but transcription is live. The storage account must already exist with the conventional name.')
+param wireApiToExistingTranscription bool = false
+
+@description('Shared callback key matching the existing transcription Function Api:CallbackKey setting. Required with wireApiToExistingTranscription so the API authorizes the Function transcript write-backs.')
+@secure()
+param transcriptionCallbackKey string = ''
+
 // Short, deterministic suffix for resources that need a globally unique name.
 var suffix = take(uniqueString(subscription().id, environmentName), 6)
 
@@ -196,6 +203,31 @@ module keyVault 'modules/keyVault.bicep' = {
   }
 }
 
+// Reference to a media storage account that already exists (managed outside this template) so the
+// API can be wired to it without re-provisioning. Only used when wiring to the existing stack.
+resource existingMediaStorage 'Microsoft.Storage/storageAccounts@2023-01-01' existing = if (wireApiToExistingTranscription && !deployTranscription) {
+  name: storageName
+  scope: rg
+}
+
+// Media-storage connection string + callback key handed to the API. Two ways to enable
+// transcription on the API:
+//   1. deployTranscription = true  → provision storage/speech/function here and use their outputs.
+//   2. wireApiToExistingTranscription = true → point the API at an existing storage account +
+//      Function managed outside this template (the Flex Consumption function), without touching them.
+// Ternaries compile to ARM if(), so listKeys() only runs when branch 2 is actually taken.
+var apiMediaStorageConnectionString = deployTranscription
+  ? (storage.?outputs.connectionString ?? '')
+  // existingMediaStorage is conditionally referenced, but only when this same branch is taken.
+  : (wireApiToExistingTranscription
+      #disable-next-line BCP422
+      ? 'DefaultEndpointsProtocol=https;AccountName=${storageName};AccountKey=${existingMediaStorage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+      : '')
+
+var apiFunctionsCallbackKey = deployTranscription
+  ? functionsCallbackKey
+  : (wireApiToExistingTranscription ? transcriptionCallbackKey : '')
+
 module appService 'modules/appService.bicep' = {
   scope: rg
   name: 'appService'
@@ -210,8 +242,8 @@ module appService 'modules/appService.bicep' = {
     authAudience: authAudience
     webOrigin: 'https://${staticWebApp.outputs.defaultHostname}'
     extraCorsOrigins: extraCorsOrigins
-    mediaStorageConnectionString: deployTranscription ? (storage.?outputs.connectionString ?? '') : ''
-    functionsCallbackKey: deployTranscription ? functionsCallbackKey : ''
+    mediaStorageConnectionString: apiMediaStorageConnectionString
+    functionsCallbackKey: apiFunctionsCallbackKey
     tags: commonTags
   }
   // App settings reference Key Vault secrets, so the secrets must already exist.

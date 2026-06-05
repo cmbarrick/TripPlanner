@@ -8,7 +8,7 @@ import { colors, radius, itemAccent, itemEmoji } from '../theme';
 import { dateRange, dayLabel, formatClock, fmtMoney, wmoEmoji, formatTemp, fmtMinutes } from '../format';
 import { useWeatherQuery, ItemWeather, DayWeather } from '../queries/weather';
 import { useTravelTimesQuery, TravelSegment } from '../queries/travelTimes';
-import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation } from '../queries/notes';
+import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation, useUpdateNoteMutation } from '../queries/notes';
 import { NoteCard } from '../notes/NoteCard';
 import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
@@ -644,6 +644,7 @@ function JournalPanel({
 }) {
   const createNote = useCreateNoteMutation(trip.id);
   const deleteNote = useDeleteNoteMutation(trip.id);
+  const updateNote = useUpdateNoteMutation(trip.id);
   const { settings, enabledForTrip, setTripEnabled, setEnabledGlobal } = usePromptSettings();
   const [draft, setDraft] = useState('');
   const [target, setTarget] = useState<'trip' | 'day'>('trip');
@@ -745,6 +746,8 @@ function JournalPanel({
             tripId={trip.id}
             anchorLabel={labelFor(note)}
             onDelete={() => deleteNote.mutate(note.id)}
+            onEdit={(bodyText) => updateNote.mutate({ noteId: note.id, bodyText })}
+            savingEdit={updateNote.isPending && updateNote.variables?.noteId === note.id}
           />
         ))
       )}

@@ -13,6 +13,9 @@ public interface INoteRepository
     /// <summary>Adds a note (and any attached media) to a trip the owner controls; null if not owned.</summary>
     Note? Add(Guid tripId, string ownerId, Note note);
 
+    /// <summary>Updates a note's body text (the editable field); null if the note isn't the owner's.</summary>
+    Note? UpdateBody(Guid noteId, string ownerId, string? bodyText);
+
     /// <summary>Soft-deletes a note the owner controls.</summary>
     bool Delete(Guid noteId, string ownerId);
 

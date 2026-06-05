@@ -92,6 +92,41 @@ public class NotesControllerTests
         Assert.IsType<NotFoundResult>(ctrl.Delete(created.Id));
     }
 
+    [Fact]
+    public void Update_OwnNote_ChangesBodyText()
+    {
+        var (ctrl, ctx, trip) = Build();
+        var created = (Note)((OkObjectResult)ctrl.Create(
+            trip.Id, new CreateNoteRequest(NoteScope.Trip, null, NoteKind.Text, "before", null)).Result!).Value!;
+
+        var ok = Assert.IsType<OkObjectResult>(ctrl.Update(created.Id, new UpdateNoteRequest("after")).Result);
+        var updated = Assert.IsType<Note>(ok.Value);
+        Assert.Equal("after", updated.BodyText);
+        Assert.Equal("after", ctx.Notes.Single().BodyText);
+    }
+
+    [Fact]
+    public void Update_OtherUsersNote_ReturnsNotFound()
+    {
+        var (ctrl, _, trip) = Build();
+        var created = (Note)((OkObjectResult)ctrl.Create(
+            trip.Id, new CreateNoteRequest(NoteScope.Trip, null, NoteKind.Text, "before", null)).Result!).Value!;
+
+        ctrl.ControllerContext = FakeAuth.ForUser(OtherUserId);
+        Assert.IsType<NotFoundResult>(ctrl.Update(created.Id, new UpdateNoteRequest("hacked")).Result);
+    }
+
+    [Fact]
+    public void Update_BodyTooLong_ReturnsBadRequest()
+    {
+        var (ctrl, _, trip) = Build();
+        var created = (Note)((OkObjectResult)ctrl.Create(
+            trip.Id, new CreateNoteRequest(NoteScope.Trip, null, NoteKind.Text, "before", null)).Result!).Value!;
+
+        var tooLong = new string('x', Note.MaxBodyLength + 1);
+        Assert.IsType<BadRequestObjectResult>(ctrl.Update(created.Id, new UpdateNoteRequest(tooLong)).Result);
+    }
+
     // ── Voice notes ───────────────────────────────────────────────────────────
 
     [Fact]

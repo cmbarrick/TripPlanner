@@ -205,6 +205,20 @@ public class NotesController : ControllerBase
         return File(stream, asset.ContentType ?? "application/octet-stream", enableRangeProcessing: true);
     }
 
+    [HttpPut("notes/{noteId:guid}")]
+    public ActionResult<Note> Update(Guid noteId, [FromBody] UpdateNoteRequest request)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        if (request.BodyText is { Length: > Note.MaxBodyLength })
+            return BadRequest(new { error = $"Note body cannot exceed {Note.MaxBodyLength} characters." });
+
+        var updated = _notes.UpdateBody(noteId, ownerId, request.BodyText);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
     [HttpDelete("notes/{noteId:guid}")]
     public IActionResult Delete(Guid noteId)
     {
@@ -232,6 +246,8 @@ public record CreateNoteRequest(
     string? BodyText,
     Guid? PromptId,
     string? PromptText = null);
+
+public record UpdateNoteRequest(string? BodyText);
 
 public class CreateVoiceNoteRequest
 {

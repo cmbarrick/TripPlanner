@@ -66,6 +66,21 @@ prefix `kv-wndr-‹env›-‹suffix›` to stay within the 24-character limit.
   > Do **not** set these via `az keyvault secret set` — the next Bicep deploy would overwrite
   > them with the (possibly empty) param value. Drive them through the param/env var instead.
 
+- **Voice-note transcription wiring (dev).** The transcription stack (media Storage account +
+  Azure AI Speech + Flex Consumption Function) is provisioned/managed imperatively in dev, not by
+  this template (the Bicep function module targets a `Y1` plan, which cannot host the existing Flex
+  app). To keep the API connected to it across deploys, `dev.bicepparam` sets
+  `wireApiToExistingTranscription = true` and supplies `transcriptionCallbackKey` from
+  `WANDER_FUNCTIONS_CALLBACK_KEY`. The template then references the **existing** storage account and
+  sets `Storage__ConnectionString`, `Storage__MediaContainer`, and `Functions__CallbackKey` on the
+  API — without re-provisioning (or disturbing) the Flex Function. The callback key **must match**
+  the Function's `Api__CallbackKey`. Fetch the current value and copy it into the GitHub secret:
+
+  ```bash
+  az functionapp config appsettings list -g rg-wander-dev -n <function-app-name> \
+    --query "[?name=='Api__CallbackKey'].value" -o tsv
+  ```
+
 - The **Postgres admin password** is supplied at deploy time from the `WANDER_PG_ADMIN_PASSWORD`
   environment variable (read by the `.bicepparam` files); it is never stored in the repo.
 
@@ -146,6 +161,7 @@ In the repo: **Settings → Environments → New environment → `dev`**, then a
 | `WANDER_PG_ADMIN_PASSWORD` | a strong Postgres admin password you choose |
 | `WANDER_MAPBOX_TOKEN` | Mapbox access token for place search (optional; empty => fake provider) |
 | `WANDER_AZURE_MAPS_KEY` | Azure Maps key for routing/travel times (optional; empty => fake provider) |
+| `WANDER_FUNCTIONS_CALLBACK_KEY` | Shared callback key for voice-note transcription; must equal the existing transcription Function's `Api__CallbackKey` so the API trusts its write-backs (empty => transcription disabled) |
 | `AZURE_SWA_TOKEN_DEV` | the dev Static Web App deployment token (for the web deploy) |
 
 The `AZURE_SWA_TOKEN_DEV` value comes from the Static Web App created by the Bicep deploy

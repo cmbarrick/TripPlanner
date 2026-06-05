@@ -11,6 +11,14 @@ param postgresAdminPassword = readEnvironmentVariable('WANDER_PG_ADMIN_PASSWORD'
 param mapboxAccessToken = readEnvironmentVariable('WANDER_MAPBOX_TOKEN', '')
 param azureMapsKey = readEnvironmentVariable('WANDER_AZURE_MAPS_KEY', '')
 
+// Voice-note transcription stack (media Storage + Azure AI Speech + Flex Consumption Function) is
+// provisioned/managed imperatively in dev, not by this template (the Bicep function module targets a
+// Y1 plan, which can't host the existing Flex app). So instead of deployTranscription, we just wire
+// the API to that existing storage + Function here — durably, so CI deploys stop disconnecting it.
+// The callback key must match the Function's Api:CallbackKey (set as a CI secret).
+param wireApiToExistingTranscription = true
+param transcriptionCallbackKey = readEnvironmentVariable('WANDER_FUNCTIONS_CALLBACK_KEY', '')
+
 // Entra External ID values for the dev environment (non-secret).
 // Dev identity: app registration "Wander Dev" in the Pay-As-You-Go tenant (workforce sign-in
 // for testing). Swap to an Entra External ID tenant when moving to public/customer sign-up.

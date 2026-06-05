@@ -77,6 +77,74 @@ public class WeatherControllerTests
             Assert.True(w.HighC >= w.LowC, $"HighC {w.HighC} should be >= LowC {w.LowC}");
     }
 
+    // ── Hourly ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetHourly_LocatedItem_ReturnsTwentyFourHours()
+    {
+        var (ctrl, trip) = BuildController(hasLocatedItems: true);
+        var itemId = trip.Days.First().Items.First().Id;
+
+        var result = await ctrl.GetHourly(trip.Id, itemId, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var body = Assert.IsType<ItemHourlyWeatherResponse>(ok.Value);
+        Assert.Equal(24, body.Hours.Count);
+    }
+
+    [Fact]
+    public async Task GetHourly_UnknownItem_ReturnsNotFound()
+    {
+        var (ctrl, trip) = BuildController(hasLocatedItems: true);
+        var result = await ctrl.GetHourly(trip.Id, Guid.NewGuid(), CancellationToken.None);
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetHourly_UnknownTrip_ReturnsNotFound()
+    {
+        var (ctrl, trip) = BuildController(hasLocatedItems: true);
+        var itemId = trip.Days.First().Items.First().Id;
+        var result = await ctrl.GetHourly(Guid.NewGuid(), itemId, CancellationToken.None);
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task GetHourly_NeverContainsApiKey()
+    {
+        var (ctrl, trip) = BuildController(hasLocatedItems: true);
+        var itemId = trip.Days.First().Items.First().Id;
+        var result = await ctrl.GetHourly(trip.Id, itemId, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
+        Assert.DoesNotContain("token", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("apiKey", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task HourlyCache_SameLocation_ProviderCalledOnce()
+    {
+        var counting = new CountingWeatherProvider(new FakeWeatherProvider());
+        var cached = new CachingWeatherProvider(counting, NewCache());
+        var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(2);
+
+        await cached.GetHourlyAsync(48.86, 2.29, date, CancellationToken.None);
+        await cached.GetHourlyAsync(48.86, 2.29, date, CancellationToken.None);
+        await cached.GetHourlyAsync(48.860001, 2.290001, date, CancellationToken.None); // rounds to same key
+
+        Assert.Equal(1, counting.HourlyCallCount);
+    }
+
+    [Fact]
+    public async Task FakeProvider_Hourly_ReturnsTwentyFourPoints()
+    {
+        var provider = new FakeWeatherProvider();
+        var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(2);
+        var hourly = await provider.GetHourlyAsync(48.86, 2.29, date, CancellationToken.None);
+        Assert.NotNull(hourly);
+        Assert.Equal(24, hourly!.Hours.Count);
+        Assert.All(hourly.Hours, h => Assert.False(string.IsNullOrEmpty(h.Time)));
+    }
+
     // ── FakeWeatherProvider ───────────────────────────────────────────────────
 
     [Fact]
@@ -192,12 +260,20 @@ public class WeatherControllerTests
     private sealed class CountingWeatherProvider(IWeatherProvider inner) : IWeatherProvider
     {
         public int CallCount { get; private set; }
+        public int HourlyCallCount { get; private set; }
 
         public async Task<WeatherObservation?> GetWeatherAsync(
             double lat, double lng, DateOnly date, CancellationToken ct)
         {
             CallCount++;
             return await inner.GetWeatherAsync(lat, lng, date, ct);
+        }
+
+        public async Task<HourlyWeather?> GetHourlyAsync(
+            double lat, double lng, DateOnly date, CancellationToken ct)
+        {
+            HourlyCallCount++;
+            return await inner.GetHourlyAsync(lat, lng, date, ct);
         }
     }
 }
