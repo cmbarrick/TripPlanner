@@ -162,6 +162,29 @@ Each slice is independently shippable, testable, and green before the next.
   - **Verify:** record a **new** voice note in the deployed app while signed in — it should flip from
     ⏳ Transcribing… to a transcript within ~10–30s. The previously stuck note predates the queue (it was
     enqueued to the no-op queue and its audio lived only on the API's local disk), so it won't recover.
+- **2026-06-05 — Bug fixes (journal load + full transcript):**
+  - **Journal loaded empty until a write:** `tryFetch` aborts reads at 2.5s and returns an empty list
+    flagged `live:false`, which React Query cached as a *successful* empty result for the 30s staleTime —
+    so on an API cold start the journal stayed empty until a mutation forced a refetch. `useTripNotesQuery`
+    now throws on `live:false` (retried w/ backoff, never cached as a real empty list).
+  - **Only first seconds transcribed:** browser `MediaRecorder` writes streamed WebM with no Duration in
+    its EBML header, so Azure fast-transcription stopped after the first cluster. `audioRecording.ts` now
+    patches the duration via `@fix-webm-duration/fix` (dynamic import, web-only) before upload.
+- **2026-06-05 — Slice 4a: reflection prompts (offline, AI-deferred):**
+  - **Decision:** prompts stay **non-AI** for now behind a `PromptProvider` seam (`StaticPromptProvider`
+    = presets + on-device custom prompts) so capture stays offline-first; an `AiPromptProvider` (context-
+    aware, ideally pre-generated server-side) can slot in during Phase 5/6 with no caller changes.
+  - **Client-side by design:** `Note` already carries `kind: PromptResponse` + `promptId` (no prompt FK),
+    so prompts need **no backend** — answers save as ordinary notes. New `src/prompts/*` (types, preset
+    library w/ stable UUIDs, provider, settings store via `useSyncExternalStore`) + `src/storage.ts`
+    (cross-platform KV mirroring the auth seam).
+  - **UI:** a **💭 Reflect** composer in the event journal (type-aware prompts) and the trip/day journal
+    (shuffle + answer → `PromptResponse` note); `NoteCard` shows the question above the answer. Profile
+    gets a Journaling card (global on/off + add/remove custom prompts); the trip journal has a per-trip
+    toggle. tsc + lint clean; 55/55 app tests (+7 prompt-provider tests).
+  - **Next (slice 4b):** post-event **local notifications** (`expo-notifications` native + Web Notifications
+    best-effort) scheduled from event end-times, deep-linking to the composer; per-event-type filter +
+    quiet hours. Prompts will surface *through* those notifications then.
 
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See

@@ -15,6 +15,7 @@ import {
 import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
 import { NoteCard } from '../notes/NoteCard';
+import { ReflectComposer } from '../prompts/ReflectComposer';
 
 const TYPES: { key: ItineraryItemType; label: string }[] = [
   { key: 'Flight', label: 'Flight' },
@@ -329,6 +330,7 @@ function EventJournal({ tripId, item }: { tripId: string; item: ItineraryItem })
 
       <VoiceControls tripId={tripId} scope="Event" targetId={item.id} />
       <PhotoControls tripId={tripId} scope="Event" targetId={item.id} />
+      <ReflectComposer tripId={tripId} scope="Event" targetId={item.id} eventType={item.type} />
 
       {isLoading ? (
         <Text style={s.journalEmpty}>Loading…</Text>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Card } from '../components';
 import { colors, radius } from '../theme';
 import { AuthState } from '../auth/session';
+import { PromptSettingsCard } from '../prompts/PromptSettingsCard';
 
 export type TempUnit = 'F' | 'C';
 export type ClockPref = '12h' | '24h';
@@ -118,6 +119,8 @@ export function ProfileScreen({
             </View>
           </View>
         </Card>
+
+        <PromptSettingsCard />
 
         <Text style={s.note}>
           Preferences are stored on-device for now. Server-backed profile sync lands when preferences API

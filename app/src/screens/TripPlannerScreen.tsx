@@ -12,6 +12,8 @@ import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation } from 
 import { NoteCard } from '../notes/NoteCard';
 import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
+import { ReflectComposer } from '../prompts/ReflectComposer';
+import { usePromptSettings } from '../prompts/store';
 import { estimate, buildDirectionsUrl, buildRouteUrl, flightAwareUrl, flightRadar24Url } from '../routing';
 import { exportIcs } from '../ics';
 import { addTripToCalendar } from '../calendar';
@@ -641,8 +643,16 @@ function JournalPanel({
 }) {
   const createNote = useCreateNoteMutation(trip.id);
   const deleteNote = useDeleteNoteMutation(trip.id);
+  const { settings, enabledForTrip, setTripEnabled, setEnabledGlobal } = usePromptSettings();
   const [draft, setDraft] = useState('');
   const [target, setTarget] = useState<'trip' | 'day'>('trip');
+
+  const promptsOn = enabledForTrip(trip.id);
+  const toggleTripPrompts = () => {
+    // When prompts are globally off, turning them on for a trip implies enabling globally too.
+    if (!settings.enabledGlobal && !promptsOn) setEnabledGlobal(true);
+    setTripEnabled(trip.id, !promptsOn);
+  };
 
   const selectedDay = trip.days.find((d) => d.id === selectedDayId) ?? trip.days[0];
   const scope: NoteScope = target === 'day' && selectedDay ? 'Day' : 'Trip';
@@ -678,6 +688,10 @@ function JournalPanel({
     <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Text style={s.packTitle}>📓 Journal</Text>
       <Text style={s.packSub}>{visible.length === 0 ? 'No entries yet — capture how the trip is going.' : `${visible.length} ${visible.length === 1 ? 'entry' : 'entries'} across this trip`}</Text>
+
+      <Pressable style={s.promptToggle} onPress={toggleTripPrompts} accessibilityLabel="Toggle reflection prompts for this trip">
+        <Text style={s.promptToggleText}>💭 Reflection prompts: {promptsOn ? 'On' : 'Off'}</Text>
+      </Pressable>
 
       <View style={s.journalScopeRow}>
         <Pressable
@@ -720,6 +734,7 @@ function JournalPanel({
 
       <VoiceControls tripId={trip.id} scope={scope} targetId={targetId} />
       <PhotoControls tripId={trip.id} scope={scope} targetId={targetId} />
+      <ReflectComposer tripId={trip.id} scope={scope} targetId={targetId} />
 
       {visible.length === 0 ? null : (
         visible.map((note) => (
@@ -1030,4 +1045,6 @@ const s = StyleSheet.create({
   journalScopeBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
   journalScopeBtnOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   journalScopeText: { fontSize: 12, fontWeight: '700', color: colors.ink600 },
+  promptToggle: { alignSelf: 'flex-start', marginBottom: 12, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  promptToggleText: { fontSize: 11, fontWeight: '800', color: colors.ink600 },
 });

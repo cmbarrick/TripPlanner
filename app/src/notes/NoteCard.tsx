@@ -4,6 +4,7 @@ import { Note, MediaAsset } from '../types';
 import { colors, radius } from '../theme';
 import { VoicePlayer } from '../voice/VoicePlayer';
 import { PhotoView } from '../media/PhotoView';
+import { usePromptSettings } from '../prompts/store';
 
 /** A single journal entry: voice player, body text, photos, transcript, timestamp, and delete. */
 export function NoteCard({
@@ -20,10 +21,14 @@ export function NoteCard({
   const media = note.mediaAssets ?? [];
   const audio = media.find((m) => m.kind === 'Audio');
   const photos = media.filter((m) => m.kind === 'Photo');
+  const { provider } = usePromptSettings();
+  const promptText =
+    note.kind === 'PromptResponse' && note.promptId ? provider.byId(note.promptId)?.text : undefined;
   return (
     <View style={st.row}>
       <View style={{ flex: 1 }}>
         {anchorLabel ? <Text style={st.anchor}>{anchorLabel}</Text> : null}
+        {promptText ? <Text style={st.prompt}>💭 {promptText}</Text> : null}
         {audio ? <VoicePlayer tripId={tripId} media={audio} /> : null}
         {note.bodyText ? <Text style={st.body}>{note.bodyText}</Text> : null}
         {photos.map((p) => (
@@ -64,6 +69,7 @@ export function formatNoteTime(iso: string): string {
 const st = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10 },
   anchor: { fontSize: 10, fontWeight: '800', color: colors.brand, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
+  prompt: { fontSize: 12, fontWeight: '700', color: colors.ink600, marginBottom: 4, lineHeight: 17 },
   body: { fontSize: 13, color: colors.ink, lineHeight: 18 },
   photo: { marginTop: 8 },
   meta: { fontSize: 10, color: colors.ink400, fontWeight: '700', marginTop: 4 },
