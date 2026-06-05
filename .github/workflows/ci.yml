@@ -171,7 +171,11 @@ jobs:
             --yes || true
 
       - name: Publish API
-        run: dotnet publish backend/Wander.Api/Wander.Api.csproj -c Release -o ./publish
+        # ReadyToRun (R2R) precompiles IL ahead-of-time so the app binds its port in
+        # seconds instead of JIT-warming on the small B1 instance. Framework-dependent
+        # (--self-contained false) keeps the package small and runs on the App Service
+        # .NET blessed image; -r linux-x64 is required for R2R crossgen.
+        run: dotnet publish backend/Wander.Api/Wander.Api.csproj -c Release -o ./publish -r linux-x64 --self-contained false -p:PublishReadyToRun=true
 
       - name: Package API
         run: cd publish && zip -r ../api.zip . && cd ..

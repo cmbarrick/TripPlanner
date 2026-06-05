@@ -64,6 +64,43 @@ export type AuthState = {
 
 type StoredAuthSession = Omit<AuthState, 'mode' | 'isAuthenticated'>;
 
+function decodeBase64Url(input: string): string | null {
+  try {
+    const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    if (typeof atob === 'function') {
+      const binary = atob(padded);
+      try {
+        const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      } catch {
+        return binary;
+      }
+    }
+    // Node / native fallback when atob is unavailable.
+    const BufferCtor = (globalThis as { Buffer?: { from(s: string, e: string): { toString(e: string): string } } }).Buffer;
+    if (BufferCtor) {
+      return BufferCtor.from(padded, 'base64').toString('utf-8');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeJwtClaims(token: string | undefined | null): Record<string, unknown> | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  const json = decodeBase64Url(parts[1]);
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 function defaultState(): AuthState {
   if (DEV_USER_ID) {
     return {
@@ -148,6 +185,9 @@ export async function signInWithEntra(): Promise<AuthState> {
     responseType: AuthSession.ResponseType.Code,
     redirectUri,
     usePKCE: true,
+    // `select_account` always shows the account chooser so the user can pick the
+    // correct work/school account instead of silently reusing an SSO session.
+    prompt: AuthSession.Prompt.SelectAccount,
     extraParams: AUTH_AUDIENCE ? { audience: AUTH_AUDIENCE } : undefined,
   });
 
@@ -185,20 +225,15 @@ export async function signInWithEntra(): Promise<AuthState> {
   let email: string | null = null;
   let displayName: string | null = 'Signed-in Traveler';
 
-  if (discovery.userInfoEndpoint) {
-    try {
-      const userInfoResponse = await fetch(discovery.userInfoEndpoint, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (userInfoResponse.ok) {
-        const payload = (await userInfoResponse.json()) as Record<string, unknown>;
-        subject = typeof payload.sub === 'string' ? payload.sub : subject;
-        email = typeof payload.email === 'string' ? payload.email : null;
-        displayName = typeof payload.name === 'string' ? payload.name : displayName;
-      }
-    } catch {
-      // UserInfo is optional; API ownership still uses JWT claims.
-    }
+  // Read profile claims from the ID token. We intentionally do NOT call the OIDC
+  // userInfo endpoint: our access token is audience-scoped to the Wander API, so
+  // Microsoft Graph's userInfo endpoint rejects it with 401.
+  const claims = decodeJwtClaims(tokenResponse.idToken);
+  if (claims) {
+    if (typeof claims.sub === 'string') subject = claims.sub;
+    if (typeof claims.email === 'string') email = claims.email;
+    else if (typeof claims.preferred_username === 'string') email = claims.preferred_username;
+    if (typeof claims.name === 'string') displayName = claims.name;
   }
 
   const stored: StoredAuthSession = {
