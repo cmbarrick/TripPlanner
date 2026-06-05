@@ -18,9 +18,18 @@ export const tripNotesQueryKey = (tripId: string) => ['notes', tripId] as const;
 export function useTripNotesQuery(tripId: string) {
   return useQuery({
     queryKey: tripNotesQueryKey(tripId),
-    queryFn: () => getTripNotes(tripId),
+    queryFn: async () => {
+      const res = await getTripNotes(tripId);
+      // A failed/aborted/timed-out read returns the empty fallback with `live: false`. Throw so
+      // React Query treats it as an error (retried, and never cached as a "fresh" empty list) —
+      // otherwise one slow read (e.g. an API cold start) pins an empty journal for the whole
+      // staleTime window, so existing notes only appear after a write forces a refetch.
+      if (!res.live) throw new Error('Notes are temporarily unavailable.');
+      return res;
+    },
     staleTime: 1000 * 30,
-    retry: 1,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
 }
 

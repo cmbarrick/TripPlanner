@@ -40,6 +40,8 @@ const sessionStorage = {
 };
 
 const STORAGE_KEY = 'wander.auth.session.v1';
+// Holds the PKCE verifier + state across the web full-page redirect to the IdP.
+const PENDING_KEY = 'wander.auth.pending.v1';
 const FALLBACK_SUBJECT = 'authenticated-user';
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID;
 const AUTH_ISSUER = process.env.EXPO_PUBLIC_AUTH_ISSUER;
@@ -172,15 +174,12 @@ async function persistSession(next: StoredAuthSession): Promise<void> {
   await sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
-export async function signInWithEntra(): Promise<AuthState> {
-  if (!AUTH_ISSUER || !AUTH_CLIENT_ID) {
-    throw new Error('Entra auth is not configured. Set EXPO_PUBLIC_AUTH_ISSUER and EXPO_PUBLIC_AUTH_CLIENT_ID.');
-  }
+type Discovery = Awaited<ReturnType<typeof AuthSession.fetchDiscoveryAsync>>;
 
-  const discovery = await AuthSession.fetchDiscoveryAsync(AUTH_ISSUER);
+function buildAuthRequest(): { request: AuthSession.AuthRequest; redirectUri: string } {
   const redirectUri = AuthSession.makeRedirectUri({ scheme: 'wander', path: 'auth' });
   const request = new AuthSession.AuthRequest({
-    clientId: AUTH_CLIENT_ID,
+    clientId: AUTH_CLIENT_ID!,
     scopes: AUTH_SCOPES,
     responseType: AuthSession.ResponseType.Code,
     redirectUri,
@@ -190,23 +189,28 @@ export async function signInWithEntra(): Promise<AuthState> {
     prompt: AuthSession.Prompt.SelectAccount,
     extraParams: AUTH_AUDIENCE ? { audience: AUTH_AUDIENCE } : undefined,
   });
+  return { request, redirectUri };
+}
 
-  await request.makeAuthUrlAsync(discovery);
-  const result = await request.promptAsync(discovery);
-
-  if (result.type !== 'success' || !result.params.code) {
-    throw new Error('Login was cancelled or did not return an authorization code.');
-  }
-
+// Exchanges an authorization code for tokens, reads profile claims from the ID
+// token (we deliberately skip the OIDC userInfo endpoint — our access token is
+// audience-scoped to the Wander API, so Microsoft Graph rejects it with 401),
+// then persists and returns the authenticated session.
+async function finalizeTokenExchange(
+  discovery: Discovery,
+  redirectUri: string,
+  code: string,
+  codeVerifier?: string
+): Promise<AuthState> {
   const tokenResponse = await AuthSession.exchangeCodeAsync(
     {
-      clientId: AUTH_CLIENT_ID,
-      code: result.params.code,
+      clientId: AUTH_CLIENT_ID!,
+      code,
       redirectUri,
       scopes: AUTH_SCOPES,
       extraParams: {
         ...(AUTH_AUDIENCE ? { audience: AUTH_AUDIENCE } : {}),
-        ...(request.codeVerifier ? { code_verifier: request.codeVerifier } : {}),
+        ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
       },
     },
     discovery
@@ -225,9 +229,6 @@ export async function signInWithEntra(): Promise<AuthState> {
   let email: string | null = null;
   let displayName: string | null = 'Signed-in Traveler';
 
-  // Read profile claims from the ID token. We intentionally do NOT call the OIDC
-  // userInfo endpoint: our access token is audience-scoped to the Wander API, so
-  // Microsoft Graph's userInfo endpoint rejects it with 401.
   const claims = decodeJwtClaims(tokenResponse.idToken);
   if (claims) {
     if (typeof claims.sub === 'string') subject = claims.sub;
@@ -251,6 +252,81 @@ export async function signInWithEntra(): Promise<AuthState> {
     ...stored,
   };
   return currentState;
+}
+
+export async function signInWithEntra(): Promise<AuthState> {
+  if (!AUTH_ISSUER || !AUTH_CLIENT_ID) {
+    throw new Error('Entra auth is not configured. Set EXPO_PUBLIC_AUTH_ISSUER and EXPO_PUBLIC_AUTH_CLIENT_ID.');
+  }
+
+  const discovery = await AuthSession.fetchDiscoveryAsync(AUTH_ISSUER);
+  const { request, redirectUri } = buildAuthRequest();
+  await request.makeAuthUrlAsync(discovery);
+
+  // Web: use a full-page redirect instead of a popup. Identity providers such as
+  // Microsoft send a Cross-Origin-Opener-Policy header that severs the
+  // popup<->opener link, which breaks expo-web-browser's postMessage-based popup
+  // completion (the popup gets stranded on /auth and the opener reports the login
+  // as "cancelled"). A top-level redirect sidesteps COOP entirely.
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    await sessionStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ codeVerifier: request.codeVerifier ?? null, state: request.state })
+    );
+    window.location.assign(request.url!);
+    // The page is navigating away to the identity provider; this never resolves.
+    return new Promise<AuthState>(() => {});
+  }
+
+  // Native: the in-app browser / system popup works fine (no COOP severance).
+  const result = await request.promptAsync(discovery);
+  if (result.type !== 'success' || !result.params.code) {
+    throw new Error('Login was cancelled or did not return an authorization code.');
+  }
+  return finalizeTokenExchange(discovery, redirectUri, result.params.code, request.codeVerifier);
+}
+
+/**
+ * Completes a web full-page redirect sign-in. Call this when the app loads on the
+ * OAuth redirect route (`/auth?code=...`). It exchanges the authorization code for
+ * tokens and persists the session; the caller should then navigate back into the app
+ * (the persisted session is picked up by `initializeAuthState`).
+ */
+export async function completeWebSignIn(): Promise<AuthState> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return currentState;
+  }
+  if (!AUTH_ISSUER || !AUTH_CLIENT_ID) {
+    throw new Error('Entra auth is not configured.');
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const errorCode = params.get('error');
+  if (errorCode) {
+    await sessionStorage.removeItem(PENDING_KEY);
+    throw new Error(params.get('error_description') ?? errorCode);
+  }
+
+  const code = params.get('code');
+  if (!code) {
+    // Not a redirect callback — fall back to any previously stored session.
+    return initializeAuthState();
+  }
+
+  const pendingRaw = await sessionStorage.getItem(PENDING_KEY);
+  await sessionStorage.removeItem(PENDING_KEY);
+  if (!pendingRaw) {
+    throw new Error('No pending sign-in was found. Please start sign-in again.');
+  }
+  const pending = JSON.parse(pendingRaw) as { codeVerifier: string | null; state: string };
+  const returnedState = params.get('state');
+  if (pending.state && returnedState && pending.state !== returnedState) {
+    throw new Error('Sign-in state did not match. Please try again.');
+  }
+
+  const discovery = await AuthSession.fetchDiscoveryAsync(AUTH_ISSUER);
+  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'wander', path: 'auth' });
+  return finalizeTokenExchange(discovery, redirectUri, code, pending.codeVerifier ?? undefined);
 }
 
 export async function signOut(): Promise<AuthState> {

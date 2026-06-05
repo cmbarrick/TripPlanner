@@ -146,6 +146,22 @@ Each slice is independently shippable, testable, and green before the next.
     container/upload on iOS/Android when a dev build is cut.
   - **Not yet done (next):** reflection prompts + notifications (slice 4), offline outbox (slice 5),
     hourly weather on item detail (slice 6), end-to-end deploy of the transcription stack.
+- **2026-06-05 — Transcription stack deployed to `dev`:** voice notes now transcribe in the cloud.
+  - **Provisioned** into `rg-wander-dev`: media Storage (`stwanderdevazgnto` — `media` blob container +
+    `transcription-jobs` queue), Azure AI Speech S0 (`spch-wander-dev-azgnto`), and the transcription
+    Function (`func-wander-dev-azgnto`, `TranscribeAudio` queue trigger) with the published worker code.
+  - **Wired** the API (`app-wander-dev-azgnto`) with `Storage__ConnectionString`, `Storage__MediaContainer`,
+    and `Functions__CallbackKey` (merged onto existing settings, so `WEBSITES_CONTAINER_START_TIME_LIMIT`
+    is preserved) → it now uses `AzureBlobStore` + `AzureStorageTranscriptionQueue`. The Function shares
+    the same callback key and posts transcripts to `/internal/media-assets/{id}/transcript`.
+  - **IaC deviation (follow-up):** the Function App was created **imperatively** as **Flex Consumption**,
+    not via the Bicep module. Azure blocks a Linux **Y1 Consumption** plan (what `modules/functionApp.bicep`
+    declares) in a resource group that already holds a regular Linux plan (the API's B1). Update
+    `modules/functionApp.bicep` to **Flex Consumption (FC1)** before flipping `deployTranscription=true`
+    in `infra/env/dev.bicepparam`; until then a full `main.bicep` deploy with transcription on would fail.
+  - **Verify:** record a **new** voice note in the deployed app while signed in — it should flip from
+    ⏳ Transcribing… to a transcript within ~10–30s. The previously stuck note predates the queue (it was
+    enqueued to the no-op queue and its audio lived only on the API's local disk), so it won't recover.
 
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See

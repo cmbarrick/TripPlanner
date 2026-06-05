@@ -52,11 +52,23 @@ export function createRecorder(): Recorder {
           reject(new Error('Not recording'));
           return;
         }
-        mediaRecorder.onstop = () => {
-          const durationSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        mediaRecorder.onstop = async () => {
+          const elapsedMs = Date.now() - startedAt;
+          const durationSeconds = Math.max(1, Math.round(elapsedMs / 1000));
           const mimeType: string = mediaRecorder.mimeType || 'audio/webm';
-          const blob = new Blob(chunks, { type: mimeType });
+          let blob = new Blob(chunks, { type: mimeType });
           stopTracks(stream);
+          // MediaRecorder writes streamed WebM without a Duration in its EBML header. Some decoders
+          // (incl. Azure Speech fast transcription) then stop after the first cluster — so only the
+          // first few seconds get transcribed. Patch the duration into the blob before upload.
+          if (mimeType.includes('webm')) {
+            try {
+              const { fixWebmDuration } = await import('@fix-webm-duration/fix');
+              blob = await fixWebmDuration(blob, elapsedMs);
+            } catch {
+              // Non-fatal: fall back to the original blob (transcription may be partial).
+            }
+          }
           resolve({ blob, durationSeconds, mimeType, fileName: fileNameFor(mimeType) });
         };
         mediaRecorder.stop();
