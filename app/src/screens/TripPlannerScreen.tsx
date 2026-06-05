@@ -12,7 +12,7 @@ import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation } from 
 import { NoteCard } from '../notes/NoteCard';
 import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
-import { ReflectComposer } from '../prompts/ReflectComposer';
+import { ReflectFlow } from '../prompts/ReflectFlow';
 import { usePromptSettings } from '../prompts/store';
 import { estimate, buildDirectionsUrl, buildRouteUrl, flightAwareUrl, flightRadar24Url } from '../routing';
 import { exportIcs } from '../ics';
@@ -734,7 +734,7 @@ function JournalPanel({
 
       <VoiceControls tripId={trip.id} scope={scope} targetId={targetId} />
       <PhotoControls tripId={trip.id} scope={scope} targetId={targetId} />
-      <ReflectComposer tripId={trip.id} scope={scope} targetId={targetId} />
+      <ReflectFlow tripId={trip.id} scope={scope} targetId={targetId} />
 
       {visible.length === 0 ? null : (
         visible.map((note) => (

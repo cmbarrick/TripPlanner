@@ -185,6 +185,38 @@ Each slice is independently shippable, testable, and green before the next.
   - **Next (slice 4b):** post-event **local notifications** (`expo-notifications` native + Web Notifications
     best-effort) scheduled from event end-times, deep-linking to the composer; per-event-type filter +
     quiet hours. Prompts will surface *through* those notifications then.
+- **2026-06-05 — Slice 4b: post-event notifications (local, offline):**
+  - **Pure core:** `src/notifications/schedule.ts` computes the nudge set from trips + settings —
+    end-time + delay, event-type filter, **quiet-hours** shift (midnight-wrapping aware), future-only,
+    and an iOS-safe 60-cap; fully unit-tested (`src/notifications.test.ts`, 14 cases). Types +
+    settings store (`useSyncExternalStore`, persisted via `src/storage.ts`) alongside.
+  - **Platform seam:** `notifier.ts` (native, `expo-notifications`) + `notifier.web.ts` (best-effort
+    `Notification` + `setTimeout` while the tab is open) behind one interface
+    (`ensureNotificationPermission` / `syncSchedule` / `registerResponseHandler`). `useNotificationSync`
+    (mounted in `App`) re-syncs the OS schedule whenever trips/settings change and routes a tapped
+    nudge to that event's composer via `uiStore.openTrip()` + `showEditItem()` (the deep-link).
+  - **UI:** Profile **Reminders** card — on/off (requests OS permission), delay (Now/15/30/60), per-type
+    filter (Meals/Activities/Transport/Flights/Stays), quiet-hours toggle. Off by default (opt-in).
+  - **Native prep:** `app.json` adds the `expo-notifications` plugin and **iOS usage strings** (mic for
+    voice notes via `expo-audio`, photos via `expo-image-picker`); Android notif permission/channel
+    handled by the plugin + `setNotificationChannelAsync`. Verifies on a **dev build** (not Expo Go).
+  - tsc + lint clean; **69/69** app tests.
+- **2026-06-05 — Slice 4a UX revisit: guided step-through reflection:**
+  - Replaced the per-question **💭 Reflect** composer with **`ReflectFlow`** — one entry point opens a
+    modal that **steps through up to 6 applicable prompts** one at a time (progress bar, answer or
+    **skip**, save-as-you-go → `PromptResponse` notes, end summary "Saved N reflections"). No more
+    tapping Reflect per question. `ReflectComposer` removed.
+  - **Past events feel more journal-y:** `isEventPast(trip, item)` (event end/start vs now) promotes a
+    **prominent CTA card** ("How was {event}? · Step through N questions") at the top of a past event's
+    journal; upcoming events keep the quiet inline pill. Trip/day journals use the same flow.
+  - **Prompt question persisted with the answer:** added a `PromptText` column on `notes` (migration
+    `AddNotePromptText`) so a reflection saves its **question text**, not just a `PromptId`. Fixes the
+    answer-only display and a latent bug (custom prompt ids aren't GUIDs → the API's `Guid? PromptId`
+    rejected them); the client now sends `promptText` always and only forwards `promptId` when it's a
+    real UUID. `NoteCard` shows `promptText`, falling back to a preset-id lookup for pre-existing notes.
+  - **Deferred (noted in `docs/deployment-runbook.md` §11):** consumer **login expansion** (Entra
+    External ID + Google) and **Sign in with Apple** (Apple Guideline 4.8) are pre-public-launch gates,
+    **not** required for dev/TestFlight testing — decoupled so native feature work isn't blocked.
 
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See

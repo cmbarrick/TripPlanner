@@ -22,8 +22,12 @@ export function NoteCard({
   const audio = media.find((m) => m.kind === 'Audio');
   const photos = media.filter((m) => m.kind === 'Photo');
   const { provider } = usePromptSettings();
+  // Prefer the question text persisted on the note; fall back to resolving a (preset) prompt id for
+  // older notes saved before promptText existed.
   const promptText =
-    note.kind === 'PromptResponse' && note.promptId ? provider.byId(note.promptId)?.text : undefined;
+    note.kind === 'PromptResponse'
+      ? note.promptText ?? (note.promptId ? provider.byId(note.promptId)?.text : undefined)
+      : undefined;
   return (
     <View style={st.row}>
       <View style={{ flex: 1 }}>

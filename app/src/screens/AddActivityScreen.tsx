@@ -15,7 +15,7 @@ import {
 import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
 import { NoteCard } from '../notes/NoteCard';
-import { ReflectComposer } from '../prompts/ReflectComposer';
+import { ReflectFlow, isEventPast } from '../prompts/ReflectFlow';
 
 const TYPES: { key: ItineraryItemType; label: string }[] = [
   { key: 'Flight', label: 'Flight' },
@@ -261,7 +261,7 @@ export function AddActivityScreen({
         {error ? <Text style={s.error}>{error}</Text> : null}
         {serverError ? <Text style={s.error}>{serverError}</Text> : null}
 
-        {editing && item ? <EventJournal tripId={trip.id} item={item} /> : null}
+        {editing && item ? <EventJournal trip={trip} item={item} /> : null}
 
         {editing && onDelete ? (
           <Pressable style={s.delete} onPress={onDelete} accessibilityLabel="Delete item">
@@ -279,7 +279,9 @@ export function AddActivityScreen({
  * doubles as the journal, so capture happens right where the event lives. (Voice + photos arrive in
  * later Phase 4 slices.)
  */
-function EventJournal({ tripId, item }: { tripId: string; item: ItineraryItem }) {
+function EventJournal({ trip, item }: { trip: Trip; item: ItineraryItem }) {
+  const tripId = trip.id;
+  const past = isEventPast(trip, item);
   const { data: notesData, isLoading } = useTripNotesQuery(tripId);
   const createNote = useCreateNoteMutation(tripId);
   const deleteNote = useDeleteNoteMutation(tripId);
@@ -306,6 +308,17 @@ function EventJournal({ tripId, item }: { tripId: string; item: ItineraryItem })
       </View>
       <Text style={s.journalHint}>Capture how this {item.type.toLowerCase()} went — saved against this event.</Text>
 
+      {past ? (
+        <ReflectFlow
+          tripId={tripId}
+          scope="Event"
+          targetId={item.id}
+          eventType={item.type}
+          prominent
+          ctaLabel={`How was ${item.title?.trim() || item.type.toLowerCase()}?`}
+        />
+      ) : null}
+
       <View style={s.journalAddRow}>
         <TextInput
           style={[s.control, s.journalInput]}
@@ -330,7 +343,9 @@ function EventJournal({ tripId, item }: { tripId: string; item: ItineraryItem })
 
       <VoiceControls tripId={tripId} scope="Event" targetId={item.id} />
       <PhotoControls tripId={tripId} scope="Event" targetId={item.id} />
-      <ReflectComposer tripId={tripId} scope="Event" targetId={item.id} eventType={item.type} />
+      {!past ? (
+        <ReflectFlow tripId={tripId} scope="Event" targetId={item.id} eventType={item.type} />
+      ) : null}
 
       {isLoading ? (
         <Text style={s.journalEmpty}>Loading…</Text>

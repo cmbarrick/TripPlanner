@@ -4,6 +4,7 @@ import { Card } from '../components';
 import { colors, radius } from '../theme';
 import { AuthState } from '../auth/session';
 import { PromptSettingsCard } from '../prompts/PromptSettingsCard';
+import { NotificationSettingsCard } from '../notifications/NotificationSettingsCard';
 
 export type TempUnit = 'F' | 'C';
 export type ClockPref = '12h' | '24h';
@@ -121,6 +122,8 @@ export function ProfileScreen({
         </Card>
 
         <PromptSettingsCard />
+
+        <NotificationSettingsCard />
 
         <Text style={s.note}>
           Preferences are stored on-device for now. Server-backed profile sync lands when preferences API

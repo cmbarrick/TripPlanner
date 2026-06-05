@@ -85,6 +85,8 @@ export interface Note {
   kind: NoteKind;
   bodyText?: string | null;
   promptId?: string | null;
+  /** For PromptResponse notes: the question text, persisted with the answer so it always displays. */
+  promptText?: string | null;
   mediaAssets: MediaAsset[];
   createdAt: string;
   updatedAt: string;

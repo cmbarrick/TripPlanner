@@ -1,6 +1,6 @@
 # Deployment & Rollback Runbook — Wander
 
-> Status: **Active** · Phase 3 · Last updated: 2026-06-03
+> Status: **Active** · Phase 3 · Last updated: 2026-06-05
 > Scope: the `dev` Azure environment (the proven Phase 3 path) + web Entra sign-in. `staging`/
 > `prod` use the same Bicep + pipeline with their own `.bicepparam` and secrets (Section 3b);
 > mobile ships via EAS (Section 9).
@@ -270,3 +270,49 @@ Set `MOBILE_API_URL` (repo variable) to point the mobile bundle at the right API
   (portrait-lock vs allow landscape). Cosmetic only — no impact on API/auth/native phone build.
 - **App Store / Google Play submission** — paid developer accounts, store listings, signing, and
   review. The EAS build/submit plumbing (Section 9) is ready; actual publishing is a launch-phase task.
+
+---
+
+## 11. Pre-public-launch checklist — auth & app stores (NOT blocking device/TestFlight testing)
+
+> Captured 2026-06-05. **None of this blocks a development build or internal TestFlight** on your
+> own device (those don't go through full App Review, and the current Microsoft sign-in works for a
+> single tester). These are gates for **public store release** and for **real consumer sign-up**.
+> Decoupled on purpose so native feature work (Phase 4 notifications, audio, photos) isn't held up.
+
+### 11a. Login expansion (consumer sign-up + Apple's Guideline 4.8)
+Today the app authenticates **only via a Microsoft workforce tenant** (`login.microsoftonline.com/<tenant>`),
+which requires a Microsoft work/school account — fine for internal testing, **not viable for public
+consumers**. Before public launch:
+
+1. **Migrate to Entra External ID (CIAM)** for the public app — a customer (CIAM) tenant supporting
+   self-service email/password sign-up + social IdPs. The app is already OIDC/PKCE against a
+   **configurable issuer + client id** (`EXPO_PUBLIC_AUTH_*` / `Authentication:EntraExternalId:*`),
+   so this is mostly **tenant + config**, not app rewrite. (`staging`/`prod` `.bicepparam` already
+   point at `*.ciamlogin.com` placeholders — see §3b.)
+2. **Apple Guideline 4.8 (Login Services):** if the app offers a **third-party/social login**
+   (Google, **Microsoft**, Facebook, …) to set up the primary account, it **must also offer an
+   equivalent privacy-preserving login** — in practice Apple enforces **Sign in with Apple**.
+   - **Implication:** the moment we add Google (or keep Microsoft) as a consumer option, **Sign in
+     with Apple is required for App Store approval.**
+   - **Exception** worth knowing: not required if the app *exclusively uses our own account system*
+     (e.g. Entra External ID email/password only, no social). Realistically we'll want Google + Apple,
+     so plan for Sign in with Apple.
+   - **Low-debt approach:** federate **Apple + Google as IdPs inside Entra External ID** (broker
+     model) so the app keeps doing a single OIDC flow; provider buttons appear on the hosted page.
+3. **Native redirect URI:** register **`wander://auth`** (and/or the Expo proxy) as a *mobile/native*
+   redirect on the app registration — on-device sign-in fails without it (also noted in §9).
+4. **Token `aud`:** confirm the CIAM app's access-token `aud` matches the API
+   `Authentication:EntraExternalId:Audience` (dev uses the bare client id — verify by decoding a real token).
+
+### 11b. Store submission prerequisites (when publishing)
+- **iOS permission usage strings** (Info.plist via config plugins): microphone (voice notes),
+  photo library (photo notes), and notifications. Add the `expo-image-picker` config plugin (not yet
+  in `app.json` `plugins`) with its photo/permission descriptions; ensure `expo-audio` mic usage
+  string is set; add `expo-notifications` plugin (Phase 4b).
+- **Android 13+**: `POST_NOTIFICATIONS` runtime permission + a notification channel (handled by the
+  Phase 4b notification code / `expo-notifications` plugin).
+- **Privacy policy URL** + Apple **App Privacy** answers + Google Play **Data safety** form
+  (we collect account email/id, journal content, audio, photos, approximate location for weather).
+- **Screenshots, listing copy, age rating**, and pass App Review / Play review.
+- **Encryption compliance** (`ITSAppUsesNonExemptEncryption` = false unless we add custom crypto).

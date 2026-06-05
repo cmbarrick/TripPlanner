@@ -290,7 +290,10 @@ export interface CreateNoteInput {
   kind?: NoteKind;
   bodyText?: string | null;
   promptId?: string | null;
+  promptText?: string | null;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Notes for a trip (newest first). Falls back to an empty list when the API is unreachable. */
 export async function getTripNotes(tripId: string): Promise<{ data: Note[]; live: boolean }> {
@@ -303,7 +306,10 @@ export async function createNote(tripId: string, input: CreateNoteInput): Promis
     targetId: input.targetId ?? null,
     kind: input.kind ?? 'Text',
     bodyText: input.bodyText ?? null,
-    promptId: input.promptId ?? null,
+    // The API column is a GUID, so only forward real UUIDs (preset prompts). Custom prompt ids
+    // aren't UUIDs — their text still persists via promptText below.
+    promptId: input.promptId && UUID_RE.test(input.promptId) ? input.promptId : null,
+    promptText: input.promptText ?? null,
   });
 }
 

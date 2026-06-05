@@ -34,6 +34,7 @@ import { TripInput, ItineraryItemInput } from './src/api';
 import { useUiStore } from './src/store/uiStore';
 import { initClientObservability } from './src/observability';
 import { useAuthSession } from './src/auth/useAuthSession';
+import { useNotificationSync } from './src/notifications/useNotificationSync';
 
 const queryClient = new QueryClient();
 initClientObservability();
@@ -74,6 +75,7 @@ function AppShell() {
 
   const tripsQuery = useTripsQuery();
   const trips = tripsQuery.data?.data ?? [];
+  useNotificationSync(trips);
   const live = tripsQuery.data?.live ?? false;
   const loading = tripsQuery.isLoading;
   const isError = tripsQuery.isError;

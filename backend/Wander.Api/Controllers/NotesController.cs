@@ -59,6 +59,7 @@ public class NotesController : ControllerBase
             Kind = request.Kind,
             BodyText = request.BodyText,
             PromptId = request.PromptId,
+            PromptText = request.PromptText,
         };
 
         var created = _notes.Add(tripId, ownerId, note);
@@ -229,7 +230,8 @@ public record CreateNoteRequest(
     Guid? TargetId,
     NoteKind Kind,
     string? BodyText,
-    Guid? PromptId);
+    Guid? PromptId,
+    string? PromptText = null);
 
 public class CreateVoiceNoteRequest
 {

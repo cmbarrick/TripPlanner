@@ -32,7 +32,24 @@
       "expo-secure-store",
       "expo-sharing",
       "expo-web-browser",
-      "expo-audio"
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Wander uses the microphone to record voice notes for your travel journal."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Wander accesses your photos so you can attach them to journal entries."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2563eb"
+        }
+      ]
     ]
   }
 }

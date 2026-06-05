@@ -52,6 +52,11 @@ public class Note
     /// <summary>For <see cref="NoteKind.PromptResponse"/> notes: the reflection prompt this answers.</summary>
     public Guid? PromptId { get; set; }
 
+    /// <summary>For <see cref="NoteKind.PromptResponse"/> notes: the prompt question text, persisted
+    /// with the answer so it survives prompt-library changes, custom-prompt deletion, and viewing on
+    /// another device (where <see cref="PromptId"/> alone can't be resolved).</summary>
+    public string? PromptText { get; set; }
+
     public List<MediaAsset> MediaAssets { get; set; } = [];
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
