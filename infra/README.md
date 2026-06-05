@@ -13,7 +13,7 @@ infra/
     monitoring.bicep         # Log Analytics + Application Insights
     postgres.bicep           # PostgreSQL Flexible Server + database + firewall
     redis.bicep              # Azure Managed Redis (optional per environment)
-    keyVault.bicep           # Key Vault + secrets (generated + provider-key placeholders)
+    keyVault.bicep           # Key Vault + secrets (generated + provider keys from secure params)
     keyVaultRoleAssignment.bicep  # grants the API identity "Key Vault Secrets User"
     appService.bicep         # Linux App Service plan + .NET 9 web app (KV-ref app settings)
     staticWebApp.bicep       # Azure Static Web Apps (Expo web target)
@@ -49,14 +49,22 @@ prefix `kv-wndr-‹env›-‹suffix›` to stay within the 24-character limit.
 - **Generated at deploy time** and written to Key Vault by `keyVault.bicep`:
   `ConnectionStrings--DefaultConnection` (Postgres), `Cache--RedisConnectionString` (Redis, only
   when `deployRedis = true`), `ApplicationInsights--ConnectionString`.
-- **Provider keys** are created as **empty placeholders** so the App Service Key Vault
-  references resolve. An empty value makes the API fall back to its Fake/no-key provider
-  seam (see `Program.cs`). Fill the real values out-of-band, e.g.:
+- **Provider keys** (Mapbox place search, Azure Maps routing) are written to Key Vault from
+  **secure deploy params** read from environment variables: `WANDER_MAPBOX_TOKEN` and
+  `WANDER_AZURE_MAPS_KEY`. When a variable is empty the secret stays empty and the API falls
+  back to its Fake/no-key provider seam (see `Program.cs`). Because the value comes from a
+  param, **deploys are deterministic and won't clobber a configured key** — set the env var and
+  redeploy:
 
   ```bash
-  az keyvault secret set --vault-name <kv-name> --name Places--MapboxAccessToken --value <token>
-  az keyvault secret set --vault-name <kv-name> --name Routing--AzureMapsKey      --value <key>
+  export WANDER_MAPBOX_TOKEN=<token>       # bash
+  $env:WANDER_MAPBOX_TOKEN = "<token>"     # PowerShell
+  az deployment sub create --location eastus2 \
+    --template-file infra/main.bicep --parameters infra/env/dev.bicepparam
   ```
+
+  > Do **not** set these via `az keyvault secret set` — the next Bicep deploy would overwrite
+  > them with the (possibly empty) param value. Drive them through the param/env var instead.
 
 - The **Postgres admin password** is supplied at deploy time from the `WANDER_PG_ADMIN_PASSWORD`
   environment variable (read by the `.bicepparam` files); it is never stored in the repo.
@@ -136,6 +144,8 @@ In the repo: **Settings → Environments → New environment → `dev`**, then a
 | `AZURE_TENANT_ID` | the tenant id printed above |
 | `AZURE_SUBSCRIPTION_ID` | the subscription id printed above |
 | `WANDER_PG_ADMIN_PASSWORD` | a strong Postgres admin password you choose |
+| `WANDER_MAPBOX_TOKEN` | Mapbox access token for place search (optional; empty => fake provider) |
+| `WANDER_AZURE_MAPS_KEY` | Azure Maps key for routing/travel times (optional; empty => fake provider) |
 | `AZURE_SWA_TOKEN_DEV` | the dev Static Web App deployment token (for the web deploy) |
 
 The `AZURE_SWA_TOKEN_DEV` value comes from the Static Web App created by the Bicep deploy

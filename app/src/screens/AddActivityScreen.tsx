@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus } from '../types';
-import { ItineraryItemInput } from '../api';
+import { ItineraryItemInput, searchPlaces } from '../api';
 import { PlaceSearchField, SelectedPlace } from '../PlaceSearchField';
 import { colors, radius, itemEmoji } from '../theme';
 import { dayLabel } from '../format';
@@ -69,11 +69,13 @@ export function AddActivityScreen({
   const [link, setLink] = useState(item?.bookingUrl ?? '');
   const [notes, setNotes] = useState(item?.notes ?? '');
   const [error, setError] = useState('');
+  const [resolving, setResolving] = useState(false);
 
   const scheduled = dayId != null;
   const canSave = title.trim().length > 0;
+  const busy = saving || resolving;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canSave) {
       setError('Add a title.');
       return;
@@ -82,16 +84,42 @@ export function AddActivityScreen({
       setError('End time must be after the start time.');
       return;
     }
+
+    // A place typed (or pasted) without choosing a suggestion has no coordinates, so it never
+    // lands on the map / gets per-item weather. Best-effort forward-geocode it on save so those
+    // items still get pinned. Falls back silently to saving without coordinates.
+    let resolvedAddress = address;
+    let resolvedPlaceId = placeId;
+    let resolvedLat = latitude;
+    let resolvedLng = longitude;
+    const placeName = place.trim();
+    if (placeName && resolvedLat == null) {
+      try {
+        setResolving(true);
+        const [top] = await searchPlaces(placeName, 1);
+        if (top?.latitude != null && top?.longitude != null) {
+          resolvedLat = top.latitude;
+          resolvedLng = top.longitude;
+          resolvedAddress = resolvedAddress ?? top.address ?? null;
+          resolvedPlaceId = resolvedPlaceId ?? top.placeId;
+        }
+      } catch {
+        // Geocoding unavailable — save the item as-is (no coordinates).
+      } finally {
+        setResolving(false);
+      }
+    }
+
     const input: ItineraryItemInput = {
       type,
       status,
       title: title.trim(),
       flightNumber: type === 'Flight' ? (flightNumber.trim().toUpperCase() || null) : null,
-      locationName: place.trim() || null,
-      address,
-      placeId,
-      latitude,
-      longitude,
+      locationName: placeName || null,
+      address: resolvedAddress,
+      placeId: resolvedPlaceId,
+      latitude: resolvedLat,
+      longitude: resolvedLng,
       // Times only make sense for a scheduled (dated) item.
       startTime: scheduled ? startTime : null,
       endTime: scheduled ? endTime : null,
@@ -111,8 +139,8 @@ export function AddActivityScreen({
           <Text style={{ fontSize: 16, color: colors.ink600 }}>✕</Text>
         </Pressable>
         <Text style={s.title}>{editing ? 'Edit item' : 'Add to itinerary'}</Text>
-        <Pressable onPress={handleSave} disabled={saving} style={[s.save, { opacity: canSave && !saving ? 1 : 0.5 }]} accessibilityLabel="Save item">
-          {saving ? <ActivityIndicator size="small" color={colors.brand} /> : <Text style={s.saveText}>Save</Text>}
+        <Pressable onPress={handleSave} disabled={busy} style={[s.save, { opacity: canSave && !busy ? 1 : 0.5 }]} accessibilityLabel="Save item">
+          {busy ? <ActivityIndicator size="small" color={colors.brand} /> : <Text style={s.saveText}>Save</Text>}
         </Pressable>
       </View>
 
@@ -180,6 +208,15 @@ export function AddActivityScreen({
               setLongitude(null);
             }}
           />
+          {latitude != null ? (
+            <Text style={s.placeHint}>
+              📍 Pinned to map{address ? ` · ${address}` : ''}
+            </Text>
+          ) : place.trim() ? (
+            <Text style={s.placeHintMuted}>
+              Pick a suggestion to pin this on the map (we'll also try to locate it on save).
+            </Text>
+          ) : null}
         </Field>
 
         <Field label={editing ? 'Day (change to move, or Ideas to unschedule)' : 'Day'}>
@@ -385,6 +422,8 @@ const s = StyleSheet.create({
   body: { paddingHorizontal: 16, paddingTop: 4 },
   label: { fontSize: 11, fontWeight: '700', color: colors.ink600, marginBottom: 5 },
   control: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, color: colors.ink },
+  placeHint: { fontSize: 11, color: colors.brand, marginTop: 5 },
+  placeHintMuted: { fontSize: 11, color: colors.ink400, marginTop: 5 },
   seg: { flexDirection: 'row', gap: 6 },
   opt: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: radius.sm, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
   optOn: { backgroundColor: colors.brand, borderColor: colors.brand },

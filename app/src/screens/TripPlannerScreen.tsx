@@ -466,6 +466,7 @@ function ItemRow({
           {item.locationName || item.cost != null || item.confirmationNo ? (
             <Text style={s.itemLoc}>
               {item.locationName ? `📍 ${item.locationName}` : ''}
+              {item.locationName && item.latitude == null ? '  ·  not on map' : ''}
               {item.cost != null ? `  ·  ${fmtMoney(item.cost, item.currency)}` : ''}
               {item.confirmationNo ? `  ·  #${item.confirmationNo}` : ''}
             </Text>

@@ -5,9 +5,9 @@
 //   az deployment sub create --location eastus2 \
 //     --template-file infra/main.bicep --parameters infra/env/dev.bicepparam
 //
-// No secrets are committed. Postgres admin password is supplied at deploy time
-// (the .bicepparam reads it from an environment variable). Provider keys are created
-// as EMPTY Key Vault placeholders and filled out-of-band — see infra/README.md.
+// No secrets are committed. Postgres admin password and provider keys (Mapbox, Azure Maps)
+// are supplied at deploy time as secure params (the .bicepparam reads them from environment
+// variables). An empty provider key keeps the API on its fake/no-key provider — see infra/README.md.
 
 targetScope = 'subscription'
 
@@ -40,6 +40,14 @@ param authAudience string
 
 @description('Extra CORS origins (e.g. localhost dev ports). Typically only set for the dev environment.')
 param extraCorsOrigins array = []
+
+@description('Mapbox access token for place search (supplied at deploy time from a CI/env secret). Empty => the API falls back to the fake place provider.')
+@secure()
+param mapboxAccessToken string = ''
+
+@description('Azure Maps key for routing/travel times (supplied at deploy time from a CI/env secret). Empty => the API falls back to the fake routing provider.')
+@secure()
+param azureMapsKey string = ''
 
 // --- SKUs (overridden per environment in the .bicepparam files) ---
 @description('App Service plan SKU.')
@@ -183,6 +191,8 @@ module keyVault 'modules/keyVault.bicep' = {
     deployRedisSecret: deployRedis
     redisConnectionString: redis.?outputs.connectionString ?? ''
     appInsightsConnectionString: monitoring.outputs.connectionString
+    mapboxAccessToken: mapboxAccessToken
+    azureMapsKey: azureMapsKey
   }
 }
 

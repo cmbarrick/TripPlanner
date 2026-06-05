@@ -65,3 +65,7 @@ desktop.ini
 # Project-specific scratch files
 # ---------------------------------------------------------------------------
 docs/_sicily_extracted.txt
+
+# Compiled Bicep output (build artifacts from `az bicep build` / `build-params`)
+infra/main.json
+infra/env/*.json

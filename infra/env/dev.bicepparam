@@ -6,6 +6,11 @@ param location = 'eastus2'
 // Supplied at deploy time from a CI secret; never committed.
 param postgresAdminPassword = readEnvironmentVariable('WANDER_PG_ADMIN_PASSWORD', '')
 
+// Provider keys, supplied at deploy time from env/CI secrets; never committed. When empty the
+// API falls back to its fake place/routing providers (so local-only deploys still work).
+param mapboxAccessToken = readEnvironmentVariable('WANDER_MAPBOX_TOKEN', '')
+param azureMapsKey = readEnvironmentVariable('WANDER_AZURE_MAPS_KEY', '')
+
 // Entra External ID values for the dev environment (non-secret).
 // Dev identity: app registration "Wander Dev" in the Pay-As-You-Go tenant (workforce sign-in
 // for testing). Swap to an Entra External ID tenant when moving to public/customer sign-up.

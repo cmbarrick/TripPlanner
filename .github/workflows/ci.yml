@@ -120,6 +120,8 @@ jobs:
         id: infra
         env:
           WANDER_PG_ADMIN_PASSWORD: ${{ secrets.WANDER_PG_ADMIN_PASSWORD }}
+          WANDER_MAPBOX_TOKEN: ${{ secrets.WANDER_MAPBOX_TOKEN }}
+          WANDER_AZURE_MAPS_KEY: ${{ secrets.WANDER_AZURE_MAPS_KEY }}
         run: |
           outputs=$(az deployment sub create \
             --location "$AZURE_LOCATION" \
