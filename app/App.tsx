@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, Platform, SafeAreaView } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
@@ -12,6 +12,7 @@ import { AddActivityScreen } from './src/screens/AddActivityScreen';
 import { CalendarScreen } from './src/screens/CalendarScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { PlaceholderScreen } from './src/screens/PlaceholderScreen';
+import { SignInScreen, AuthSplash } from './src/screens/SignInScreen';
 import {
   useTripsQuery,
   useCreateTripMutation,
@@ -51,6 +52,47 @@ export default function App() {
 
 function AppShell() {
   const authSession = useAuthSession();
+  const [guest, setGuest] = useState(false);
+
+  // While restoring a persisted session, show a branded splash rather than flashing demo data.
+  if (authSession.loading) {
+    return (
+      <View style={styles.page}>
+        <View style={styles.phone}>
+          <SafeAreaView style={styles.safe}>
+            <StatusBar style="dark" />
+            <AuthSplash />
+          </SafeAreaView>
+        </View>
+      </View>
+    );
+  }
+
+  // When sign-in is available but the traveler isn't signed in, gate on a login splash instead of
+  // loading the app with demo data. Only gates when Entra is configured (otherwise there's no way to
+  // sign in — e.g. local dev — so we keep the demo experience).
+  if (authSession.entraConfigured && !authSession.auth.isAuthenticated && !guest) {
+    return (
+      <View style={styles.page}>
+        <View style={styles.phone}>
+          <SafeAreaView style={styles.safe}>
+            <StatusBar style="dark" />
+            <SignInScreen
+              busy={authSession.busy}
+              error={authSession.error}
+              onSignIn={authSession.signIn}
+              onContinueAsGuest={() => setGuest(true)}
+            />
+          </SafeAreaView>
+        </View>
+      </View>
+    );
+  }
+
+  return <AuthedApp authSession={authSession} />;
+}
+
+function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSession> }) {
   const {
     tab,
     tripView,
@@ -267,15 +309,10 @@ function AppShell() {
   }
 
   return (
-    <View style={styles.page}>
-      <View style={styles.phone}>
-        <SafeAreaView style={styles.safe}>
-          <StatusBar style="dark" />
-          <View style={styles.screen}>{content}</View>
-          <TabBar active={tab} onChange={(k: TabKey) => setTab(k)} />
-        </SafeAreaView>
-      </View>
-    </View>
+    <>
+      <View style={styles.screen}>{content}</View>
+      <TabBar active={tab} onChange={(k: TabKey) => setTab(k)} />
+    </>
   );
 }
 
