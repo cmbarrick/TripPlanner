@@ -142,10 +142,10 @@ public class PlacesControllerTests
 
     private sealed class ThrowingPlaceProvider : IPlaceProvider
     {
-        public Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string q, int limit, CancellationToken ct) =>
+        public Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string q, int limit, PlaceSearchOptions options, CancellationToken ct) =>
             throw new HttpRequestException("simulated network failure");
 
-        public Task<PlaceDetails?> GetDetailsAsync(string id, CancellationToken ct) =>
+        public Task<PlaceDetails?> GetDetailsAsync(string id, string? sessionToken, CancellationToken ct) =>
             throw new HttpRequestException("simulated network failure");
     }
 
@@ -154,16 +154,16 @@ public class PlacesControllerTests
         public int SearchCallCount { get; private set; }
         public int DetailCallCount { get; private set; }
 
-        public async Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string q, int limit, CancellationToken ct)
+        public async Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string q, int limit, PlaceSearchOptions options, CancellationToken ct)
         {
             SearchCallCount++;
-            return await inner.SearchAsync(q, limit, ct);
+            return await inner.SearchAsync(q, limit, options, ct);
         }
 
-        public async Task<PlaceDetails?> GetDetailsAsync(string id, CancellationToken ct)
+        public async Task<PlaceDetails?> GetDetailsAsync(string id, string? sessionToken, CancellationToken ct)
         {
             DetailCallCount++;
-            return await inner.GetDetailsAsync(id, ct);
+            return await inner.GetDetailsAsync(id, sessionToken, ct);
         }
     }
 }

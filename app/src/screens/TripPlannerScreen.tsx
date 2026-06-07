@@ -14,6 +14,7 @@ import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
 import { ReflectFlow } from '../prompts/ReflectFlow';
 import { usePromptSettings } from '../prompts/store';
+import { useNotificationSettings } from '../notifications/settings';
 import { estimate, buildDirectionsUrl, buildRouteUrl, flightAwareUrl, flightRadar24Url } from '../routing';
 import { exportIcs } from '../ics';
 import { addTripToCalendar } from '../calendar';
@@ -646,6 +647,11 @@ function JournalPanel({
   const deleteNote = useDeleteNoteMutation(trip.id);
   const updateNote = useUpdateNoteMutation(trip.id);
   const { settings, enabledForTrip, setTripEnabled, setEnabledGlobal } = usePromptSettings();
+  const {
+    settings: notifSettings,
+    enabledForTrip: notifEnabledForTrip,
+    setTripEnabled: setTripNotifEnabled,
+  } = useNotificationSettings();
   const [draft, setDraft] = useState('');
   const [target, setTarget] = useState<'trip' | 'day'>('trip');
 
@@ -655,6 +661,11 @@ function JournalPanel({
     if (!settings.enabledGlobal && !promptsOn) setEnabledGlobal(true);
     setTripEnabled(trip.id, !promptsOn);
   };
+
+  // Per-trip reminder opt-out. Only meaningful when reminders are enabled globally (which requires
+  // OS permission, granted from Profile); here we only let the user silence this trip.
+  const notifsOn = notifEnabledForTrip(trip.id);
+  const toggleTripNotifs = () => setTripNotifEnabled(trip.id, !notifsOn);
 
   const selectedDay = trip.days.find((d) => d.id === selectedDayId) ?? trip.days[0];
   const scope: NoteScope = target === 'day' && selectedDay ? 'Day' : 'Trip';
@@ -694,6 +705,12 @@ function JournalPanel({
       <Pressable style={s.promptToggle} onPress={toggleTripPrompts} accessibilityLabel="Toggle reflection prompts for this trip">
         <Text style={s.promptToggleText}>💭 Reflection prompts: {promptsOn ? 'On' : 'Off'}</Text>
       </Pressable>
+
+      {notifSettings.enabled ? (
+        <Pressable style={s.promptToggle} onPress={toggleTripNotifs} accessibilityLabel="Toggle post-event reminders for this trip">
+          <Text style={s.promptToggleText}>🔔 Post-event reminders: {notifsOn ? 'On' : 'Off'}</Text>
+        </Pressable>
+      ) : null}
 
       <View style={s.journalScopeRow}>
         <Pressable

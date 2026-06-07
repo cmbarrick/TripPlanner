@@ -184,12 +184,25 @@ jobs:
         run: cd publish && zip -r ../api.zip . && cd ..
 
       - name: Deploy API to App Service
+        # The infra step above can restart the app + recycle Kudu when app settings change,
+        # which makes the SCM endpoint briefly return transient 502/504s on the B1 plan.
+        # Retry a few times (with a warm-up wait) so a transient blip doesn't fail the whole
+        # pipeline — and, critically, doesn't block the dependent web deploy.
         run: |
-          az webapp deploy \
-            --resource-group "$RG_NAME" \
-            --name "$APP_NAME" \
-            --src-path api.zip \
-            --type zip
+          for attempt in 1 2 3; do
+            echo "Deploy attempt $attempt..."
+            if az webapp deploy \
+                --resource-group "$RG_NAME" \
+                --name "$APP_NAME" \
+                --src-path api.zip \
+                --type zip; then
+              echo "Deploy succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Deploy attempt $attempt failed; warming up and retrying..."
+            sleep 30
+          done
+          echo "Deploy failed after 3 attempts"; exit 1
 
       - name: Smoke test /health
         run: |

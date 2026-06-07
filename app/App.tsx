@@ -36,6 +36,7 @@ import { useUiStore } from './src/store/uiStore';
 import { initClientObservability } from './src/observability';
 import { useAuthSession } from './src/auth/useAuthSession';
 import { useNotificationSync } from './src/notifications/useNotificationSync';
+import { useOutboxSync } from './src/sync/useOutboxSync';
 
 const queryClient = new QueryClient();
 initClientObservability();
@@ -118,6 +119,7 @@ function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSess
   const tripsQuery = useTripsQuery();
   const trips = tripsQuery.data?.data ?? [];
   useNotificationSync(trips);
+  useOutboxSync();
   const live = tripsQuery.data?.live ?? false;
   const loading = tripsQuery.isLoading;
   const isError = tripsQuery.isError;

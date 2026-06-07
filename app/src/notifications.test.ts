@@ -86,6 +86,13 @@ describe('computeEventNotifications', () => {
     expect(computeEventNotifications([t], enabled({ enabled: false }), now)).toEqual([]);
   });
 
+  it('skips a trip that is opted out per-trip', () => {
+    const t = trip('2030-06-01', [item({ id: 'a', type: 'Food', endTime: '14:00:00' })]);
+    expect(computeEventNotifications([t], enabled({ disabledTripIds: ['t1'] }), now)).toEqual([]);
+    // ...but still schedules when a different trip is the one opted out.
+    expect(computeEventNotifications([t], enabled({ disabledTripIds: ['other'] }), now)).toHaveLength(1);
+  });
+
   it('schedules end-time + delay for matching event types', () => {
     const t = trip('2030-06-01', [item({ id: 'a', type: 'Food', title: 'Lunch', endTime: '14:00:00' })]);
     const out = computeEventNotifications([t], enabled({ delayMinutes: 15 }), now);

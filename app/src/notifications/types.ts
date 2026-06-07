@@ -13,6 +13,8 @@ export interface NotificationSettings {
    *  Set start === end to disable quiet hours. */
   quietStartHour: number;
   quietEndHour: number;
+  /** Trips where nudges are explicitly turned off (overrides the global on). */
+  disabledTripIds: string[];
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -21,6 +23,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   eventTypes: ['Food', 'Activity'],
   quietStartHour: 22,
   quietEndHour: 8,
+  disabledTripIds: [],
 };
 
 /** A computed, ready-to-schedule local notification for an itinerary event. */

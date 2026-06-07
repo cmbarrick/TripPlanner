@@ -24,6 +24,10 @@ public class NotesController : ControllerBase
     /// <summary>Cap on uploaded photo size (~25 MB) — well above a phone JPEG.</summary>
     public const long MaxImageBytes = 25L * 1024 * 1024;
 
+    /// <summary>How long an issued media SAS URL stays valid. Long enough to play/scrub a memo, short
+    /// enough that a leaked URL expires quickly.</summary>
+    private static readonly TimeSpan SasLifetime = TimeSpan.FromMinutes(30);
+
     private readonly INoteRepository _notes;
     private readonly IBlobStore _blobs;
     private readonly ITranscriptionQueue _queue;
@@ -205,6 +209,30 @@ public class NotesController : ControllerBase
         return File(stream, asset.ContentType ?? "application/octet-stream", enableRangeProcessing: true);
     }
 
+    /// <summary>
+    /// Resolves a short-lived signed URL for a media asset so clients can fetch it directly from
+    /// storage (offloading bandwidth from the API). Returns 200 with the URL when the store can
+    /// sign one; 204 No Content when it can't (local dev / non-signing credential), signalling the
+    /// client to fall back to the authenticated streaming endpoint above.
+    /// </summary>
+    [HttpGet("trips/{tripId:guid}/notes/media/{mediaAssetId:guid}/sas")]
+    public async Task<IActionResult> GetMediaSas(Guid tripId, Guid mediaAssetId, CancellationToken ct)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        var asset = _notes.GetMediaAsset(mediaAssetId);
+        if (asset is null || asset.OwnerId != ownerId)
+            return NotFound();
+
+        var uri = await _blobs.TryGetReadSasUriAsync(asset.BlobName, SasLifetime, ct);
+        if (uri is null)
+            return NoContent();
+
+        return Ok(new MediaSasResponse(uri.ToString(), DateTimeOffset.UtcNow.Add(SasLifetime)));
+    }
+
     [HttpPut("notes/{noteId:guid}")]
     public ActionResult<Note> Update(Guid noteId, [FromBody] UpdateNoteRequest request)
     {
@@ -248,6 +276,9 @@ public record CreateNoteRequest(
     string? PromptText = null);
 
 public record UpdateNoteRequest(string? BodyText);
+
+/// <summary>A signed, time-limited direct URL for a media asset.</summary>
+public record MediaSasResponse(string Url, DateTimeOffset ExpiresAt);
 
 public class CreateVoiceNoteRequest
 {

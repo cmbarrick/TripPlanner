@@ -22,7 +22,12 @@ function ensureLoaded() {
   if (loaded || loading) return;
   loading = readJson<NotificationSettings>(STORAGE_KEY, DEFAULT_NOTIFICATION_SETTINGS).then((s) => {
     // Merge over defaults so older persisted shapes pick up newly-added fields.
-    state = { ...DEFAULT_NOTIFICATION_SETTINGS, ...s, eventTypes: s.eventTypes ?? DEFAULT_NOTIFICATION_SETTINGS.eventTypes };
+    state = {
+      ...DEFAULT_NOTIFICATION_SETTINGS,
+      ...s,
+      eventTypes: s.eventTypes ?? DEFAULT_NOTIFICATION_SETTINGS.eventTypes,
+      disabledTripIds: s.disabledTripIds ?? DEFAULT_NOTIFICATION_SETTINGS.disabledTripIds,
+    };
     loaded = true;
     loading = null;
     emit();
@@ -67,15 +72,32 @@ export const notificationStore = {
   setQuietHours(quietStartHour: number, quietEndHour: number) {
     return update((s) => ({ ...s, quietStartHour, quietEndHour }));
   },
+  setTripEnabled(tripId: string, enabled: boolean) {
+    return update((s) => ({
+      ...s,
+      disabledTripIds: enabled
+        ? s.disabledTripIds.filter((id) => id !== tripId)
+        : s.disabledTripIds.includes(tripId)
+          ? s.disabledTripIds
+          : [...s.disabledTripIds, tripId],
+    }));
+  },
 };
+
+/** Whether post-event nudges are active for a given trip (global on, not turned off for the trip). */
+export function notificationsEnabledForTrip(settings: NotificationSettings, tripId: string): boolean {
+  return settings.enabled && !settings.disabledTripIds.includes(tripId);
+}
 
 export interface UseNotificationSettings {
   settings: NotificationSettings;
   ready: boolean;
+  enabledForTrip: (tripId: string) => boolean;
   setEnabled: (enabled: boolean) => Promise<void>;
   setDelayMinutes: (delayMinutes: number) => Promise<void>;
   toggleEventType: (type: ItineraryItemType) => Promise<void>;
   setQuietHours: (start: number, end: number) => Promise<void>;
+  setTripEnabled: (tripId: string, enabled: boolean) => Promise<void>;
 }
 
 export function useNotificationSettings(): UseNotificationSettings {
@@ -83,9 +105,11 @@ export function useNotificationSettings(): UseNotificationSettings {
   return {
     settings,
     ready: loaded,
+    enabledForTrip: (tripId: string) => notificationsEnabledForTrip(settings, tripId),
     setEnabled: notificationStore.setEnabled,
     setDelayMinutes: notificationStore.setDelayMinutes,
     toggleEventType: notificationStore.toggleEventType,
     setQuietHours: notificationStore.setQuietHours,
+    setTripEnabled: notificationStore.setTripEnabled,
   };
 }

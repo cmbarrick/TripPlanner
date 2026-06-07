@@ -1,5 +1,6 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
 
 namespace Wander.Api.Media;
 
@@ -29,5 +30,24 @@ public sealed class AzureBlobStore : IBlobStore
     {
         var blob = _container.GetBlobClient(blobName);
         return await blob.OpenReadAsync(position: 0, cancellationToken: ct);
+    }
+
+    public Task<Uri?> TryGetReadSasUriAsync(string blobName, TimeSpan validFor, CancellationToken ct)
+    {
+        var blob = _container.GetBlobClient(blobName);
+        // Only possible when the client carries a shared key (connection string with AccountKey).
+        // Managed-identity / SAS-based credentials can't sign here, so we fall back to streaming.
+        if (!blob.CanGenerateSasUri)
+            return Task.FromResult<Uri?>(null);
+
+        var builder = new BlobSasBuilder(BlobSasPermissions.Read, DateTimeOffset.UtcNow.Add(validFor))
+        {
+            BlobContainerName = blob.BlobContainerName,
+            BlobName = blob.Name,
+            Resource = "b",
+        };
+        // Small clock-skew cushion so a freshly minted SAS isn't rejected as not-yet-valid.
+        builder.StartsOn = DateTimeOffset.UtcNow.AddMinutes(-5);
+        return Task.FromResult<Uri?>(blob.GenerateSasUri(builder));
     }
 }

@@ -19,7 +19,7 @@ public class FakePlaceProvider : IPlaceProvider
         new("fake_alhambra",         "Alhambra Palace",         "Calle Real de la Alhambra, Granada, Spain", 37.176100, -3.588200),
     ];
 
-    public Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string query, int limit, CancellationToken ct)
+    public Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string query, int limit, PlaceSearchOptions options, CancellationToken ct)
     {
         var q = query.Trim();
         var results = Catalog
@@ -33,7 +33,7 @@ public class FakePlaceProvider : IPlaceProvider
         return Task.FromResult<IReadOnlyList<PlaceCandidate>>(results);
     }
 
-    public Task<PlaceDetails?> GetDetailsAsync(string placeId, CancellationToken ct)
+    public Task<PlaceDetails?> GetDetailsAsync(string placeId, string? sessionToken, CancellationToken ct)
     {
         var detail = Catalog.FirstOrDefault(p => p.PlaceId == placeId);
         return Task.FromResult(detail);

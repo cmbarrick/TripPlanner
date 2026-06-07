@@ -37,4 +37,8 @@ public sealed class LocalBlobStore : IBlobStore
         Stream stream = File.OpenRead(path);
         return Task.FromResult(stream);
     }
+
+    /// <summary>The local store has no signed-URL concept; callers fall back to API streaming.</summary>
+    public Task<Uri?> TryGetReadSasUriAsync(string blobName, TimeSpan validFor, CancellationToken ct) =>
+        Task.FromResult<Uri?>(null);
 }

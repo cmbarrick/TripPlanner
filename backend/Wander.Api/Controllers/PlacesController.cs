@@ -19,17 +19,21 @@ public class PlacesController(IPlaceProvider places) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<AutocompleteResult>>> Autocomplete(
         [FromQuery] string q,
         [FromQuery] int limit = 5,
+        [FromQuery] string? session = null,
+        [FromQuery] double? proximityLat = null,
+        [FromQuery] double? proximityLng = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(q))
             return BadRequest("q is required.");
 
         limit = Math.Clamp(limit, 1, MaxResults);
+        var options = new PlaceSearchOptions(session, proximityLng, proximityLat);
 
         IReadOnlyList<PlaceCandidate> candidates;
         try
         {
-            candidates = await places.SearchAsync(q.Trim(), limit, ct);
+            candidates = await places.SearchAsync(q.Trim(), limit, options, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -44,7 +48,10 @@ public class PlacesController(IPlaceProvider places) : ControllerBase
     /// Returns full structured details for a place. The provider key never appears in the response.
     /// </summary>
     [HttpGet("{id}")]
-    public async Task<ActionResult<PlaceDetailsResult>> Details(string id, CancellationToken ct = default)
+    public async Task<ActionResult<PlaceDetailsResult>> Details(
+        string id,
+        [FromQuery] string? session = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(id))
             return BadRequest("id is required.");
@@ -52,7 +59,7 @@ public class PlacesController(IPlaceProvider places) : ControllerBase
         PlaceDetails? detail;
         try
         {
-            detail = await places.GetDetailsAsync(id, ct);
+            detail = await places.GetDetailsAsync(id, session, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

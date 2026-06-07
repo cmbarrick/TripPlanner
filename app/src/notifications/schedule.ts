@@ -61,6 +61,8 @@ export function computeEventNotifications(
 
   const out: ScheduledPromptNotification[] = [];
   for (const trip of trips) {
+    // Per-trip opt-out (overrides the global on).
+    if (settings.disabledTripIds?.includes(trip.id)) continue;
     for (const day of trip.days ?? []) {
       for (const item of day.items ?? []) {
         if (!settings.eventTypes.includes(item.type)) continue;

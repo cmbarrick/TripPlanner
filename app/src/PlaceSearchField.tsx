@@ -7,8 +7,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { PlaceCandidate, searchPlaces } from './api';
+import { PlaceCandidate, searchPlaces, getPlaceDetails } from './api';
 import { colors, radius } from './theme';
+
+/** RFC4122-ish session token for Search Box (groups suggest + retrieve into one billed session). */
+function newSessionToken(): string {
+  const c = (globalThis as any).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 export interface SelectedPlace {
   name: string;
@@ -25,6 +35,8 @@ interface Props {
   onClear: () => void;
   placeholder?: string;
   accessibilityLabel?: string;
+  /** Bias suggestions toward this point (e.g. the trip area) for better local relevance. */
+  proximity?: { lat: number; lng: number } | null;
 }
 
 const DEBOUNCE_MS = 300;
@@ -36,13 +48,17 @@ export function PlaceSearchField({
   onClear,
   placeholder = '📍 Search a place',
   accessibilityLabel = 'Place search',
+  proximity = null,
 }: Props) {
   const [results, setResults] = useState<PlaceCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestQuery = useRef('');
+  // One session token spans a series of suggest calls + the retrieve on select; rotate after each pick.
+  const sessionRef = useRef<string>(newSessionToken());
 
   const runSearch = useCallback(async (q: string) => {
     latestQuery.current = q;
@@ -55,7 +71,11 @@ export function PlaceSearchField({
     setLoading(true);
     setError(null);
     try {
-      const candidates = await searchPlaces(q);
+      const candidates = await searchPlaces(q, 6, {
+        sessionToken: sessionRef.current,
+        proximityLat: proximity?.lat ?? null,
+        proximityLng: proximity?.lng ?? null,
+      });
       if (latestQuery.current !== q) return; // stale result
       setResults(candidates);
       setOpen(true);
@@ -65,7 +85,7 @@ export function PlaceSearchField({
     } finally {
       if (latestQuery.current === q) setLoading(false);
     }
-  }, []);
+  }, [proximity?.lat, proximity?.lng]);
 
   const handleChange = (text: string) => {
     onChange(text);
@@ -81,16 +101,35 @@ export function PlaceSearchField({
     debounceRef.current = setTimeout(() => runSearch(text), DEBOUNCE_MS);
   };
 
-  const handleSelect = (candidate: PlaceCandidate) => {
+  const handleSelect = async (candidate: PlaceCandidate) => {
     onChange(candidate.name);
+    // Suggestions carry no coordinates — resolve them via retrieve (same session) before committing.
+    let latitude = candidate.latitude ?? null;
+    let longitude = candidate.longitude ?? null;
+    let address = candidate.address ?? null;
+    if (latitude == null || longitude == null) {
+      setResolvingId(candidate.placeId);
+      try {
+        const detail = await getPlaceDetails(candidate.placeId, sessionRef.current);
+        if (detail) {
+          latitude = detail.latitude;
+          longitude = detail.longitude;
+          address = address ?? detail.address ?? null;
+        }
+      } finally {
+        setResolvingId(null);
+      }
+    }
     setOpen(false);
     setResults([]);
+    // A pick ends the Search Box session — start a fresh one for the next search.
+    sessionRef.current = newSessionToken();
     onSelectPlace({
       name: candidate.name,
-      address: candidate.address,
+      address,
       placeId: candidate.placeId,
-      latitude: candidate.latitude,
-      longitude: candidate.longitude,
+      latitude,
+      longitude,
     });
   };
 
@@ -107,7 +146,7 @@ export function PlaceSearchField({
   );
 
   return (
-    <View>
+    <View style={open ? s.rootOpen : undefined}>
       <View style={s.inputRow}>
         <TextInput
           style={s.input}
@@ -142,11 +181,17 @@ export function PlaceSearchField({
               key={c.placeId}
               style={s.resultRow}
               onPress={() => handleSelect(c)}
+              disabled={resolvingId !== null}
               accessibilityLabel={`Select ${c.name}`}
             >
-              <Text style={s.resultName} numberOfLines={1}>{c.name}</Text>
-              {c.address ? (
-                <Text style={s.resultAddr} numberOfLines={1}>{c.address}</Text>
+              <View style={s.resultTextWrap}>
+                <Text style={s.resultName} numberOfLines={1}>{c.name}</Text>
+                {c.address ? (
+                  <Text style={s.resultAddr} numberOfLines={1}>{c.address}</Text>
+                ) : null}
+              </View>
+              {resolvingId === c.placeId ? (
+                <ActivityIndicator size="small" color={colors.brand} />
               ) : null}
             </Pressable>
           ))}
@@ -161,6 +206,9 @@ export function PlaceSearchField({
 }
 
 const s = StyleSheet.create({
+  // While the dropdown is open, raise the whole field above following siblings (e.g. the
+  // "pin this on the map" hint) so the absolutely-positioned results aren't painted under them.
+  rootOpen: { position: 'relative', zIndex: 1000, elevation: 1000 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -199,11 +247,15 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
+  resultTextWrap: { flex: 1 },
   resultName: { fontSize: 13, fontWeight: '600', color: colors.ink },
   resultAddr: { fontSize: 11, color: colors.ink400, marginTop: 2 },
   noResults: { paddingHorizontal: 12, paddingVertical: 10, fontSize: 12, color: colors.ink400 },

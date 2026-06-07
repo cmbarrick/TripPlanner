@@ -17,15 +17,20 @@ public class CachingPlaceProvider(IPlaceProvider inner, IDistributedCache cache)
     public static readonly TimeSpan AutocompleteTtl = TimeSpan.FromMinutes(5);
     public static readonly TimeSpan DetailsTtl = TimeSpan.FromHours(24);
 
-    public async Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string query, int limit, CancellationToken ct)
+    public async Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string query, int limit, PlaceSearchOptions options, CancellationToken ct)
     {
-        var key = $"places:ac:{limit}:{query.Trim().ToLowerInvariant()}";
+        // Suggestions vary by query, limit, and proximity bias — but NOT by session token (that only
+        // affects billing, not results), so the key excludes it to keep cache hits across sessions.
+        var prox = options is { ProximityLng: not null, ProximityLat: not null }
+            ? $"{options.ProximityLng.Value:F2},{options.ProximityLat.Value:F2}"
+            : "-";
+        var key = $"places:ac:{limit}:{prox}:{query.Trim().ToLowerInvariant()}";
 
         var cached = await cache.GetStringAsync(key, ct);
         if (cached is not null)
             return JsonSerializer.Deserialize<IReadOnlyList<PlaceCandidate>>(cached) ?? [];
 
-        var result = await inner.SearchAsync(query, limit, ct);
+        var result = await inner.SearchAsync(query, limit, options, ct);
         await cache.SetStringAsync(
             key,
             JsonSerializer.Serialize(result),
@@ -34,7 +39,7 @@ public class CachingPlaceProvider(IPlaceProvider inner, IDistributedCache cache)
         return result;
     }
 
-    public async Task<PlaceDetails?> GetDetailsAsync(string placeId, CancellationToken ct)
+    public async Task<PlaceDetails?> GetDetailsAsync(string placeId, string? sessionToken, CancellationToken ct)
     {
         var key = $"places:detail:{placeId}";
 
@@ -44,7 +49,7 @@ public class CachingPlaceProvider(IPlaceProvider inner, IDistributedCache cache)
         if (cached is not null)
             return JsonSerializer.Deserialize<PlaceDetails?>(cached);
 
-        var result = await inner.GetDetailsAsync(placeId, ct);
+        var result = await inner.GetDetailsAsync(placeId, sessionToken, ct);
         await cache.SetStringAsync(
             key,
             JsonSerializer.Serialize(result),

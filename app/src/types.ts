@@ -91,6 +91,8 @@ export interface Note {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
+  /** Client-only: set on optimistic notes that are queued in the offline outbox and not yet synced. */
+  pendingSync?: boolean;
 }
 
 export interface Trip {

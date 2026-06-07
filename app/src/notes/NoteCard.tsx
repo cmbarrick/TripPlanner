@@ -87,7 +87,10 @@ export function NoteCard({
           </View>
         ))}
         {audio ? <Transcript media={audio} /> : null}
-        <Text style={st.meta}>{formatNoteTime(note.createdAt)}</Text>
+        <Text style={st.meta}>
+          {formatNoteTime(note.createdAt)}
+          {note.pendingSync ? '  ·  ⏳ Saved offline — will sync' : ''}
+        </Text>
       </View>
       {editing ? null : (
         <View style={st.actions}>

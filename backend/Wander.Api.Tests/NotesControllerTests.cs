@@ -189,6 +189,50 @@ public class NotesControllerTests
         Assert.IsType<NotFoundResult>(result);
     }
 
+    // ── Media SAS (direct download) ───────────────────────────────────────────
+
+    [Fact]
+    public async Task GetMediaSas_WhenStoreCanSign_ReturnsSignedUrl()
+    {
+        var (ctrl, _, trip) = BuildWithBlobs(out var blobs);
+        blobs.SasBaseUrl = "https://store.example/container";
+        var voice = await ctrl.CreateVoiceNote(
+            trip.Id, new CreateVoiceNoteRequest { Scope = NoteScope.Trip, Audio = FakeAudioFile() }, CancellationToken.None);
+        var note = (Note)((OkObjectResult)voice.Result!).Value!;
+
+        var result = await ctrl.GetMediaSas(trip.Id, note.MediaAssets[0].Id, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var body = Assert.IsType<MediaSasResponse>(ok.Value);
+        Assert.Contains("sig=fake", body.Url);
+        Assert.True(body.ExpiresAt > DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public async Task GetMediaSas_WhenStoreCannotSign_ReturnsNoContent()
+    {
+        var (ctrl, _, trip) = BuildWithBlobs(out _); // SasBaseUrl null → no SAS
+        var voice = await ctrl.CreateVoiceNote(
+            trip.Id, new CreateVoiceNoteRequest { Scope = NoteScope.Trip, Audio = FakeAudioFile() }, CancellationToken.None);
+        var note = (Note)((OkObjectResult)voice.Result!).Value!;
+
+        var result = await ctrl.GetMediaSas(trip.Id, note.MediaAssets[0].Id, CancellationToken.None);
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task GetMediaSas_OtherUser_ReturnsNotFound()
+    {
+        var (ctrl, _, trip) = BuildWithBlobs(out var blobs);
+        blobs.SasBaseUrl = "https://store.example/container";
+        var voice = await ctrl.CreateVoiceNote(
+            trip.Id, new CreateVoiceNoteRequest { Scope = NoteScope.Trip, Audio = FakeAudioFile() }, CancellationToken.None);
+        var note = (Note)((OkObjectResult)voice.Result!).Value!;
+
+        ctrl.ControllerContext = FakeAuth.ForUser(OtherUserId);
+        var result = await ctrl.GetMediaSas(trip.Id, note.MediaAssets[0].Id, CancellationToken.None);
+        Assert.IsType<NotFoundResult>(result);
+    }
+
     // ── Photo notes ───────────────────────────────────────────────────────────
 
     [Fact]
@@ -278,6 +322,18 @@ public class NotesControllerTests
     private static (NotesController ctrl, WanderDbContext ctx, Trip trip) Build() =>
         Build(out _);
 
+    private static (NotesController ctrl, WanderDbContext ctx, Trip trip) BuildWithBlobs(out FakeBlobStore blobs)
+    {
+        var ctx = NewContext();
+        var trip = SeedTrip(ctx);
+        blobs = new FakeBlobStore();
+        var ctrl = new NotesController(new EfCoreNoteRepository(ctx), blobs, new FakeTranscriptionQueue())
+        {
+            ControllerContext = FakeAuth.ForUser(OwnerId),
+        };
+        return (ctrl, ctx, trip);
+    }
+
     private static (NotesController ctrl, WanderDbContext ctx, Trip trip) Build(out FakeTranscriptionQueue queue)
     {
         var ctx = NewContext();
@@ -363,6 +419,10 @@ public class NotesControllerTests
     {
         public Dictionary<string, byte[]> Blobs { get; } = [];
 
+        /// <summary>When set, <see cref="TryGetReadSasUriAsync"/> returns a SAS-style URL built from
+        /// this base; when null it returns null (the streaming-fallback path).</summary>
+        public string? SasBaseUrl { get; set; }
+
         public async Task<BlobResult> SaveAsync(string blobName, Stream content, string contentType, CancellationToken ct)
         {
             using var ms = new MemoryStream();
@@ -377,6 +437,9 @@ public class NotesControllerTests
                 throw new FileNotFoundException("Media blob not found.", blobName);
             return Task.FromResult<Stream>(new MemoryStream(bytes));
         }
+
+        public Task<Uri?> TryGetReadSasUriAsync(string blobName, TimeSpan validFor, CancellationToken ct) =>
+            Task.FromResult(SasBaseUrl is null ? null : new Uri($"{SasBaseUrl}/{blobName}?sig=fake"));
     }
 
     private sealed class FakeTranscriptionQueue : ITranscriptionQueue

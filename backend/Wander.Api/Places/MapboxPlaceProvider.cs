@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -6,13 +7,19 @@ using Microsoft.Extensions.Configuration;
 namespace Wander.Api.Places;
 
 /// <summary>
-/// Calls the Mapbox Geocoding API v6. Reads the access token from
+/// Calls the Mapbox Search Box API. Autocomplete uses interactive <c>suggest</c> (best POI recall —
+/// hotels, restaurants, attractions — with optional proximity bias toward the trip area); the chosen
+/// suggestion is resolved to coordinates with <c>retrieve</c>. Suggest + retrieve share a session
+/// token so they bill as one Search Box session. Reads the access token from
 /// <c>Places:MapboxAccessToken</c> in configuration (env var / user-secrets / Key Vault).
 /// Never surfaces the token to clients — it stays server-side.
 /// </summary>
 public class MapboxPlaceProvider : IPlaceProvider
 {
-    private const string BaseUrl = "https://api.mapbox.com/search/geocode/v6";
+    private const string BaseUrl = "https://api.mapbox.com/search/searchbox/v1";
+
+    // Feature types relevant to a trip stop. Search Box (unlike Geocoding v6) supports "poi".
+    private const string Types = "poi,address,street,place,locality,neighborhood";
 
     private readonly HttpClient _http;
     private readonly string _token;
@@ -24,28 +31,38 @@ public class MapboxPlaceProvider : IPlaceProvider
             ?? throw new InvalidOperationException("Places:MapboxAccessToken must be configured.");
     }
 
-    public async Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string query, int limit, CancellationToken ct)
+    public async Task<IReadOnlyList<PlaceCandidate>> SearchAsync(string query, int limit, PlaceSearchOptions options, CancellationToken ct)
     {
-        var url = $"{BaseUrl}/forward?q={Uri.EscapeDataString(query)}&limit={limit}&types=poi,address,place&access_token={_token}";
-        var root = await _http.GetFromJsonAsync<MapboxForwardResponse>(url, ct);
-        if (root?.Features is null)
+        // "suggest" is the interactive autocomplete: it returns ranked suggestions (incl. POIs) but
+        // NOT coordinates — those come from a follow-up retrieve(placeId) using the same session.
+        var session = string.IsNullOrWhiteSpace(options.SessionToken) ? Guid.NewGuid().ToString() : options.SessionToken!;
+        var url = $"{BaseUrl}/suggest?q={Uri.EscapeDataString(query)}&limit={limit}&types={Types}&session_token={Uri.EscapeDataString(session)}&access_token={_token}";
+        if (options is { ProximityLng: not null, ProximityLat: not null })
+            url += $"&proximity={options.ProximityLng.Value.ToString(CultureInfo.InvariantCulture)},{options.ProximityLat.Value.ToString(CultureInfo.InvariantCulture)}";
+
+        var root = await _http.GetFromJsonAsync<MapboxSuggestResponse>(url, ct);
+        if (root?.Suggestions is null)
             return [];
 
-        return root.Features
-            .Select(f => new PlaceCandidate(
-                PlaceId: f.Properties?.MapboxId ?? f.Id ?? string.Empty,
-                Name: f.Properties?.Name ?? string.Empty,
-                Address: f.Properties?.FullAddress ?? f.Properties?.PlaceFormatted,
-                Latitude: f.Geometry?.Coordinates?.ElementAtOrDefault(1),
-                Longitude: f.Geometry?.Coordinates?.ElementAtOrDefault(0)))
+        return root.Suggestions
+            .Select(s => new PlaceCandidate(
+                PlaceId: s.MapboxId ?? string.Empty,
+                Name: s.Name ?? string.Empty,
+                // Suggestions have no coordinates; resolve via GetDetailsAsync on selection.
+                Address: s.FullAddress ?? s.PlaceFormatted,
+                Latitude: null,
+                Longitude: null))
             .Where(c => !string.IsNullOrWhiteSpace(c.PlaceId) && !string.IsNullOrWhiteSpace(c.Name))
             .ToList();
     }
 
-    public async Task<PlaceDetails?> GetDetailsAsync(string placeId, CancellationToken ct)
+    public async Task<PlaceDetails?> GetDetailsAsync(string placeId, string? sessionToken, CancellationToken ct)
     {
-        var url = $"{BaseUrl}/retrieve/{Uri.EscapeDataString(placeId)}?access_token={_token}";
-        var root = await _http.GetFromJsonAsync<MapboxForwardResponse>(url, ct);
+        // "retrieve" resolves a suggestion's mapbox_id to a feature with coordinates. Reuse the
+        // session token from the suggest calls so the pair bills as a single Search Box session.
+        var session = string.IsNullOrWhiteSpace(sessionToken) ? Guid.NewGuid().ToString() : sessionToken!;
+        var url = $"{BaseUrl}/retrieve/{Uri.EscapeDataString(placeId)}?session_token={Uri.EscapeDataString(session)}&access_token={_token}";
+        var root = await _http.GetFromJsonAsync<MapboxFeatureCollection>(url, ct);
         var f = root?.Features?.FirstOrDefault();
         if (f is null)
             return null;
@@ -63,8 +80,18 @@ public class MapboxPlaceProvider : IPlaceProvider
             Longitude: lng.Value);
     }
 
-    // Minimal Mapbox Geocoding API v6 response shapes.
-    private record MapboxForwardResponse(
+    // Minimal Search Box "suggest" response: a list of suggestions (no geometry).
+    private record MapboxSuggestResponse(
+        [property: JsonPropertyName("suggestions")] List<MapboxSuggestion>? Suggestions);
+
+    private record MapboxSuggestion(
+        [property: JsonPropertyName("mapbox_id")] string? MapboxId,
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("full_address")] string? FullAddress,
+        [property: JsonPropertyName("place_formatted")] string? PlaceFormatted);
+
+    // Minimal Search Box "retrieve" response (GeoJSON FeatureCollection; geometry carries [lng, lat]).
+    private record MapboxFeatureCollection(
         [property: JsonPropertyName("features")] List<MapboxFeature>? Features);
 
     private record MapboxFeature(

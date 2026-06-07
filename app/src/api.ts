@@ -78,6 +78,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * True when a thrown error looks like a connectivity failure (the request never got a response)
+ * rather than a server rejection. A failed `fetch` rejects with a TypeError and no HTTP status;
+ * `sendJson` only throws an {@link ApiError} (with a status) once the server has responded. The
+ * offline outbox uses this to decide whether a write should be queued for later replay.
+ */
+export function isOfflineError(e: unknown): boolean {
+  if (e instanceof ApiError) return e.status === undefined;
+  return true;
+}
+
 async function sendJson<T>(path: string, method: string, body?: unknown): Promise<T> {
   const baseHeaders = (await buildHeaders()) ?? {};
   const res = await fetch(`${API_BASE}${path}`, {
@@ -158,13 +169,28 @@ export interface PlaceDetails {
   longitude: number;
 }
 
-export async function searchPlaces(query: string, limit = 5): Promise<PlaceCandidate[]> {
+/** Optional hints for place search: a session token (groups suggest+retrieve into one billed
+ *  Search Box session) and a proximity point to bias results toward the trip area. */
+export interface PlaceSearchHints {
+  sessionToken?: string;
+  proximityLat?: number | null;
+  proximityLng?: number | null;
+}
+
+export async function searchPlaces(
+  query: string,
+  limit = 5,
+  hints?: PlaceSearchHints,
+): Promise<PlaceCandidate[]> {
   if (!query.trim()) return [];
+  const params = new URLSearchParams({ q: query.trim(), limit: String(limit) });
+  if (hints?.sessionToken) params.set('session', hints.sessionToken);
+  if (hints?.proximityLat != null && hints?.proximityLng != null) {
+    params.set('proximityLat', String(hints.proximityLat));
+    params.set('proximityLng', String(hints.proximityLng));
+  }
   try {
-    return await sendJson<PlaceCandidate[]>(
-      `/api/places/autocomplete?q=${encodeURIComponent(query.trim())}&limit=${limit}`,
-      'GET',
-    );
+    return await sendJson<PlaceCandidate[]>(`/api/places/autocomplete?${params.toString()}`, 'GET');
   } catch {
     return [];
   }
@@ -251,9 +277,13 @@ export async function fetchItemHourlyWeather(
   }
 }
 
-export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+export async function getPlaceDetails(
+  placeId: string,
+  sessionToken?: string,
+): Promise<PlaceDetails | null> {
+  const qs = sessionToken ? `?session=${encodeURIComponent(sessionToken)}` : '';
   try {
-    return await sendJson<PlaceDetails>(`/api/places/${encodeURIComponent(placeId)}`, 'GET');
+    return await sendJson<PlaceDetails>(`/api/places/${encodeURIComponent(placeId)}${qs}`, 'GET');
   } catch {
     return null;
   }
@@ -424,8 +454,31 @@ export function mediaUrl(tripId: string, mediaAssetId: string): string {
   return `${API_BASE}/api/trips/${tripId}/notes/media/${mediaAssetId}`;
 }
 
-/** Fetches media bytes with auth and returns a playable/displayable object URL (web only). */
+/**
+ * Asks the API for a short-lived signed (SAS) URL so media can be fetched directly from storage,
+ * offloading bandwidth from the API. Returns the URL when the backend issues one, or `null` when it
+ * can't (local dev store / non-signing credential) so callers fall back to authenticated streaming.
+ */
+export async function getMediaSasUrl(tripId: string, mediaAssetId: string): Promise<string | null> {
+  try {
+    const headers = await buildHeaders();
+    const res = await fetch(`${mediaUrl(tripId, mediaAssetId)}/sas`, { headers });
+    if (res.status === 204 || !res.ok) return null; // no SAS available → fall back
+    const body = (await res.json()) as { url?: string };
+    return body?.url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns a playable/displayable URL for a media asset (web). Prefers a direct SAS URL (no proxying
+ * through the API); otherwise fetches the bytes with auth into an object URL. Either way the result
+ * is a string usable as an `<img>`/`<audio>` src; object URLs should be revoked by the caller.
+ */
 export async function fetchMediaObjectUrl(tripId: string, mediaAssetId: string): Promise<string> {
+  const sas = await getMediaSasUrl(tripId, mediaAssetId);
+  if (sas) return sas;
   const headers = await buildHeaders();
   const res = await fetch(mediaUrl(tripId, mediaAssetId), { headers });
   if (!res.ok) throw new ApiError(await readError(res), res.status);

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Trip, ItineraryItem, ItineraryItemType, ItineraryItemStatus } from '../types';
-import { ItineraryItemInput, searchPlaces } from '../api';
+import { ItineraryItemInput, searchPlaces, getPlaceDetails } from '../api';
 import { PlaceSearchField, SelectedPlace } from '../PlaceSearchField';
 import { colors, radius, itemEmoji } from '../theme';
 import { dayLabel } from '../format';
@@ -77,6 +77,15 @@ export function AddActivityScreen({
   const canSave = title.trim().length > 0;
   const busy = saving || resolving;
 
+  // Bias place search toward the trip area: use the first already-located stop's coordinates.
+  const proximity = useMemo(() => {
+    const located = [
+      ...trip.days.flatMap((d) => d.items),
+      ...(trip.unscheduledItems ?? []),
+    ].find((i) => i.latitude != null && i.longitude != null);
+    return located ? { lat: located.latitude as number, lng: located.longitude as number } : null;
+  }, [trip]);
+
   const handleSave = async () => {
     if (!canSave) {
       setError('Add a title.');
@@ -98,12 +107,21 @@ export function AddActivityScreen({
     if (placeName && resolvedLat == null) {
       try {
         setResolving(true);
-        const [top] = await searchPlaces(placeName, 1);
-        if (top?.latitude != null && top?.longitude != null) {
-          resolvedLat = top.latitude;
-          resolvedLng = top.longitude;
-          resolvedAddress = resolvedAddress ?? top.address ?? null;
-          resolvedPlaceId = resolvedPlaceId ?? top.placeId;
+        const session = `save-${Date.now()}`;
+        const [top] = await searchPlaces(placeName, 1, {
+          sessionToken: session,
+          proximityLat: proximity?.lat ?? null,
+          proximityLng: proximity?.lng ?? null,
+        });
+        if (top) {
+          // Search Box suggestions carry no coordinates — resolve the top match via retrieve.
+          const detail = await getPlaceDetails(top.placeId, session);
+          if (detail) {
+            resolvedLat = detail.latitude;
+            resolvedLng = detail.longitude;
+            resolvedAddress = resolvedAddress ?? detail.address ?? top.address ?? null;
+            resolvedPlaceId = resolvedPlaceId ?? top.placeId;
+          }
         }
       } catch {
         // Geocoding unavailable — save the item as-is (no coordinates).
@@ -183,8 +201,9 @@ export function AddActivityScreen({
           />
         </Field>
 
-        <Field label="Place">
+        <Field label="Place" style={s.placeField}>
           <PlaceSearchField
+            proximity={proximity}
             value={place}
             onChange={(text) => {
               setPlace(text);
@@ -434,6 +453,9 @@ const s = StyleSheet.create({
   body: { paddingHorizontal: 16, paddingTop: 4 },
   label: { fontSize: 11, fontWeight: '700', color: colors.ink600, marginBottom: 5 },
   control: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, color: colors.ink },
+  // Keep the Place field (and its absolutely-positioned suggestions dropdown) above the
+  // form fields that follow it (Day selector, Start time) so results aren't painted behind them.
+  placeField: { zIndex: 10, position: 'relative' },
   placeHint: { fontSize: 11, color: colors.brand, marginTop: 5 },
   placeHintMuted: { fontSize: 11, color: colors.ink400, marginTop: 5 },
   seg: { flexDirection: 'row', gap: 6 },

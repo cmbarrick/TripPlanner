@@ -27,15 +27,16 @@
       See architecture §7 "Hourly weather" and Phase 2 weather notes.
 - [ ] **Post-event notifications:** schedule a **local** notification at an event's end time (+ small
       delay) prompting a summary; tapping **deep-links to that event's** note composer / reflection prompt.
-- [ ] **Notification config:** on/off **globally, per trip, and per event type** (e.g., meals &
+- [x] **Notification config:** on/off **globally, per trip, and per event type** (e.g., meals &
       activities only; skip transport/lodging); **quiet hours**; respects "prompts can be turned off".
 - [ ] **Reflection prompts:** preset library + custom; **toggle on/off globally and per trip**;
       fire at end of **event/day/trip**; responses saved as notes linked to the prompt.
-- [x] **Photos** attached to notes (Blob). *(SAS signed-URL serving deferred; media is streamed
-      through the ownership-checked API endpoint for now.)*
-- [ ] **Offline-first capture:** create notes/recordings offline; **schedule notifications locally**
-      (no server needed); queue mutations in the sync outbox; resume media upload + transcription on reconnect.
-- [ ] Ownership checks; signed URLs for media.
+- [x] **Photos** attached to notes (Blob), served via **short-lived SAS URLs** when the cloud store
+      can sign them, falling back to the ownership-checked streaming endpoint (local dev / non-signing creds).
+- [x] **Offline-first capture (text/prompt):** create text + reflection notes offline; **schedule
+      notifications locally** (no server needed); queue mutations in a persisted sync outbox; replay on
+      reconnect. *(Offline **media** capture/resume — large audio/photo blobs — is deferred to Phase 9 hardening.)*
+- [x] Ownership checks; signed URLs for media.
 
 ## Delivery plan (slices)
 Each slice is independently shippable, testable, and green before the next.
@@ -241,13 +242,36 @@ Each slice is independently shippable, testable, and green before the next.
     no schema change.
   - Backend **72/72**, app **69/69**, tsc + lint clean.
 
+- **2026-06-05 — Slice 5 (offline-first text/prompt capture) + per-trip reminders + media SAS:**
+  - **Offline outbox (`src/sync/outbox.ts`):** a persisted (`localStore`) FIFO queue of journal writes
+    — `note.create` / `note.update` / `note.delete`. Edits/deletes of a still-unsynced note **fold into
+    its queued create** (or collapse repeated edits) so the queue stays consistent. `flushOutbox` replays
+    in order, **stops at the first offline retry** (preserves order, no hammering) and **drops 4xx
+    poison ops**. Fully unit-tested (`outbox.test.ts`, 9 cases).
+  - **Wiring:** the note create/update/delete mutations (`queries/notes.ts`) try the API first and, on a
+    **connectivity** failure (`isOfflineError` — no HTTP status), enqueue + **optimistically patch the
+    React Query cache** (temp-id note marked `pendingSync`). Temp-id notes never hit the API. `NoteCard`
+    shows **⏳ Saved offline — will sync**. `useOutboxSync` (mounted in `App`) flushes on mount, web
+    `online`, app-foreground, and a 20s safety interval, then invalidates affected trips.
+  - **Per-trip reminders (notification config gap):** `NotificationSettings.disabledTripIds` +
+    `setTripEnabled` + `notificationsEnabledForTrip`; `computeEventNotifications` skips opted-out trips;
+    the trip Journal panel gets a **🔔 Post-event reminders: On/Off** toggle (shown when reminders are
+    enabled globally). New test covers the per-trip skip.
+  - **Media SAS:** `IBlobStore.TryGetReadSasUriAsync` — `AzureBlobStore` mints a 30-min read **SAS**
+    (when the connection-string credential can sign), `LocalBlobStore` returns null. New
+    `GET …/notes/media/{id}/sas` returns the URL (200) or **204** to signal fall-back. Frontend prefers
+    SAS (`getMediaSasUrl`): `PhotoView` + `VoicePlayer` (native via `useMediaSource`, web via
+    `fetchMediaObjectUrl`) use the direct URL when available, else authenticated streaming. 3 new API tests.
+  - Backend **81/81**, app **79/79**, tsc + lint clean. *(Offline media + a device dev-build pass remain.)*
+
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See
 > `docs/deployment-runbook.md` → "Open item to revisit".
 
 ## Testing plan
-- [ ] **Unit:** note scoping, prompt enable/disable logic, notification scheduling rules
-      (per-type filter, quiet hours, delay), outbox queueing.
+- [x] **Unit:** note scoping, prompt enable/disable logic, notification scheduling rules
+      (per-type filter, quiet hours, delay, **per-trip opt-out**), **outbox queueing/flush** (FIFO,
+      retry-stops-on-offline, drop-poison, create/edit/delete folding).
 - [ ] **Integration:** audio upload → transcription → transcript persisted; photo upload; ownership.
 - [ ] **Media/voice:** transcription accuracy on sample clips; audio round-trip (record→store→play).
 - [ ] **Notifications:** event-end notification fires at the right time; **deep-link opens the correct
