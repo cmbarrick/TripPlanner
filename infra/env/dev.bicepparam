@@ -11,6 +11,10 @@ param postgresAdminPassword = readEnvironmentVariable('WANDER_PG_ADMIN_PASSWORD'
 param mapboxAccessToken = readEnvironmentVariable('WANDER_MAPBOX_TOKEN', '')
 param azureMapsKey = readEnvironmentVariable('WANDER_AZURE_MAPS_KEY', '')
 
+// Azure OpenAI (Phase 5 planning assistant). When either is empty the API uses DisabledAiProvider.
+param azureOpenAiEndpoint = readEnvironmentVariable('WANDER_AZURE_OPENAI_ENDPOINT', '')
+param azureOpenAiApiKey = readEnvironmentVariable('WANDER_AZURE_OPENAI_API_KEY', '')
+
 // Voice-note transcription stack (media Storage + Azure AI Speech + Flex Consumption Function) is
 // provisioned/managed imperatively in dev, not by this template (the Bicep function module targets a
 // Y1 plan, which can't host the existing Flex app). So instead of deployTranscription, we just wire

@@ -35,6 +35,29 @@ jest.mock('./src/queries/itinerary', () => {
   };
 });
 
+jest.mock('./src/queries/preferences', () => ({
+  usePreferencesQuery: () => ({
+    isLoading: false,
+    data: {
+      data: {
+        temperatureUnit: 'F',
+        distanceUnit: 'mi',
+        currency: 'USD',
+        travelStyle: null,
+        pace: null,
+        diet: null,
+        budgetBand: null,
+      },
+      live: false,
+    },
+  }),
+  useUpdatePreferencesMutation: () => ({ mutate: jest.fn(), isPending: false }),
+  TRAVEL_STYLE_OPTIONS: [],
+  PACE_OPTIONS: [],
+  DIET_OPTIONS: [],
+  BUDGET_OPTIONS: [],
+}));
+
 jest.mock('./src/auth/useAuthSession', () => ({
   useAuthSession: () => ({
     auth: {

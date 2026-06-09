@@ -340,6 +340,69 @@ export async function deletePackingItem(tripId: string, packingItemId: string): 
   await sendJson<void>(`/api/trips/${tripId}/packing/${packingItemId}`, 'DELETE');
 }
 
+// ── AI assistant (Phase 5) ───────────────────────────────────────────────────
+
+export interface AiStatus {
+  enabled: boolean;
+  dailyTokenLimit: number;
+  tokensUsedToday: number;
+  tokensRemainingToday: number;
+}
+
+const DEFAULT_AI_STATUS: AiStatus = {
+  enabled: false,
+  dailyTokenLimit: 50_000,
+  tokensUsedToday: 0,
+  tokensRemainingToday: 50_000,
+};
+
+/** Whether AI planning is configured on the server and the caller's daily quota headroom. */
+export async function fetchAiStatus(): Promise<AiStatus> {
+  try {
+    return await sendJson<AiStatus>('/api/ai/status', 'GET');
+  } catch {
+    return DEFAULT_AI_STATUS;
+  }
+}
+
+// ── User preferences (Phase 5 Slice 1) ─────────────────────────────────────
+
+export type TravelStyle = 'adventure' | 'culture' | 'foodie' | 'relaxation' | 'mixed';
+export type TravelPace = 'relaxed' | 'moderate' | 'packed';
+export type TravelDiet = 'none' | 'vegetarian' | 'vegan' | 'gluten_free' | 'halal' | 'kosher';
+export type BudgetBand = 'budget' | 'mid' | 'luxury';
+
+export interface UserPreferences {
+  temperatureUnit: 'F' | 'C';
+  distanceUnit: 'mi' | 'km';
+  currency: string;
+  travelStyle: TravelStyle | null;
+  pace: TravelPace | null;
+  diet: TravelDiet | null;
+  budgetBand: BudgetBand | null;
+}
+
+export type UserPreferencesPatch = Partial<UserPreferences>;
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  temperatureUnit: 'F',
+  distanceUnit: 'mi',
+  currency: 'USD',
+  travelStyle: null,
+  pace: null,
+  diet: null,
+  budgetBand: null,
+};
+
+/** Server-backed profile preferences; falls back to defaults when the API is unreachable. */
+export async function fetchPreferences(): Promise<{ data: UserPreferences; live: boolean }> {
+  return tryFetch<UserPreferences>('/api/preferences', DEFAULT_PREFERENCES);
+}
+
+export async function updatePreferences(patch: UserPreferencesPatch): Promise<UserPreferences> {
+  return sendJson<UserPreferences>('/api/preferences', 'PUT', patch);
+}
+
 // ── Notes & journaling (Phase 4) ─────────────────────────────────────────────
 
 export interface CreateNoteInput {

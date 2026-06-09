@@ -1,7 +1,7 @@
 // Azure Key Vault — holds all environment secrets (RBAC-authorized).
 //
 // Generated secrets (DB, Redis, App Insights) are written at deploy time from other
-// resources. Provider keys (Mapbox, Azure Maps) are written from secure deploy params
+// resources. Provider keys (Mapbox, Azure Maps, Azure OpenAI API key) are written from secure deploy params
 // (supplied from a CI/env secret). When a param is empty the secret stays empty, which makes
 // the API fall back to its Fake/no-key provider seam. Because the value comes from a param,
 // deploys are deterministic and no longer clobber a real key — see infra/README.md.
@@ -30,6 +30,10 @@ param mapboxAccessToken string = ''
 @description('Azure Maps key for routing/travel times. Empty => API uses the fake routing provider.')
 @secure()
 param azureMapsKey string = ''
+
+@description('Azure OpenAI API key for the planning assistant. Empty => API uses DisabledAiProvider.')
+@secure()
+param azureOpenAiApiKey string = ''
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
@@ -85,6 +89,14 @@ resource azureMapsSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: 'Routing--AzureMapsKey'
   properties: {
     value: azureMapsKey
+  }
+}
+
+resource azureOpenAiApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: 'Ai--ApiKey'
+  properties: {
+    value: azureOpenAiApiKey
   }
 }
 

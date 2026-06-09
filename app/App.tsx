@@ -11,7 +11,7 @@ import { TripFormScreen } from './src/screens/TripFormScreen';
 import { AddActivityScreen } from './src/screens/AddActivityScreen';
 import { CalendarScreen } from './src/screens/CalendarScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
-import { PlaceholderScreen } from './src/screens/PlaceholderScreen';
+import { AssistantScreen } from './src/screens/AssistantScreen';
 import { SignInScreen, AuthSplash } from './src/screens/SignInScreen';
 import {
   useTripsQuery,
@@ -284,14 +284,7 @@ function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSess
   } else if (tab === 'calendar') {
     content = <CalendarScreen trips={trips} unit={unit} clock={clock} onEditItem={(tripId, item) => { openTrip(tripId); showEditItem(item.id); }} />;
   } else if (tab === 'assistant') {
-    content = (
-      <PlaceholderScreen
-        title="Assistant"
-        emoji="✨"
-        phase="Phase 5"
-        blurb="An AI travel assistant that generates and refines your itinerary by editing the real trip."
-      />
-    );
+    content = <AssistantScreen />;
   } else {
     content = (
       <ProfileScreen

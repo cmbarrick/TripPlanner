@@ -10,6 +10,9 @@ param postgresAdminPassword = readEnvironmentVariable('WANDER_PG_ADMIN_PASSWORD'
 param mapboxAccessToken = readEnvironmentVariable('WANDER_MAPBOX_TOKEN', '')
 param azureMapsKey = readEnvironmentVariable('WANDER_AZURE_MAPS_KEY', '')
 
+param azureOpenAiEndpoint = readEnvironmentVariable('WANDER_AZURE_OPENAI_ENDPOINT', '')
+param azureOpenAiApiKey = readEnvironmentVariable('WANDER_AZURE_OPENAI_API_KEY', '')
+
 // Entra External ID values for the production environment (non-secret).
 param authAuthority = 'https://wander.ciamlogin.com/wander.onmicrosoft.com/v2.0'
 param authAudience = 'api://wander-api'

@@ -47,6 +47,11 @@ jobs:
         id: infra
         env:
           WANDER_PG_ADMIN_PASSWORD: ${{ secrets.WANDER_PG_ADMIN_PASSWORD }}
+          WANDER_MAPBOX_TOKEN: ${{ secrets.WANDER_MAPBOX_TOKEN }}
+          WANDER_AZURE_MAPS_KEY: ${{ secrets.WANDER_AZURE_MAPS_KEY }}
+          WANDER_AZURE_OPENAI_ENDPOINT: ${{ secrets.WANDER_AZURE_OPENAI_ENDPOINT }}
+          WANDER_AZURE_OPENAI_API_KEY: ${{ secrets.WANDER_AZURE_OPENAI_API_KEY }}
+          WANDER_FUNCTIONS_CALLBACK_KEY: ${{ secrets.WANDER_FUNCTIONS_CALLBACK_KEY }}
         run: |
           outputs=$(az deployment sub create \
             --location "$AZURE_LOCATION" \

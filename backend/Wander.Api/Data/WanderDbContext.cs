@@ -16,6 +16,7 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
     public DbSet<TripShare> TripShares => Set<TripShare>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+    public DbSet<AiTokenUsage> AiTokenUsages => Set<AiTokenUsage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -127,6 +128,12 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
         {
             entity.ToTable("media_assets");
             entity.HasIndex(x => x.NoteId);
+        });
+
+        modelBuilder.Entity<AiTokenUsage>(entity =>
+        {
+            entity.ToTable("ai_token_usage");
+            entity.HasIndex(x => new { x.OwnerId, x.UsageDate }).IsUnique();
         });
     }
 }

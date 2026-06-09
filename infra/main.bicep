@@ -5,7 +5,7 @@
 //   az deployment sub create --location eastus2 \
 //     --template-file infra/main.bicep --parameters infra/env/dev.bicepparam
 //
-// No secrets are committed. Postgres admin password and provider keys (Mapbox, Azure Maps)
+// No secrets are committed. Postgres admin password and provider keys (Mapbox, Azure Maps, Azure OpenAI)
 // are supplied at deploy time as secure params (the .bicepparam reads them from environment
 // variables). An empty provider key keeps the API on its fake/no-key provider — see infra/README.md.
 
@@ -48,6 +48,25 @@ param mapboxAccessToken string = ''
 @description('Azure Maps key for routing/travel times (supplied at deploy time from a CI/env secret). Empty => the API falls back to the fake routing provider.')
 @secure()
 param azureMapsKey string = ''
+
+@description('Whether to provision the Phase 5 Azure OpenAI account + gpt-4o / gpt-4o-mini deployments. Off by default (~pay-as-you-go); enable per environment when the planning assistant goes live.')
+param deployOpenAi bool = false
+
+@description('Azure OpenAI endpoint URL for the planning assistant (supplied at deploy time). Empty => AI disabled.')
+param azureOpenAiEndpoint string = ''
+
+@description('Azure OpenAI API key (supplied at deploy time from a CI/env secret). Empty => AI disabled.')
+@secure()
+param azureOpenAiApiKey string = ''
+
+@description('Azure OpenAI chat deployment name (e.g. gpt-4o).')
+param azureOpenAiChatDeployment string = 'gpt-4o'
+
+@description('Azure OpenAI draft deployment name (e.g. gpt-4o-mini).')
+param azureOpenAiDraftDeployment string = 'gpt-4o-mini'
+
+@description('Per-user daily AI token cap enforced by the API.')
+param azureOpenAiDailyTokenLimit int = 50000
 
 // --- SKUs (overridden per environment in the .bicepparam files) ---
 @description('App Service plan SKU.')
@@ -103,6 +122,7 @@ var aiName = 'appi-${namePrefix}-${environmentName}'
 // Storage account names: 3-24 chars, lowercase alphanumeric only.
 var storageName = toLower(replace('st${namePrefix}${environmentName}${suffix}', '-', ''))
 var speechName = 'spch-${namePrefix}-${environmentName}-${suffix}'
+var openAiName = 'oai-${namePrefix}-${environmentName}-${suffix}'
 var funcAppName = 'func-${namePrefix}-${environmentName}-${suffix}'
 var funcPlanName = 'plan-func-${namePrefix}-${environmentName}'
 var funcContentShare = toLower('func${environmentName}${suffix}')
@@ -177,6 +197,18 @@ module speech 'modules/speech.bicep' = if (deployTranscription) {
   }
 }
 
+module openAi 'modules/openAi.bicep' = if (deployOpenAi) {
+  scope: rg
+  name: 'openAi'
+  params: {
+    openAiAccountName: openAiName
+    location: location
+    chatDeploymentName: azureOpenAiChatDeployment
+    draftDeploymentName: azureOpenAiDraftDeployment
+    tags: commonTags
+  }
+}
+
 module staticWebApp 'modules/staticWebApp.bicep' = {
   scope: rg
   name: 'staticWebApp'
@@ -200,6 +232,7 @@ module keyVault 'modules/keyVault.bicep' = {
     appInsightsConnectionString: monitoring.outputs.connectionString
     mapboxAccessToken: mapboxAccessToken
     azureMapsKey: azureMapsKey
+    azureOpenAiApiKey: deployOpenAi ? openAi.outputs.key : azureOpenAiApiKey
   }
 }
 
@@ -244,6 +277,10 @@ module appService 'modules/appService.bicep' = {
     extraCorsOrigins: extraCorsOrigins
     mediaStorageConnectionString: apiMediaStorageConnectionString
     functionsCallbackKey: apiFunctionsCallbackKey
+    azureOpenAiEndpoint: deployOpenAi ? openAi.outputs.endpoint : azureOpenAiEndpoint
+    azureOpenAiChatDeployment: azureOpenAiChatDeployment
+    azureOpenAiDraftDeployment: azureOpenAiDraftDeployment
+    azureOpenAiDailyTokenLimit: azureOpenAiDailyTokenLimit
     tags: commonTags
   }
   // App settings reference Key Vault secrets, so the secrets must already exist.
@@ -295,5 +332,7 @@ output postgresServerName string = pgName
 output postgresFqdn string = postgres.outputs.fullyQualifiedDomainName
 output postgresAdminLogin string = postgresAdminLogin
 output transcriptionEnabled bool = deployTranscription
+output openAiEnabled bool = deployOpenAi
+output openAiAccountName string = deployOpenAi ? openAiName : ''
 output mediaStorageAccountName string = deployTranscription ? storageName : ''
 output functionAppHostName string = functionApp.?outputs.defaultHostName ?? ''

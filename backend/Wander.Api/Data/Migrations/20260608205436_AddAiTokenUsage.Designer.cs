@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Wander.Api.Data;
@@ -11,9 +12,11 @@ using Wander.Api.Data;
 namespace Wander.Api.Data.Migrations
 {
     [DbContext(typeof(WanderDbContext))]
-    partial class WanderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260608205436_AddAiTokenUsage")]
+    partial class AddAiTokenUsage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -368,9 +371,6 @@ namespace Wander.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("BudgetBand")
-                        .HasColumnType("text");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -381,9 +381,6 @@ namespace Wander.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Diet")
-                        .HasColumnType("text");
-
                     b.Property<string>("DistanceUnit")
                         .IsRequired()
                         .HasColumnType("text");
@@ -392,14 +389,8 @@ namespace Wander.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("Pace")
-                        .HasColumnType("text");
-
                     b.Property<string>("TemperatureUnit")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("TravelStyle")
                         .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UpdatedAt")

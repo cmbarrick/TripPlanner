@@ -33,6 +33,18 @@ param mediaStorageConnectionString string = ''
 @secure()
 param functionsCallbackKey string = ''
 
+@description('Azure OpenAI endpoint URL (e.g. https://myresource.openai.azure.com/). Empty => AI disabled.')
+param azureOpenAiEndpoint string = ''
+
+@description('Azure OpenAI chat deployment name (e.g. gpt-4o).')
+param azureOpenAiChatDeployment string = 'gpt-4o'
+
+@description('Azure OpenAI draft deployment name (e.g. gpt-4o-mini).')
+param azureOpenAiDraftDeployment string = 'gpt-4o-mini'
+
+@description('Per-user daily AI token cap enforced by the API.')
+param azureOpenAiDailyTokenLimit int = 50000
+
 param tags object = {}
 
 var kvSecretUriPrefix = 'https://${keyVaultName}${environment().suffixes.keyvaultDns}/secrets/'
@@ -70,6 +82,26 @@ var baseAppSettings = [
   {
     name: 'Routing__AzureMapsKey'
     value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Routing--AzureMapsKey)'
+  }
+  {
+    name: 'Ai__ApiKey'
+    value: '@Microsoft.KeyVault(SecretUri=${kvSecretUriPrefix}Ai--ApiKey)'
+  }
+  {
+    name: 'Ai__Endpoint'
+    value: azureOpenAiEndpoint
+  }
+  {
+    name: 'Ai__ChatDeployment'
+    value: azureOpenAiChatDeployment
+  }
+  {
+    name: 'Ai__DraftDeployment'
+    value: azureOpenAiDraftDeployment
+  }
+  {
+    name: 'Ai__DailyTokenLimit'
+    value: string(azureOpenAiDailyTokenLimit)
   }
   {
     name: 'Authentication__EntraExternalId__Authority'

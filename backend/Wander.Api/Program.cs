@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Azure;
+using Azure.AI.OpenAI;
+using Wander.Api.Ai;
 using Wander.Api.Data;
 using Wander.Api.Media;
 using Wander.Api.Places;
@@ -112,6 +115,28 @@ builder.Services.AddDbContext<WanderDbContext>(options =>
 });
 
 builder.Services.AddScoped<ITripRepository, EfCoreTripRepository>();
+builder.Services.AddScoped<IPreferenceService, PreferenceService>();
+
+// AI planning assistant (Phase 5): Azure OpenAI when configured; disabled/fake otherwise.
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
+builder.Services.AddScoped<IAiTokenQuotaService, AiTokenQuotaService>();
+var aiSection = builder.Configuration.GetSection(AiOptions.SectionName);
+var useFakeAi = aiSection.GetValue<bool>(nameof(AiOptions.UseFake));
+var aiEndpoint = aiSection[nameof(AiOptions.Endpoint)];
+var aiApiKey = aiSection[nameof(AiOptions.ApiKey)];
+if (useFakeAi)
+{
+    builder.Services.AddSingleton<IAiProvider, FakeAiProvider>();
+}
+else if (!string.IsNullOrWhiteSpace(aiEndpoint) && !string.IsNullOrWhiteSpace(aiApiKey))
+{
+    builder.Services.AddSingleton(_ => new AzureOpenAIClient(new Uri(aiEndpoint), new AzureKeyCredential(aiApiKey)));
+    builder.Services.AddSingleton<IAiProvider, AzureOpenAiProvider>();
+}
+else
+{
+    builder.Services.AddSingleton<IAiProvider, DisabledAiProvider>();
+}
 
 // Notes & journaling (Phase 4): media blobs + async voice-note transcription.
 // Cloud: Azure Blob Storage + an Azure Storage queue (drained by the transcription Function) when

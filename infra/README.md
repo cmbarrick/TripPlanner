@@ -49,22 +49,52 @@ prefix `kv-wndr-‹env›-‹suffix›` to stay within the 24-character limit.
 - **Generated at deploy time** and written to Key Vault by `keyVault.bicep`:
   `ConnectionStrings--DefaultConnection` (Postgres), `Cache--RedisConnectionString` (Redis, only
   when `deployRedis = true`), `ApplicationInsights--ConnectionString`.
-- **Provider keys** (Mapbox place search, Azure Maps routing) are written to Key Vault from
-  **secure deploy params** read from environment variables: `WANDER_MAPBOX_TOKEN` and
-  `WANDER_AZURE_MAPS_KEY`. When a variable is empty the secret stays empty and the API falls
-  back to its Fake/no-key provider seam (see `Program.cs`). Because the value comes from a
-  param, **deploys are deterministic and won't clobber a configured key** — set the env var and
-  redeploy:
+- **Provider keys** (Mapbox place search, Azure Maps routing, Azure OpenAI) are written to Key Vault from
+  **secure deploy params** read from environment variables: `WANDER_MAPBOX_TOKEN`,
+  `WANDER_AZURE_MAPS_KEY`, and `WANDER_AZURE_OPENAI_API_KEY`. The Azure OpenAI **endpoint** is a
+  non-secret deploy param (`WANDER_AZURE_OPENAI_ENDPOINT`) set directly on the App Service. When a
+  key is empty the API falls back to its Fake/no-key provider seam (see `Program.cs`). Because the
+  value comes from a param, **deploys are deterministic and won't clobber a configured key** — set
+  the env var and redeploy:
 
   ```bash
   export WANDER_MAPBOX_TOKEN=<token>       # bash
+  export WANDER_AZURE_OPENAI_ENDPOINT=https://myresource.openai.azure.com/
+  export WANDER_AZURE_OPENAI_API_KEY=<key>
   $env:WANDER_MAPBOX_TOKEN = "<token>"     # PowerShell
   az deployment sub create --location eastus2 \
     --template-file infra/main.bicep --parameters infra/env/dev.bicepparam
   ```
 
-  > Do **not** set these via `az keyvault secret set` — the next Bicep deploy would overwrite
-  > them with the (possibly empty) param value. Drive them through the param/env var instead.
+  Key Vault secret names map to ASP.NET config (`--` → `:`):
+
+  | Key Vault secret | App setting | Config key |
+  |---|---|---|
+  | `Places--MapboxAccessToken` | `Places__MapboxAccessToken` | `Places:MapboxAccessToken` |
+  | `Routing--AzureMapsKey` | `Routing__AzureMapsKey` | `Routing:AzureMapsKey` |
+  | `Ai--ApiKey` | `Ai__ApiKey` | `Ai:ApiKey` |
+
+  Non-secret AI settings on the App Service: `Ai__Endpoint`, `Ai__ChatDeployment`,
+  `Ai__DraftDeployment`, `Ai__DailyTokenLimit`.
+
+- **Azure OpenAI (Phase 5, dev live).** Resource `oai-wander-dev-azgnto` is provisioned; API wired to
+  `app-wander-dev-azgnto`. Deployments: `gpt-4o` (2024-11-20) + `gpt-4o-mini` (model **gpt-4.1-mini**
+  2025-04-14). Re-run or first-time setup:
+
+  ```powershell
+  .\scripts\provision-openai-dev.ps1 -Login
+  ```
+
+  Use **device-code MFA** (best in VS Code terminal). Run **one command at a time**. If Key Vault
+  RBAC blocks the secret write, the script sets `Ai__ApiKey` directly on App Service (dev fallback).
+  Persist for CI so Bicep deploys do not wipe the key:
+
+  ```powershell
+  gh auth login
+  .\scripts\set-github-ai-secrets.ps1
+  ```
+
+  Or provision via Bicep (`deployOpenAi = true`) using `infra/modules/openAi.bicep`.
 
 - **Voice-note transcription wiring (dev).** The transcription stack (media Storage account +
   Azure AI Speech + Flex Consumption Function) is provisioned/managed imperatively in dev, not by
@@ -161,6 +191,8 @@ In the repo: **Settings → Environments → New environment → `dev`**, then a
 | `WANDER_PG_ADMIN_PASSWORD` | a strong Postgres admin password you choose |
 | `WANDER_MAPBOX_TOKEN` | Mapbox access token for place search (optional; empty => fake provider) |
 | `WANDER_AZURE_MAPS_KEY` | Azure Maps key for routing/travel times (optional; empty => fake provider) |
+| `WANDER_AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL, e.g. `https://myresource.openai.azure.com/` (optional; empty => AI disabled) |
+| `WANDER_AZURE_OPENAI_API_KEY` | Azure OpenAI API key (optional; empty => AI disabled) |
 | `WANDER_FUNCTIONS_CALLBACK_KEY` | Shared callback key for voice-note transcription; must equal the existing transcription Function's `Api__CallbackKey` so the API trusts its write-backs (empty => transcription disabled) |
 | `AZURE_SWA_TOKEN_DEV` | the dev Static Web App deployment token (for the web deploy) |
 
