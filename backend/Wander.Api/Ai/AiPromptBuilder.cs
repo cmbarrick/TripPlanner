@@ -13,6 +13,42 @@ public static class AiPromptBuilder
         When unsure, ask a clarifying question instead of guessing.
         """;
 
+    public const string GenerateItineraryRules = """
+        Task: propose a full itinerary draft as JSON matching the schema.
+        Use only dayNumber values that exist on the trip. Respect user preferences and realistic pacing.
+        Do not invent confirmation numbers or booking URLs. Prefer activities and meals over fabricated bookings.
+        Spread items across days with sensible local start times (HH:mm). Keep titles concise.
+        """;
+
+    public const string ChatAssistantRules = """
+        Task: help the traveler edit their real trip via tools. Call tools to search places, check weather,
+        add/move/remove items, or analyze schedule gaps. After tool results, explain briefly what changed.
+        Never invent confirmation numbers or booking URLs. New items should use Tentative status (the server sets this).
+        Respect user preferences and keep geography and pacing realistic.
+        """;
+
+    public static string FormatTripContext(Models.Trip trip)
+    {
+        var lines = new List<string>
+        {
+            $"Trip: {trip.Title} — {trip.Destination}",
+            $"Dates: {trip.StartDate:yyyy-MM-dd} to {trip.EndDate:yyyy-MM-dd} ({trip.Days.Count} days)",
+            $"Currency: {trip.Currency}",
+        };
+
+        foreach (var day in trip.Days.OrderBy(d => d.DayNumber))
+        {
+            var titles = day.Items
+                .Where(i => i.DeletedAt == null)
+                .OrderBy(i => i.SortOrder)
+                .Select(i => i.Title)
+                .ToList();
+            lines.Add(FormatDaySummary(day.DayNumber, day.Date, titles));
+        }
+
+        return string.Join("\n", lines);
+    }
+
     public static AiMessage BuildSystemMessage(string? extraContext = null)
     {
         var content = string.IsNullOrWhiteSpace(extraContext)

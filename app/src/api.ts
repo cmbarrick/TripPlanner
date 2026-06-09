@@ -365,6 +365,149 @@ export async function fetchAiStatus(): Promise<AiStatus> {
   }
 }
 
+export interface DraftItineraryItem {
+  dayNumber: number;
+  type: ItineraryItem['type'];
+  title: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  locationName?: string | null;
+  address?: string | null;
+  cost?: number | null;
+  notes?: string | null;
+}
+
+export interface GenerateItineraryResponse {
+  summary: string;
+  items: DraftItineraryItem[];
+  tokensUsed: number;
+}
+
+/** Ephemeral AI draft — not persisted until the client accepts via existing item CRUD. */
+export async function generateItineraryDraft(
+  tripId: string,
+  prompt: string,
+): Promise<GenerateItineraryResponse> {
+  return sendJson<GenerateItineraryResponse>(
+    `/api/ai/trips/${tripId}/generate-itinerary`,
+    'POST',
+    { prompt },
+  );
+}
+
+/** Maps a draft row to the payload expected by create-item endpoints. */
+export function draftItemToInput(
+  item: DraftItineraryItem,
+  currency: string,
+): ItineraryItemInput {
+  return {
+    type: item.type,
+    status: 'Tentative',
+    title: item.title,
+    startTime: item.startTime ?? null,
+    endTime: item.endTime ?? null,
+    locationName: item.locationName ?? null,
+    address: item.address ?? null,
+    cost: item.cost ?? null,
+    currency,
+    notes: item.notes ?? null,
+  };
+}
+
+export interface AiChatHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AiTripChange {
+  action: string;
+  itemId: string | null;
+  title: string;
+  dayNumber: number | null;
+  detail?: string | null;
+  batchId?: string | null;
+}
+
+export interface ItineraryItemRestore {
+  dayId: string | null;
+  type: string;
+  status: string;
+  title: string;
+  flightNumber?: string | null;
+  locationName?: string | null;
+  address?: string | null;
+  placeId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  cost?: number | null;
+  currency: string;
+  notes?: string | null;
+}
+
+export interface AiUndoStep {
+  kind: string;
+  itemId?: string | null;
+  targetDayId?: string | null;
+  restore?: ItineraryItemRestore | null;
+}
+
+export interface AiChatStreamEvent {
+  type: 'text_delta' | 'tool_start' | 'tool_result' | 'trip_changed' | 'done' | 'error';
+  text?: string;
+  toolName?: string;
+  toolSummary?: string;
+  changes?: AiTripChange[];
+  tokensUsed?: number;
+  message?: string;
+  batchId?: string | null;
+  undoSteps?: AiUndoStep[] | null;
+}
+
+/** SSE chat with tool-calling — streams events until done or error. */
+export async function streamAiChat(
+  tripId: string,
+  message: string,
+  history: AiChatHistoryMessage[],
+  onEvent: (event: AiChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const headers = (await buildHeaders()) ?? {};
+  const res = await fetch(`${API_BASE}/api/ai/trips/${tripId}/chat`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ message, history }),
+    signal,
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await readError(res), res.status);
+  }
+
+  const { readSseStream, parseSseEvents } = await import('./ai/chatStream');
+
+  if (res.body) {
+    await readSseStream(res.body, onEvent);
+    return;
+  }
+
+  parseSseEvents(await res.text(), onEvent);
+}
+
+/** Reverse a batch of AI itinerary mutations (steps applied in reverse order on the server). */
+export async function undoAiBatch(
+  tripId: string,
+  steps: AiUndoStep[],
+): Promise<AiTripChange[]> {
+  const res = await sendJson<{ changes: AiTripChange[] }>(
+    `/api/ai/trips/${tripId}/undo`,
+    'POST',
+    { steps },
+  );
+  return res.changes;
+}
+
 // ── User preferences (Phase 5 Slice 1) ─────────────────────────────────────
 
 export type TravelStyle = 'adventure' | 'culture' | 'foodie' | 'relaxation' | 'mixed';

@@ -120,6 +120,12 @@ builder.Services.AddScoped<IPreferenceService, PreferenceService>();
 // AI planning assistant (Phase 5): Azure OpenAI when configured; disabled/fake otherwise.
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
 builder.Services.AddScoped<IAiTokenQuotaService, AiTokenQuotaService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IAiItineraryDraftService, AiItineraryDraftService>();
+builder.Services.AddScoped<IAiToolExecutor, AiToolExecutor>();
+builder.Services.AddSingleton<IAiChatRateLimiter, AiChatRateLimiter>();
+builder.Services.AddScoped<IAiUndoService, AiUndoService>();
+builder.Services.AddScoped<IAiPlanningService, AiPlanningService>();
 var aiSection = builder.Configuration.GetSection(AiOptions.SectionName);
 var useFakeAi = aiSection.GetValue<bool>(nameof(AiOptions.UseFake));
 var aiEndpoint = aiSection[nameof(AiOptions.Endpoint)];

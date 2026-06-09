@@ -58,6 +58,27 @@ public class AiPromptBuilderTests
     {
         Assert.Null(AiPromptBuilder.FormatUserPreferences(null, null, null, null));
     }
+
+    [Fact]
+    public void FormatTripContext_IncludesDaysAndDestination()
+    {
+        var trip = new Wander.Api.Models.Trip
+        {
+            Title = "Lisbon",
+            Destination = "Lisbon, Portugal",
+            StartDate = new DateOnly(2026, 6, 10),
+            EndDate = new DateOnly(2026, 6, 11),
+            Currency = "EUR",
+            Days =
+            [
+                new Wander.Api.Models.Day { DayNumber = 1, Date = new DateOnly(2026, 6, 10) },
+            ],
+        };
+
+        var text = AiPromptBuilder.FormatTripContext(trip);
+        Assert.Contains("Lisbon, Portugal", text);
+        Assert.Contains("Day 1 (2026-06-10): empty", text);
+    }
 }
 
 public class DisabledAiProviderTests
@@ -171,7 +192,7 @@ public class AiControllerTests
     [Fact]
     public async Task GetStatus_WhenDisabled_ReturnsEnabledFalse()
     {
-        var ctrl = new AiController(new DisabledAiProvider(), NewQuotaService());
+        var ctrl = new AiController(new DisabledAiProvider(), NewQuotaService(), new NoopDraftService(), new NoopPlanningService(), new NoopUndoService());
         ctrl.ControllerContext = FakeAuth.ForUser("user-1");
 
         var result = await ctrl.GetStatus(CancellationToken.None);
@@ -184,7 +205,7 @@ public class AiControllerTests
     [Fact]
     public async Task GetStatus_WhenFakeEnabled_ReturnsEnabledTrue()
     {
-        var ctrl = new AiController(new FakeAiProvider(), NewQuotaService());
+        var ctrl = new AiController(new FakeAiProvider(), NewQuotaService(), new NoopDraftService(), new NoopPlanningService(), new NoopUndoService());
         ctrl.ControllerContext = FakeAuth.ForUser("user-1");
 
         var result = await ctrl.GetStatus(CancellationToken.None);
@@ -198,5 +219,31 @@ public class AiControllerTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
         return new AiTokenQuotaService(db, Options.Create(new AiOptions { DailyTokenLimit = 50_000 }));
+    }
+
+    private sealed class NoopDraftService : IAiItineraryDraftService
+    {
+        public Task<GenerateItineraryResponse> GenerateAsync(
+            string ownerId,
+            Guid tripId,
+            GenerateItineraryRequest request,
+            CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class NoopPlanningService : IAiPlanningService
+    {
+        public IAsyncEnumerable<AiChatStreamEvent> StreamChatAsync(
+            string ownerId,
+            Guid tripId,
+            AiChatRequest request,
+            CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class NoopUndoService : IAiUndoService
+    {
+        public IReadOnlyList<AiTripChange> ApplyUndo(string ownerId, Guid tripId, IReadOnlyList<AiUndoStep> steps) =>
+            throw new NotImplementedException();
     }
 }

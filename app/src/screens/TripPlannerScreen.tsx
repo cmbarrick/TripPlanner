@@ -19,6 +19,10 @@ import { estimate, buildDirectionsUrl, buildRouteUrl, flightAwareUrl, flightRada
 import { exportIcs } from '../ics';
 import { addTripToCalendar } from '../calendar';
 import { ClockPref } from '../store/uiStore';
+import { useAiBatchStore } from '../store/aiBatchStore';
+import { undoAiBatch } from '../api';
+import { useQueryClient } from '@tanstack/react-query';
+import { tripsQueryKey } from '../queries/trips';
 import {
   Scope,
   scopedDays,
@@ -286,7 +290,7 @@ export function TripPlannerScreen({
               )}
             </>
           )}
-          {view !== 'map' ? <AiDock /> : null}
+          {view !== 'map' ? <AiDock tripId={trip.id} /> : null}
           <View style={{ height: 90 }} />
         </ScrollView>
       )}
@@ -618,14 +622,45 @@ function ExportPanel({
   );
 }
 
-function AiDock() {
+function AiDock({ tripId }: { tripId: string }) {
+  const qc = useQueryClient();
+  const batch = useAiBatchStore((s) => s.lastByTrip[tripId]);
+  const markUndone = useAiBatchStore((s) => s.markUndone);
+  const [undoing, setUndoing] = useState(false);
+
+  const undoLastBatch = async () => {
+    if (!batch || batch.undone || undoing) return;
+    setUndoing(true);
+    try {
+      await undoAiBatch(tripId, batch.undoSteps);
+      markUndone(tripId);
+      qc.invalidateQueries({ queryKey: tripsQueryKey });
+    } finally {
+      setUndoing(false);
+    }
+  };
+
   return (
     <View style={s.aiDock}>
       <View style={s.aiSpark}><Text style={{ color: '#fff', fontSize: 13 }}>✨</Text></View>
       <View style={{ flex: 1 }}>
         <Text style={s.aiText}>Ask Wander to plan or tweak this trip…</Text>
       </View>
-      <View style={s.aiBadge}><Text style={s.aiBadgeText}>Phase 5</Text></View>
+      {batch && !batch.undone && batch.undoSteps.length > 0 ? (
+        <Pressable
+          style={[s.aiUndoBtn, undoing && { opacity: 0.5 }]}
+          onPress={undoLastBatch}
+          disabled={undoing}
+        >
+          {undoing ? (
+            <ActivityIndicator color={colors.brand} size="small" />
+          ) : (
+            <Text style={s.aiUndoText}>Undo AI</Text>
+          )}
+        </Pressable>
+      ) : (
+        <View style={s.aiBadge}><Text style={s.aiBadgeText}>Phase 5</Text></View>
+      )}
     </View>
   );
 }
@@ -1050,6 +1085,15 @@ const s = StyleSheet.create({
   aiText: { fontSize: 12, color: colors.ink400 },
   aiBadge: { backgroundColor: colors.brand100, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   aiBadgeText: { fontSize: 10, fontWeight: '800', color: colors.brand },
+  aiUndoBtn: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.bg,
+  },
+  aiUndoText: { fontSize: 11, fontWeight: '700', color: colors.brand },
   fab: { position: 'absolute', right: 18, bottom: 18, width: 56, height: 56, borderRadius: 18, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   packTitle: { fontSize: 18, fontWeight: '800', color: colors.ink, marginTop: 6 },
   packSub: { fontSize: 12, color: colors.ink400, marginTop: 2, marginBottom: 12 },

@@ -284,7 +284,7 @@ function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSess
   } else if (tab === 'calendar') {
     content = <CalendarScreen trips={trips} unit={unit} clock={clock} onEditItem={(tripId, item) => { openTrip(tripId); showEditItem(item.id); }} />;
   } else if (tab === 'assistant') {
-    content = <AssistantScreen />;
+    content = <AssistantScreen trips={trips} initialTripId={openTripId} />;
   } else {
     content = (
       <ProfileScreen

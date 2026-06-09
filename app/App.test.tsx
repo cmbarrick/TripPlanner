@@ -35,6 +35,20 @@ jest.mock('./src/queries/itinerary', () => {
   };
 });
 
+jest.mock('./src/queries/ai', () => ({
+  aiStatusQueryKey: ['ai', 'status'],
+  useAiStatusQuery: () => ({
+    isLoading: false,
+    data: {
+      enabled: false,
+      dailyTokenLimit: 50_000,
+      tokensUsedToday: 0,
+      tokensRemainingToday: 50_000,
+    },
+  }),
+  useGenerateItineraryMutation: () => ({ mutate: jest.fn(), isPending: false, error: null }),
+}));
+
 jest.mock('./src/queries/preferences', () => ({
   usePreferencesQuery: () => ({
     isLoading: false,
