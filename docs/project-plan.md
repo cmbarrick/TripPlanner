@@ -1,7 +1,7 @@
 # Project Plan — Wander (Trip Planning App)
 
-> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-06-03
-> Progress: Phases 0–3 complete (see per-phase summaries in `/docs`). Next: Phase 4 — Notes & Journaling.
+> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-06-08
+> Progress: Phases 0–4 complete (see per-phase summaries in `/docs`). Next: Phase 5 — AI Planning Assistant.
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
 Every phase has explicit **goals**, **deliverables**, **exit criteria**, and a **testing plan**.
@@ -113,7 +113,7 @@ and discovery layers make it a community product over time.
   native sign-in redirect, store submission, and responsive web/iPad layout. See
   [`phase-3-summary.md`](./phase-3-summary.md).
 
-### Phase 4 — Notes & Journaling  *(capture)*
+### Phase 4 — Notes & Journaling  *(capture)*  ✅ **Complete (2026-06-08)**
 - **Goal:** Capture the trip as it happens, low-friction and offline.
 - **Deliverables:**
   - **Text notes** scoped to an **event**, a **day**, or the **whole trip**.
@@ -124,6 +124,12 @@ and discovery layers make it a community product over time.
   - Attach photos to notes (Blob).
 - **Exit criteria:** Create text & voice notes (with transcript) on an event/day/trip offline; they sync;
   prompts can be turned off; media stored securely with ownership checks.
+- **Status:** Done on the **web** target (dev) — text/voice/photo journaling, **cloud transcription
+  verified end-to-end**, reflection prompts, post-event reminders (global/per-trip/per-type + quiet
+  hours), media via ownership-checked streaming + **short-lived SAS**, and **offline-first text/prompt**
+  capture (persisted sync outbox). Deferred by decision: on-device native dev-build pass, offline
+  **media** resume (→ Phase 9), `functionApp.bicep` Y1→Flex tidy-up, and the remaining
+  integration/E2E/privacy tests. See `phases/phase-4-notes-journaling/README.md`.
 
 ### Phase 5 — AI Planning Assistant
 - **Goal:** Accelerate planning with AI that edits the real trip.
@@ -231,7 +237,7 @@ checklist are signed off.
 - **M2:** Manual planning end-to-end (end of Phase 1)
 - **M3:** Map + live weather + integrations (end of Phase 2)
 - **M4:** Deployment/release foundations in place (end of Phase 3) ✅
-- **M5:** Notes & voice journaling, offline (end of Phase 4)
+- **M5:** Notes & voice journaling, offline (end of Phase 4) ✅
 - **M6:** AI planning assistant usable (end of Phase 5)
 - **M7:** AI recap + export (end of Phase 6)
 - **M8:** Sharing + real-time collaboration (end of Phase 7)

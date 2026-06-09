@@ -11,6 +11,8 @@
 ## Scope / tasks
 - [ ] **Offline data layer:** local SQLite as UI source of truth; query persistence; local media cache.
 - [ ] **Outbox + background sync:** queue mutations & media uploads offline, flush on reconnect.
+      *(Phase 4 shipped the text/prompt outbox — `app/src/sync/outbox.ts`; extend it to **media** —
+      large audio/photo blobs — and resume upload + transcription on reconnect.)*
 - [ ] **Conflict handling:** harden for single + multi-user (builds on Phase 7 merge strategy);
       soft-delete via `deleted_at`.
 - [ ] **Sync status UI:** offline indicator, "pending changes", media upload progress, retry.

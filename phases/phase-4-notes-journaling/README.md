@@ -3,6 +3,13 @@
 > Goal: Capture the trip **as it happens** — text and **voice notes** — low-friction and offline.
 > Est: ~3–4 weeks · Depends on: Phase 3 (cloud + media infra for voice/photos), Phase 1 itinerary
 
+> **Status: ✅ Closed (2026-06-08).** All journaling capabilities shipped and verified on the **web**
+> target (dev): event/day/trip notes, voice notes with cloud transcription, photos (SAS-served),
+> reflection prompts, post-event reminders (global/per-trip/per-type + quiet hours), and offline-first
+> text/prompt capture. A few non-blocking items are **deferred by decision** (see *Deferred / carried*
+> below) — on-device native dev-build verification, offline **media** resume (Phase 9 hardening), the
+> Flex-Consumption IaC tidy-up, and the remaining integration/E2E/privacy tests.
+
 ## Objectives
 - **Journal-as-you-go:** make the **itinerary itself the journal** — capture against the specific
   event you're experiencing, with minimal friction.
@@ -18,18 +25,19 @@
 - [x] **Text notes** scoped to an **event**, a **day**, or the **trip** (`scope` + `target_id`).
 - [x] **Voice notes:** record audio → upload to Azure Blob → transcribe via **Azure Speech-to-Text**
       (async job) → store **both audio and transcript**; playback + show transcript.
-      *(capture/upload/playback done web + native; transcript pending the deployed Function stack.)*
+      *(capture/upload/playback web + native; transcription verified end-to-end in dev — a new note
+      flips ⏳→transcript in ~10–30s and the journal auto-polls while pending, no reload.)*
 - [x] **Hourly weather on item detail:** when viewing or adding a note to an itinerary event,
       show an hourly forecast for that stop's location and day (e.g. "🌦️ 14°C at 2 PM").
       Open-Meteo `hourly=temperature_2m,weather_code,precipitation_probability` on the existing
       `api.open-meteo.com/v1/forecast` endpoint; cache the full day's hourly array under one key
       and slice client-side. Add `GetHourlyAsync(lat, lng, date, ct)` to `IWeatherProvider`.
       See architecture §7 "Hourly weather" and Phase 2 weather notes.
-- [ ] **Post-event notifications:** schedule a **local** notification at an event's end time (+ small
+- [x] **Post-event notifications:** schedule a **local** notification at an event's end time (+ small
       delay) prompting a summary; tapping **deep-links to that event's** note composer / reflection prompt.
 - [x] **Notification config:** on/off **globally, per trip, and per event type** (e.g., meals &
       activities only; skip transport/lodging); **quiet hours**; respects "prompts can be turned off".
-- [ ] **Reflection prompts:** preset library + custom; **toggle on/off globally and per trip**;
+- [x] **Reflection prompts:** preset library + custom; **toggle on/off globally and per trip**;
       fire at end of **event/day/trip**; responses saved as notes linked to the prompt.
 - [x] **Photos** attached to notes (Blob), served via **short-lived SAS URLs** when the cloud store
       can sign them, falling back to the ownership-checked streaming endpoint (local dev / non-signing creds).
@@ -264,6 +272,33 @@ Each slice is independently shippable, testable, and green before the next.
     `fetchMediaObjectUrl`) use the direct URL when available, else authenticated streaming. 3 new API tests.
   - Backend **81/81**, app **79/79**, tsc + lint clean. *(Offline media + a device dev-build pass remain.)*
 
+- **2026-06-08 — Phase close-out (transcription live-refresh + native build prep):**
+  - **Transcript appears without a reload:** `useTripNotesQuery` now sets `refetchInterval` to poll
+    every 5s **while any voice note is `Pending`** and stops once all are `Completed`/`Failed` — so the
+    async transcript slides in on its own (previously it only showed after an F5). Confirmed against the
+    deployed dev stack end-to-end, which **closes the cloud-transcription verification**.
+  - **Native build readiness (mobile is a near-term target):** verified the Expo project is build-ready
+    (scheme `wander`, iOS/Android bundle ids, fingerprint runtime, EAS dev/preview/prod profiles, native
+    plugins w/ permission strings). Found + fixed the one real blocker: the EAS profiles passed only
+    `EXPO_PUBLIC_API_URL`, so a native build would report *"Entra auth is not configured."* Baked the dev
+    Entra vars (`EXPO_PUBLIC_AUTH_ISSUER` / `_CLIENT_ID` / `_SCOPES`, the same non-secret public client
+    used by web/CI) into all three `app/eas.json` profiles. Documented the remaining manual step — register
+    the `wander://auth` mobile redirect on the dev app registration — in `docs/deployment-runbook.md`.
+  - **Decision:** **close Phase 4** on the verified web target; the on-device pass runs when a dev build
+    is cut (`eas build --profile development`).
+
+### Deferred / carried (non-blocking, tracked elsewhere)
+- **Native on-device verification:** run voice/photo/notifications + Microsoft sign-in on a real iOS/
+  Android **dev build**. Project + auth are wired; only `eas login` + the `wander://auth` Entra redirect
+  remain (manual, account-gated). → revisit when shipping the mobile build.
+- **Offline media capture/resume:** queuing large audio/photo blobs offline (the outbox covers text/
+  prompt today). → **Phase 9** sync hardening.
+- **IaC tidy-up:** `infra/modules/functionApp.bicep` still declares a **Y1** plan while the live Function
+  is **Flex Consumption**; convert to **FC1** before any full `main.bicep` deploy with
+  `deployTranscription=true`. → infra backlog.
+- **Remaining tests:** integration (audio→transcript persisted), offline E2E (airplane→reconnect→sync),
+  and privacy (negative-access) — see Testing plan.
+
 > **Revisit on return (carried from Phase 3 deploy):** confirm live web sign-in end-to-end on the
 > dev Static Web App — the `401 /api/trips` seen in the console is just the signed-out state. See
 > `docs/deployment-runbook.md` → "Open item to revisit".
@@ -278,15 +313,18 @@ Each slice is independently shippable, testable, and green before the next.
       event's** composer; disabling globally/per-trip/per-type suppresses it.
 - [ ] **Offline E2E:** airplane mode → create text + voice note on an event → notification still
       scheduled locally → reconnect → media + transcript sync.
-- [ ] **Privacy:** notes default private; media access requires ownership/signed URL.
-- [ ] **Regression:** Phases 0–4 suites green.
+- [ ] **Privacy:** notes default private; media access requires ownership/signed URL. *(ownership +
+      SAS-or-streaming unit-tested; a dedicated negative-access pass is deferred.)*
+- [x] **Regression:** Phases 0–4 suites green (backend **81/81**, app **79/79**).
 
 ## Exit criteria
-- From the itinerary, add text/voice/photo to a **specific event** (journal-as-you-go), **offline**, and it syncs.
-- A **post-event notification** prompts a summary and deep-links to that event; it can be turned off
-  globally, per trip, and per event type.
-- Reflection prompts can be turned off globally and per trip.
-- Media stored securely; nothing is shared or public yet.
+- [x] From the itinerary, add text/voice/photo to a **specific event** (journal-as-you-go); text/prompt
+      capture works **offline** and syncs on reconnect. *(Offline **media** sync → Phase 9.)*
+- [x] A **post-event notification** prompts a summary and deep-links to that event; it can be turned off
+      globally, per trip, and per event type.
+- [x] Reflection prompts can be turned off globally and per trip.
+- [x] Media stored securely (ownership-checked streaming + short-lived SAS); nothing is shared or public yet.
 
 ## Artifacts
-- Mockups: to be added (event note composer, voice recorder, post-event notification, prompt card).
+- Mockups: deferred (event note composer, voice recorder, post-event notification, prompt card) — the
+  shipped UI in `app/` is the source of truth; formal mockups not produced for this phase.

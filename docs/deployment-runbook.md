@@ -253,10 +253,13 @@ Set `MOBILE_API_URL` (repo variable) to point the mobile bundle at the right API
 | Variable | `MOBILE_API_URL` | API base URL the mobile bundle calls (defaults to dev API) |
 | Variable (optional) | `EXPO_PUBLIC_AUTH_ISSUER` / `EXPO_PUBLIC_AUTH_CLIENT_ID` / `EXPO_PUBLIC_AUTH_SCOPES` | Entra config baked into the bundle. **Default to the dev app registration in `ci.yml`**; only set to override for a different tenant. |
 
-> **Native sign-in follow-up:** native (iOS/Android) Entra sign-in needs a mobile redirect URI
-> (`wander://auth` and/or the Expo proxy) registered on the app registration as a *mobile/native*
-> redirect. Web sign-in (current) uses the SPA redirect URIs. Add the native redirect before
-> shipping a build that must authenticate.
+> **Native sign-in follow-up:** native (iOS/Android) Entra sign-in uses the custom-scheme redirect
+> `wander://auth` (`AuthSession.makeRedirectUri({ scheme: 'wander', path: 'auth' })`). Register it on
+> the **same** dev app registration (`2fc17871-0fc0-414a-a86c-78de362fe29a`) under
+> **Authentication → Add a platform → Mobile and desktop applications** (a SPA platform only accepts
+> https redirects, so the mobile redirect must live under the mobile/desktop platform). Web sign-in
+> (current) keeps using the SPA redirect URIs. The auth env vars themselves are now baked into every
+> EAS build profile (`app/eas.json`), so a dev build authenticates once this redirect is registered.
 
 ---
 
