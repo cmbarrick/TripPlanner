@@ -75,8 +75,8 @@ jobs:
           echo "FW_RULE=gh-${{ github.run_id }}" >> "$GITHUB_ENV"
           az postgres flexible-server firewall-rule create \
             --resource-group "$RG_NAME" \
-            --name "${PG_FQDN%%.*}" \
-            --rule-name "gh-${{ github.run_id }}" \
+            --server-name "${PG_FQDN%%.*}" \
+            --name "gh-${{ github.run_id }}" \
             --start-ip-address "$RUNNER_IP" \
             --end-ip-address "$RUNNER_IP"
 
@@ -96,8 +96,8 @@ jobs:
         run: |
           az postgres flexible-server firewall-rule delete \
             --resource-group "$RG_NAME" \
-            --name "$PG_SERVER" \
-            --rule-name "$FW_RULE" \
+            --server-name "$PG_SERVER" \
+            --name "$FW_RULE" \
             --yes || true
 
       - name: Publish API

@@ -1,7 +1,7 @@
 # Project Plan — Wander (Trip Planning App)
 
 > Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-06-08
-> Progress: Phases 0–4 complete (see per-phase summaries in `/docs`). Next: Phase 5 — AI Planning Assistant.
+> Progress: Phases 0–5 feature-complete on dev (see per-phase summaries in `/docs`). Next: Phase 6 — AI Recap & Export.
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
 Every phase has explicit **goals**, **deliverables**, **exit criteria**, and a **testing plan**.
@@ -134,8 +134,14 @@ and discovery layers make it a community product over time.
 ### Phase 5 — AI Planning Assistant
 - **Goal:** Accelerate planning with AI that edits the real trip.
 - **Deliverables:** "Generate itinerary" from a prompt; chat assistant with tool-calling (search places,
-  add/move items, gap-fill); preference-aware; per-user quotas.
-- **Exit criteria:** Prompt → editable draft; chat edits persist; respects preferences & token quotas.
+  add/move items, gap-fill); preference-aware; per-user quotas; batch undo; basic guardrails.
+- **Exit criteria:** Prompt → editable draft; chat edits persist; respects preferences & token quotas;
+  visible changes + undo.
+- **Status:** Done on **dev** — Slices 0–4 shipped (AI seam, preferences, ephemeral draft generation,
+  SSE chat + tools, batch undo, input guard + chat rate limit). Azure OpenAI wired on dev App Service.
+  Deferred: integration tests, golden AI evals, automated E2E, expanded safety evals. Undo applies to
+  chat tool batches only (not Generate "Apply to trip"). See `docs/phase-5-summary.md` and
+  `phases/phase-5-ai-assistant/README.md`.
 
 ### Phase 6 — AI Recap & Export  *(NEW)*
 - **Goal:** Turn captured notes into a shareable story.
@@ -238,7 +244,7 @@ checklist are signed off.
 - **M3:** Map + live weather + integrations (end of Phase 2)
 - **M4:** Deployment/release foundations in place (end of Phase 3) ✅
 - **M5:** Notes & voice journaling, offline (end of Phase 4) ✅
-- **M6:** AI planning assistant usable (end of Phase 5)
+- **M6:** AI planning assistant usable (end of Phase 5) ✅ *(dev; eval/E2E hardening open)*
 - **M7:** AI recap + export (end of Phase 6)
 - **M8:** Sharing + real-time collaboration (end of Phase 7)
 - **M9:** Public discovery + RAG Q&A (end of Phase 8)
