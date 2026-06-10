@@ -138,8 +138,11 @@ export function TripPlannerScreen({
           <Text style={{ fontSize: 20, color: colors.ink600, marginTop: -2 }}>‹</Text>
         </Pressable>
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={s.title} numberOfLines={1}>{trip.destination.split(',')[0]}</Text>
-          <Text style={s.sub}>{dateRange(trip.startDate, trip.endDate)} · {trip.days.length} days · {trip.days.reduce((n, d) => n + d.items.length, 0)} stops</Text>
+          <Text style={s.title} numberOfLines={1}>{trip.title}</Text>
+          <Text style={s.sub}>
+            {trip.destination.split(',')[0]} · {dateRange(trip.startDate, trip.endDate)} · {trip.days.length} days ·{' '}
+            {trip.days.reduce((n, d) => n + d.items.length, 0)} stops
+          </Text>
         </View>
         <Pressable style={s.iconBtn} onPress={onEditTrip} accessibilityLabel="Edit trip">
           <Text style={{ fontSize: 15, color: colors.ink600 }}>✎</Text>

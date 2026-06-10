@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,11 @@ import { AssistantChatPanel } from './AssistantChatPanel';
 
 type AssistantMode = 'generate' | 'chat';
 
+type PinnedDraft = {
+  tripId: string;
+  response: GenerateItineraryResponse;
+};
+
 export function AssistantScreen({
   trips,
   initialTripId,
@@ -35,34 +40,54 @@ export function AssistantScreen({
   const [tripId, setTripId] = useState<string | null>(defaultTripId);
   const [mode, setMode] = useState<AssistantMode>('chat');
   const [prompt, setPrompt] = useState('');
-  const [draft, setDraft] = useState<GenerateItineraryResponse | null>(null);
+  const [draft, setDraft] = useState<PinnedDraft | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+
+  useEffect(() => {
+    if (initialTripId) setTripId(initialTripId);
+  }, [initialTripId]);
+
+  useEffect(() => {
+    if (tripId && !trips.some((t) => t.id === tripId)) {
+      setTripId(trips[0]?.id ?? null);
+      setDraft(null);
+    }
+  }, [tripId, trips]);
 
   const selectedTrip = useMemo(
     () => trips.find((t) => t.id === tripId) ?? null,
     [tripId, trips],
   );
 
+  const draftTrip = useMemo(
+    () => (draft ? trips.find((t) => t.id === draft.tripId) ?? null : null),
+    [draft, trips],
+  );
+
   const groupedDraft = useMemo(() => {
-    if (!draft || !selectedTrip) return [];
-    const byDay = new Map<number, typeof draft.items>();
-    for (const item of draft.items) {
+    if (!draft || !draftTrip) return [];
+    const byDay = new Map<number, typeof draft.response.items>();
+    for (const item of draft.response.items) {
       const list = byDay.get(item.dayNumber) ?? [];
       list.push(item);
       byDay.set(item.dayNumber, list);
     }
-    return selectedTrip.days
+    return draftTrip.days
       .filter((d) => byDay.has(d.dayNumber))
       .map((day) => ({ day, items: byDay.get(day.dayNumber)! }));
-  }, [draft, selectedTrip]);
+  }, [draft, draftTrip]);
 
   const runGenerate = () => {
     if (!tripId || !prompt.trim()) return;
     setApplyError(null);
+    const targetTripId = tripId;
     generate.mutate(
-      { tripId, prompt: prompt.trim() },
-      { onSuccess: (result) => setDraft(result), onError: () => setDraft(null) },
+      { tripId: targetTripId, prompt: prompt.trim() },
+      {
+        onSuccess: (result) => setDraft({ tripId: targetTripId, response: result }),
+        onError: () => setDraft(null),
+      },
     );
   };
 
@@ -72,17 +97,20 @@ export function AssistantScreen({
   };
 
   const applyDraft = async () => {
-    if (!draft || !selectedTrip) return;
+    if (!draft || !draftTrip) {
+      setApplyError('That trip is no longer available. Regenerate the draft.');
+      return;
+    }
     setApplying(true);
     setApplyError(null);
     try {
-      for (const item of draft.items) {
-        const day = selectedTrip.days.find((d) => d.dayNumber === item.dayNumber);
+      for (const item of draft.response.items) {
+        const day = draftTrip.days.find((d) => d.dayNumber === item.dayNumber);
         if (!day) continue;
         await createItem.mutateAsync({
-          tripId: selectedTrip.id,
+          tripId: draft.tripId,
           dayId: day.id,
-          input: draftItemToInput(item, selectedTrip.currency),
+          input: draftItemToInput(item, draftTrip.currency),
         });
       }
       setDraft(null);
@@ -204,13 +232,14 @@ export function AssistantScreen({
               ) : null}
             </Card>
 
-            {draft ? (
+            {draft && draftTrip ? (
               <>
                 <Text style={s.section}>Draft preview</Text>
                 <Card style={s.draftCard}>
-                  <Text style={s.draftSummary}>{draft.summary}</Text>
+                  <Text style={s.draftTarget}>Applying to: {draftTrip.title}</Text>
+                  <Text style={s.draftSummary}>{draft.response.summary}</Text>
                   <Text style={s.draftMeta}>
-                    {draft.items.length} stops · {draft.tokensUsed.toLocaleString()} tokens
+                    {draft.response.items.length} stops · {draft.response.tokensUsed.toLocaleString()} tokens
                   </Text>
 
                   {groupedDraft.map(({ day, items }) => {
@@ -337,6 +366,7 @@ const s = StyleSheet.create({
   secondaryBtnText: { color: colors.ink600, fontSize: 13, fontWeight: '700' },
   error: { marginTop: 10, fontSize: 11, color: '#b91c1c' },
   draftCard: { gap: 8 },
+  draftTarget: { fontSize: 12, fontWeight: '800', color: colors.brand, marginBottom: 4 },
   draftSummary: { fontSize: 15, fontWeight: '800', color: colors.ink },
   draftMeta: { fontSize: 11, color: colors.ink400, marginBottom: 4 },
   dayBlock: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.line },

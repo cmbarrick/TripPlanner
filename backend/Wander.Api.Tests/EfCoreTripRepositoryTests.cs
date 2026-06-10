@@ -134,6 +134,44 @@ public class EfCoreTripRepositoryTests
             var reloaded = new EfCoreTripRepository(ctx).GetById(id, "owner-a");
             Assert.Equal("Renamed", reloaded!.Title);
             Assert.Equal(7, reloaded.Nights);
+            Assert.Equal(8, reloaded.Days.Count);
+            Assert.Equal(new DateOnly(2026, 7, 2), reloaded.Days[0].Date);
+            Assert.Equal(new DateOnly(2026, 7, 9), reloaded.Days[^1].Date);
+        }
+    }
+
+    [Fact]
+    public void Update_ShorteningDates_RemovesExtraDays()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid id;
+        using (var ctx = NewContext(db))
+        {
+            var trip = SampleTrip("owner-a");
+            trip.StartDate = new DateOnly(2026, 7, 1);
+            trip.EndDate = new DateOnly(2026, 7, 31);
+            trip.Days = [];
+            for (var n = 1; n <= 31; n++)
+                trip.Days.Add(new Day { DayNumber = n, Date = trip.StartDate.AddDays(n - 1) });
+            id = new EfCoreTripRepository(ctx).Add(trip).Id;
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var updated = new EfCoreTripRepository(ctx).Update(id, "owner-a", new Trip
+            {
+                Title = "Short",
+                Destination = "Los Angeles",
+                StartDate = new DateOnly(2026, 6, 24),
+                EndDate = new DateOnly(2026, 6, 27),
+                Travelers = 1,
+                CoverTheme = "default",
+                Currency = "USD",
+            });
+            Assert.NotNull(updated);
+            Assert.Equal(4, updated!.Days.Count);
+            Assert.Equal(new DateOnly(2026, 6, 24), updated.Days[0].Date);
+            Assert.Equal(new DateOnly(2026, 6, 27), updated.Days[^1].Date);
         }
     }
 

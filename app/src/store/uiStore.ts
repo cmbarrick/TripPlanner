@@ -82,19 +82,22 @@ export const useUiStore = create<UiState>()(
   unit: 'F',
   clock: '12h',
   setTab: (tab) =>
-    set((state) =>
-      tab === 'trips'
-        ? { tab }
-        : {
-            ...state,
-            tab,
-            tripView: 'list',
-            openTripId: null,
-            editingTripId: null,
-            addItemDayId: null,
-            editingItemId: null,
-          }
-    ),
+    set((state) => {
+      if (tab === 'trips') return { tab };
+      // Keep openTripId on Assistant so generate/apply targets the trip the user was viewing.
+      const resetPlanner = tab !== 'assistant';
+      return {
+        ...state,
+        tab,
+        ...(resetPlanner && {
+          tripView: 'list',
+          openTripId: null,
+          editingTripId: null,
+          addItemDayId: null,
+          editingItemId: null,
+        }),
+      };
+    }),
   openTrip: (tripId) =>
     set({
       openTripId: tripId,

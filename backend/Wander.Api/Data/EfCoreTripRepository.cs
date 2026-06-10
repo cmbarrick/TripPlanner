@@ -91,6 +91,8 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         existing.Currency = updated.Currency;
         existing.TimeZoneId = updated.TimeZoneId;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        TripDaySync.Sync(dbContext, existing, ownerId);
         dbContext.SaveChanges();
 
         return GetById(id, ownerId);

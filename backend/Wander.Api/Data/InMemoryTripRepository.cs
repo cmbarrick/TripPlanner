@@ -60,7 +60,50 @@ public class InMemoryTripRepository : ITripRepository
         existing.Currency = updated.Currency;
         existing.TimeZoneId = updated.TimeZoneId;
         existing.UpdatedAt = DateTimeOffset.UtcNow;
+        SyncDaysInMemory(existing);
         return existing;
+    }
+
+    private static void SyncDaysInMemory(Trip trip)
+    {
+        var expected = TripDaySync.BuildRange(trip.StartDate, trip.EndDate);
+        var existing = trip.Days.Where(d => d.DeletedAt is null).ToList();
+        var expectedNumbers = expected.Select(e => e.DayNumber).ToHashSet();
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var (dayNumber, date) in expected)
+        {
+            var day = existing.FirstOrDefault(d => d.DayNumber == dayNumber);
+            if (day is null)
+            {
+                trip.Days.Add(new Day
+                {
+                    Id = Guid.NewGuid(),
+                    TripId = trip.Id,
+                    OwnerId = trip.OwnerId,
+                    DayNumber = dayNumber,
+                    Date = date,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+            else
+            {
+                day.Date = date;
+                day.UpdatedAt = now;
+            }
+        }
+
+        foreach (var extra in existing.Where(d => !expectedNumbers.Contains(d.DayNumber)))
+        {
+            extra.DeletedAt = now;
+            extra.UpdatedAt = now;
+            foreach (var item in extra.Items.Where(i => i.DeletedAt is null))
+            {
+                item.DeletedAt = now;
+                item.UpdatedAt = now;
+            }
+        }
     }
 
     public bool Delete(Guid id, string ownerId)
