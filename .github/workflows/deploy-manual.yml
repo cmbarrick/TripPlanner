@@ -73,12 +73,7 @@ jobs:
           RUNNER_IP=$(curl -s https://api.ipify.org)
           echo "PG_SERVER=${PG_FQDN%%.*}" >> "$GITHUB_ENV"
           echo "FW_RULE=gh-${{ github.run_id }}" >> "$GITHUB_ENV"
-          az postgres flexible-server firewall-rule create \
-            --resource-group "$RG_NAME" \
-            --server-name "${PG_FQDN%%.*}" \
-            --name "gh-${{ github.run_id }}" \
-            --start-ip-address "$RUNNER_IP" \
-            --end-ip-address "$RUNNER_IP"
+          bash scripts/postgres-runner-firewall.sh open "$RG_NAME" "$PG_FQDN" "gh-${{ github.run_id }}" "$RUNNER_IP"
 
       - name: Apply database migrations
         env:
@@ -93,12 +88,7 @@ jobs:
 
       - name: Close Postgres firewall for runner
         if: always()
-        run: |
-          az postgres flexible-server firewall-rule delete \
-            --resource-group "$RG_NAME" \
-            --server-name "$PG_SERVER" \
-            --name "$FW_RULE" \
-            --yes || true
+        run: bash scripts/postgres-runner-firewall.sh close "$RG_NAME" "$PG_SERVER" "$FW_RULE"
 
       - name: Publish API
         run: dotnet publish backend/Wander.Api/Wander.Api.csproj -c Release -o ./publish
