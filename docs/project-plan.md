@@ -1,7 +1,7 @@
 # Project Plan — Wander (Trip Planning App)
 
 > Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-06-08
-> Progress: Phases 0–5 feature-complete on dev (see per-phase summaries in `/docs`). Next: Phase 6 — AI Recap & Export.
+> Progress: Phases 0–6 **closed** on dev (see per-phase summaries in `/docs`). Next: **Phase 7 — Sharing & Collaboration**.
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
 Every phase has explicit **goals**, **deliverables**, **exit criteria**, and a **testing plan**.
@@ -64,8 +64,8 @@ and discovery layers make it a community product over time.
 | **2** | Maps & Integrations | Map view, place search, live weather, .ics export | ~3 wks |
 | **3** | Deployment & Release Foundations | Azure environments, CI/CD deploy, EAS/store groundwork | ~1–2 wks |
 | **4** | Notes & Journaling | Text + **voice notes** (audio+transcript), reflection prompts, offline capture | ~3–4 wks |
-| **5** | AI Planning Assistant | Generate & refine itineraries via chat | ~3 wks |
-| **6** | AI Recap & Export | Summarize notes → recap (event/day/trip), export to PDF/web | ~2–3 wks |
+| **5** | AI Planning Assistant ✅ | Generate & refine itineraries via chat | ~3 wks |
+| **6** | AI Recap & Export ✅ | Summarize notes → recap (event/day/trip), export to PDF/web | ~2–3 wks |
 | **7** | Sharing & Collaboration | Share by link + accounts, **real-time co-edit**, reactions | ~3–4 wks |
 | **8** | Public Recaps & Discovery | Publish + moderation, search, **RAG** location Q&A + itinerary discovery | ~4–5 wks |
 | **9** | Offline, Polish & Launch | Robust sync, performance, accessibility, launch hardening | ~2–3 wks |
@@ -131,7 +131,7 @@ and discovery layers make it a community product over time.
   **media** resume (→ Phase 9), `functionApp.bicep` Y1→Flex tidy-up, and the remaining
   integration/E2E/privacy tests. See `phases/phase-4-notes-journaling/README.md`.
 
-### Phase 5 — AI Planning Assistant
+### Phase 5 — AI Planning Assistant  ✅ **Complete (2026-06-08)**
 - **Goal:** Accelerate planning with AI that edits the real trip.
 - **Deliverables:** "Generate itinerary" from a prompt; chat assistant with tool-calling (search places,
   add/move items, gap-fill); preference-aware; per-user quotas; batch undo; basic guardrails.
@@ -139,17 +139,24 @@ and discovery layers make it a community product over time.
   visible changes + undo.
 - **Status:** Done on **dev** — Slices 0–4 shipped (AI seam, preferences, ephemeral draft generation,
   SSE chat + tools, batch undo, input guard + chat rate limit). Azure OpenAI wired on dev App Service.
-  Deferred: integration tests, golden AI evals, automated E2E, expanded safety evals. Undo applies to
-  chat tool batches only (not Generate "Apply to trip"). See `docs/phase-5-summary.md` and
-  `phases/phase-5-ai-assistant/README.md`.
+  Chat + Generate on the **Assistant tab**; trip planner AI dock is placeholder + undo after chat.
+  Deferred by decision: in-trip composer, integration tests, golden AI evals, automated E2E, expanded
+  safety evals, undo on Generate Apply. See [`phase-5-summary.md`](./phase-5-summary.md) and
+  [`phases/phase-5-ai-assistant/README.md`](../phases/phase-5-ai-assistant/README.md).
 
-### Phase 6 — AI Recap & Export  *(NEW)*
+### Phase 6 — AI Recap & Export  ✅ **Complete (2026-06-12)**
 - **Goal:** Turn captured notes into a shareable story.
 - **Deliverables:** **Azure OpenAI** summarizes notes (text + transcripts) into a **recap** at event,
   day, and whole-trip levels; tone/format options; user can **edit before saving**; **export** to
   PDF and a shareable web page; optional inclusion of photos.
 - **Exit criteria:** Generate an editable trip recap from notes; export a polished PDF/web page; AI recap
   quality passes the eval thresholds; no fabricated facts beyond the user's notes.
+- **Status:** Done on **dev** (web) — versioned `Recap` entity + generate/save/finalize API, strict
+  grounding (context whitelist + per-section note citations validated server-side), **historical
+  weather actuals** (Open-Meteo archive, immutable cache) in recap context, tone picker, QuestPDF
+  export + unlisted `/share/recaps/{token}` page, quota + regeneration dedupe. Also shipped the
+  deferred Phase 5 **in-trip AI dock** composer. Deferred: golden faithfulness evals, event-scope UI
+  entry, photos on the share page, live E2E. See [`phase-6-summary.md`](./phase-6-summary.md).
 
 ### Phase 7 — Sharing & Collaboration  *(expanded from old v2)*
 - **Goal:** Plan and relive trips together.
@@ -244,8 +251,8 @@ checklist are signed off.
 - **M3:** Map + live weather + integrations (end of Phase 2)
 - **M4:** Deployment/release foundations in place (end of Phase 3) ✅
 - **M5:** Notes & voice journaling, offline (end of Phase 4) ✅
-- **M6:** AI planning assistant usable (end of Phase 5) ✅ *(dev; eval/E2E hardening open)*
-- **M7:** AI recap + export (end of Phase 6)
+- **M6:** AI planning assistant usable (end of Phase 5) ✅
+- **M7:** AI recap + export (end of Phase 6) ✅
 - **M8:** Sharing + real-time collaboration (end of Phase 7)
 - **M9:** Public discovery + RAG Q&A (end of Phase 8)
 - **M10:** Public launch — offline, polished, privacy-reviewed (end of Phase 9)

@@ -16,6 +16,13 @@ public sealed class FakeAiProvider : IAiProvider
         {"dayNumber":1,"type":"Food","title":"Coffee break","startTime":"10:30"}
         """;
 
+    public const string SampleRecapJson = """
+        {"title":"A sample trip recap","sections":[
+          {"heading":"Wandering the old town","body":"We strolled the old town and loved the market.","noteIds":["n1"]},
+          {"heading":"Looking back","body":"A relaxed pace suited us perfectly.","noteIds":["n1","n2"]}
+        ]}
+        """;
+
     public bool IsEnabled => true;
 
     public async IAsyncEnumerable<AiCompletionDelta> CompleteAsync(
@@ -26,7 +33,8 @@ public sealed class FakeAiProvider : IAiProvider
 
         if (request.Format == AiResponseFormat.JsonSchema)
         {
-            yield return new TextDelta(SampleDraftJson);
+            yield return new TextDelta(
+                request.DeploymentKind == "recap" ? SampleRecapJson : SampleDraftJson);
             yield return new CompletionDone(new AiUsage(40, 60), AiFinishReason.Stop);
             yield break;
         }

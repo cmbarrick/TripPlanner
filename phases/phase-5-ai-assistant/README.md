@@ -3,6 +3,12 @@
 > Goal: Accelerate planning with an AI that **edits the real trip** (not just chats).
 > Est: ~3 weeks · Depends on: Phase 3 (cloud infra for AI orchestration)
 
+> **Status: ✅ Closed (2026-06-08).** Slices 0–4 shipped on **dev**: AI seam, preferences, ephemeral
+> draft generation, SSE chat + tool-calling, batch undo, input guard + chat rate limit. Chat and
+> Generate live on the **Assistant tab**; the trip planner **AI dock** remains a placeholder composer
+> (undo-only after chat batches). Non-blocking validation hardening and the in-trip composer are
+> **deferred** — see [`docs/phase-5-summary.md`](../../docs/phase-5-summary.md).
+
 ## Objectives
 - Generate editable itineraries from a prompt.
 - Provide a chat assistant that performs actions via tool-calling and respects preferences.
@@ -49,10 +55,19 @@
 - [ ] **Regression:** Phases 0–3 suites green.
 
 ## Exit criteria
-- From a prompt, the AI produces an **editable** draft itinerary.
-- In chat, the AI can add/modify/reorder items that **persist**, with visible changes + undo.
-- Respects user preferences and stays within token quotas.
-- AI eval suite passes the agreed quality thresholds.
+- [x] From a prompt, the AI produces an **editable** draft itinerary.
+- [x] In chat, the AI can add/modify/reorder items that **persist**, with visible changes + undo.
+- [x] Respects user preferences and stays within token quotas.
+- [ ] AI eval suite passes the agreed quality thresholds. *(Deferred — golden eval suite not automated.)*
+
+## Deferred / carried forward
+
+| Item | Notes |
+|---|---|
+| In-trip AI dock composer | Mockup in `option-4-map-ai-planner.html`; wire tap/type → chat for open trip → Phase 9 polish or pre–Phase 6 slice |
+| Integration + E2E + golden evals | See testing plan below |
+| Undo on Generate **Apply** | Chat tool batches only |
+| Expanded safety evals | Basic `AiInputGuard` shipped |
 
 ## Artifacts
 - Mockups: `../../mockups` (AI Assistant chat, Generate Itinerary)

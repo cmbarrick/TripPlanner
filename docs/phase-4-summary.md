@@ -161,5 +161,6 @@ works fully against local data.
 
 ## What's next
 
-**Phase 5 — AI Planning Assistant:** generate/refine itineraries via chat with tool-calling (search
-places, add/move items, gap-fill), preference-aware, with per-user token quotas and AI quality evals.
+**Phase 6 — AI Recap & Export:** summarize notes (text + transcripts) into editable recaps at
+event/day/trip level; export to PDF/web; faithfulness evals. *(Phase 5 closed 2026-06-08 — see
+[`phase-5-summary.md`](./phase-5-summary.md).)*

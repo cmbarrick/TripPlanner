@@ -102,8 +102,10 @@ public sealed class AzureOpenAiProvider : IAiProvider
         yield return new CompletionDone(usage, finish);
     }
 
+    // Recaps ride the cheaper draft deployment — first drafts are user-edited anyway.
     private string ResolveDeployment(string? kind) =>
         string.Equals(kind, "draft", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(kind, "recap", StringComparison.OrdinalIgnoreCase)
             ? _options.DraftDeployment
             : _options.ChatDeployment;
 

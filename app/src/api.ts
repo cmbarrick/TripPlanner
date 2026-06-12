@@ -546,6 +546,127 @@ export async function updatePreferences(patch: UserPreferencesPatch): Promise<Us
   return sendJson<UserPreferences>('/api/preferences', 'PUT', patch);
 }
 
+// ── AI recap & export (Phase 6) ──────────────────────────────────────────────
+
+export type RecapScope = 'Trip' | 'Day' | 'Event';
+export type RecapTone = 'Narrative' | 'Highlights' | 'Bullets';
+export type RecapStatus = 'Draft' | 'Final';
+
+/** One generated section with the journal notes that grounded it. */
+export interface RecapSection {
+  heading: string;
+  body: string;
+  noteIds: string[];
+}
+
+export interface Recap {
+  id: string;
+  tripId: string;
+  scope: RecapScope;
+  targetId: string | null;
+  tone: RecapTone;
+  title: string;
+  body: string;
+  sections: RecapSection[];
+  generatedFromNoteIds: string[];
+  status: RecapStatus;
+  version: number;
+  /** Relative URL of the unlisted share page once shared. */
+  shareUrl: string | null;
+  exportUrls: string[];
+  tokensUsed: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GenerateRecapInput {
+  scope: RecapScope;
+  targetId?: string | null;
+  tone: RecapTone;
+}
+
+/** Recaps for a trip (newest first). Falls back to an empty list when the API is unreachable. */
+export async function fetchRecaps(tripId: string): Promise<{ data: Recap[]; live: boolean }> {
+  return tryFetch<Recap[]>(`/api/trips/${tripId}/recaps`, []);
+}
+
+export async function generateRecap(tripId: string, input: GenerateRecapInput): Promise<Recap> {
+  return sendJson<Recap>(`/api/trips/${tripId}/recaps/generate`, 'POST', input);
+}
+
+export async function updateRecap(
+  tripId: string,
+  recapId: string,
+  input: { title: string; body: string },
+): Promise<Recap> {
+  return sendJson<Recap>(`/api/trips/${tripId}/recaps/${recapId}`, 'PUT', input);
+}
+
+export async function finalizeRecap(tripId: string, recapId: string): Promise<Recap> {
+  return sendJson<Recap>(`/api/trips/${tripId}/recaps/${recapId}/finalize`, 'POST');
+}
+
+/** Issues (or reuses) the unlisted share-page link for a recap. */
+export async function shareRecap(tripId: string, recapId: string): Promise<Recap> {
+  return sendJson<Recap>(`/api/trips/${tripId}/recaps/${recapId}/share`, 'POST');
+}
+
+export async function deleteRecap(tripId: string, recapId: string): Promise<void> {
+  await sendJson<void>(`/api/trips/${tripId}/recaps/${recapId}`, 'DELETE');
+}
+
+/** Absolute URL for a recap's share page (the API serves the page). */
+export function recapShareAbsoluteUrl(shareUrl: string): string {
+  return `${API_BASE}${shareUrl}`;
+}
+
+/** Downloads the server-rendered recap PDF (browser download on web, share sheet on native). */
+export async function downloadRecapPdf(
+  tripId: string,
+  recapId: string,
+  options?: { includePhotos?: boolean; fileName?: string },
+): Promise<void> {
+  const headers = (await buildHeaders()) ?? {};
+  const params = options?.includePhotos ? '?includePhotos=true' : '';
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/recaps/${recapId}/pdf${params}`, {
+    headers,
+  });
+  if (!res.ok) {
+    throw new ApiError(await readError(res), res.status);
+  }
+
+  const fileName = `${(options?.fileName ?? 'trip-recap').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+  if (Platform.OS === 'web') {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // Native: write to cache and hand off to the share sheet (same pattern as exportIcs).
+  const buffer = await res.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  const base64 = btoa(binary);
+  const FileSystem = await import('expo-file-system');
+  const Sharing = await import('expo-sharing');
+  const cacheDir = (FileSystem as any).cacheDirectory ?? (FileSystem as any).Paths?.cache ?? '';
+  const path = `${cacheDir}${fileName}`;
+  await (FileSystem as any).writeAsStringAsync(path, base64, { encoding: 'base64' });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(path, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+  }
+}
+
 // ── Notes & journaling (Phase 4) ─────────────────────────────────────────────
 
 export interface CreateNoteInput {

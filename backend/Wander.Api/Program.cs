@@ -7,6 +7,7 @@ using Wander.Api.Ai;
 using Wander.Api.Data;
 using Wander.Api.Media;
 using Wander.Api.Places;
+using Wander.Api.Recaps;
 using Wander.Api.Routing;
 using Wander.Api.Security;
 using Wander.Api.Transcription;
@@ -72,6 +73,24 @@ else
             sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 }
 
+// Historical weather actuals for recap grounding (Phase 6) — archive data is immutable, so the
+// caching decorator keeps entries indefinitely. Same fake switch as planning weather.
+if (useFakeWeather)
+{
+    builder.Services.AddScoped<IHistoricalWeatherProvider>(sp =>
+        new CachingHistoricalWeatherProvider(
+            new FakeHistoricalWeatherProvider(),
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
+}
+else
+{
+    builder.Services.AddHttpClient<OpenMeteoHistoricalWeatherProvider>();
+    builder.Services.AddScoped<IHistoricalWeatherProvider>(sp =>
+        new CachingHistoricalWeatherProvider(
+            sp.GetRequiredService<OpenMeteoHistoricalWeatherProvider>(),
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
+}
+
 // Place search provider — key stays server-side. Swap MapboxPlaceProvider for
 // FakePlaceProvider automatically when no access token is configured (e.g. CI).
 var mapboxToken = builder.Configuration["Places:MapboxAccessToken"];
@@ -126,6 +145,11 @@ builder.Services.AddScoped<IAiToolExecutor, AiToolExecutor>();
 builder.Services.AddSingleton<IAiChatRateLimiter, AiChatRateLimiter>();
 builder.Services.AddScoped<IAiUndoService, AiUndoService>();
 builder.Services.AddScoped<IAiPlanningService, AiPlanningService>();
+
+// AI recap & export (Phase 6): grounded recap generation over the user's notes/transcripts.
+builder.Services.AddScoped<IRecapRepository, EfCoreRecapRepository>();
+builder.Services.AddScoped<IRecapGenerationService, RecapGenerationService>();
+builder.Services.AddScoped<IRecapExportService, RecapExportService>();
 var aiSection = builder.Configuration.GetSection(AiOptions.SectionName);
 var useFakeAi = aiSection.GetValue<bool>(nameof(AiOptions.UseFake));
 var aiEndpoint = aiSection[nameof(AiOptions.Endpoint)];

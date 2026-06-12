@@ -55,9 +55,13 @@ type UiState = {
   editingTripId: string | null;
   addItemDayId: string | null;
   editingItemId: string | null;
+  /** Prompt typed into the trip planner AI dock, consumed by the Assistant chat on arrival. */
+  pendingAiPrompt: string | null;
   unit: TempUnit;
   clock: ClockPref;
   setTab: (tab: TabKey) => void;
+  openAssistant: (prompt?: string | null) => void;
+  clearPendingAiPrompt: () => void;
   openTrip: (tripId: string) => void;
   backToList: () => void;
   showAddItem: (dayId: string) => void;
@@ -79,6 +83,7 @@ export const useUiStore = create<UiState>()(
   editingTripId: null,
   addItemDayId: null,
   editingItemId: null,
+  pendingAiPrompt: null,
   unit: 'F',
   clock: '12h',
   setTab: (tab) =>
@@ -98,6 +103,11 @@ export const useUiStore = create<UiState>()(
         }),
       };
     }),
+  // Jump to the Assistant tab (Chat mode, current trip stays pinned via openTripId);
+  // an optional prompt is handed off and auto-sent by the chat panel.
+  openAssistant: (prompt) =>
+    set({ tab: 'assistant', pendingAiPrompt: prompt?.trim() || null }),
+  clearPendingAiPrompt: () => set({ pendingAiPrompt: null }),
   openTrip: (tripId) =>
     set({
       openTripId: tripId,

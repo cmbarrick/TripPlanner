@@ -1,10 +1,10 @@
 # Phase 5 Summary — AI Planning Assistant
 
 Date: 2026-06-08
-Status: **Feature-complete on dev** (Slices 0–4 shipped). Core exit criteria met for draft
+Status: **✅ Closed (2026-06-08).** Slices 0–4 shipped on **dev**; core exit criteria met for draft
 generation, chat tool-calling, preference-aware prompts, token quotas, visible trip changes, and
-batch undo. Remaining work is **validation hardening** (integration tests, golden AI evals, automated
-E2E) — documented below, not blocked for dev use.
+batch undo. Non-blocking items are **deferred by decision** (validation hardening, in-trip AI dock
+composer, undo on Generate Apply) — documented below, not blocked for dev use or Phase 6 kickoff.
 
 ---
 
@@ -22,9 +22,21 @@ tab degrades gracefully (`GET /api/ai/status` → disabled). Orchestration runs 
 (App Service) with **SSE streaming** for chat; Azure Functions remain for async work (e.g. transcription).
 
 Each chat turn that mutates the itinerary emits a **batch id** and **undo steps**; the client can call
-`POST /api/ai/trips/{id}/undo` or tap **Undo last AI batch** (Assistant) / **Undo AI** (trip planner).
-Basic **guardrails** block common prompt-injection patterns and cap chat requests at 20/minute per user
-(token quota unchanged).
+`POST /api/ai/trips/{id}/undo` or tap **Undo last AI batch** (Assistant) / **Undo AI** (trip planner
+dock, when a chat batch exists in the current session). Basic **guardrails** block common
+prompt-injection patterns and cap chat requests at 20/minute per user (token quota unchanged).
+
+### Where to use AI (UX)
+
+| Surface | What works |
+|---|---|
+| **Assistant tab** (✨) | **Chat** — tool-calling edits that persist; **Generate** — ephemeral draft → Apply to trip |
+| **Trip planner AI dock** | ✅ Functional composer (shipped Phase 6 Slice 0) — typed prompt opens Assistant chat pinned to the open trip and auto-sends; **Undo AI** appears after a **chat** batch (same session) |
+| **Profile** | Travel preferences (style, pace, diet, budget) injected into generate + chat prompts |
+
+The mockup **in-context composer** on the trip screen (`mockups/option-4-map-ai-planner.html`) was
+deferred from this phase and shipped as **Phase 6 Slice 0** — the dock is now a real composer that
+hands off to Assistant chat with the trip pinned.
 
 ---
 
@@ -90,20 +102,35 @@ Basic **guardrails** block common prompt-injection patterns and cap chat request
 
 ---
 
+## Exit criteria (sign-off)
+
+| Criterion | Met |
+|---|---|
+| Prompt → editable draft itinerary | ✅ Generate tab + ephemeral preview |
+| Chat adds/modifies/reorders items that persist | ✅ Tool-calling via SSE chat |
+| Visible changes + undo | ✅ Activity rail + undo API (chat batches only) |
+| Respects user preferences | ✅ Profile preferences in prompts |
+| Stays within token quotas | ✅ Postgres daily quota + status endpoint |
+| AI eval suite passes quality thresholds | ⏸ Deferred — golden eval suite not automated yet |
+
+---
+
 ## Deferred items (documented, not blocked)
 
-| Item | Notes |
-|---|---|
-| Integration tests | Tool mutations persist; preferences in prompts; quota blocks; swappable provider |
-| Golden AI eval suite | Structure, diet/budget constraints, no hallucinated bookings, pacing/geography |
-| Automated E2E | "Plan 3 days in Lisbon…" → draft → chat tweak → undo |
-| Expanded safety evals | Basic regex guard only; no history scanning or content moderation |
-| Undo on Generate **Apply** | Undo covers **chat tool batches** only; apply-to-trip uses normal CRUD |
-| Live LLM smoke | Manual against dev Azure OpenAI; unit tests use `FakeAiProvider` |
+| Item | Target | Notes |
+|---|---|---|
+| **In-trip AI dock composer** | ✅ Done — Phase 6 Slice 0 (2026-06-11) | Composer on trip planner hands the prompt to Assistant chat (trip pinned, auto-sent); AI-off state degrades gracefully |
+| Integration tests | Cross-phase hardening | Tool mutations persist; preferences in prompts; quota blocks |
+| Golden AI eval suite | Phases 5–6 on AI changes | Structure, diet/budget, no hallucinated bookings, pacing |
+| Automated E2E | Cross-phase hardening | Draft → chat tweak → persist → undo |
+| Expanded safety evals | Phases 5–8 | Basic regex guard only today |
+| Undo on Generate **Apply** | Backlog | Undo covers **chat tool batches** only |
+| Live LLM smoke | Manual | Dev Azure OpenAI; unit tests use `FakeAiProvider` |
 
 ---
 
 ## What's next
 
 **Phase 6 — AI Recap & Export:** summarize notes (text + transcripts) into editable recaps at
-event/day/trip level; export to PDF/web; faithfulness evals.
+event/day/trip level; export to PDF/web; faithfulness evals. Reuses Phase 5 AI seam (`IAiProvider`,
+quota, Azure OpenAI wiring).

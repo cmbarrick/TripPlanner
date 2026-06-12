@@ -17,6 +17,7 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
     public DbSet<AiTokenUsage> AiTokenUsages => Set<AiTokenUsage>();
+    public DbSet<Recap> Recaps => Set<Recap>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,6 +135,19 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
         {
             entity.ToTable("ai_token_usage");
             entity.HasIndex(x => new { x.OwnerId, x.UsageDate }).IsUnique();
+        });
+
+        modelBuilder.Entity<Recap>(entity =>
+        {
+            entity.ToTable("recaps");
+            // Listing filters by (trip, scope, target); the share token is the anonymous lookup key.
+            entity.HasIndex(x => new { x.TripId, x.Scope, x.TargetId });
+            entity.HasIndex(x => x.OwnerId);
+            entity.HasIndex(x => x.ShareToken).IsUnique();
+            entity.HasOne<Trip>()
+                .WithMany()
+                .HasForeignKey(x => x.TripId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -18,7 +18,9 @@
 - [ ] **Sync status UI:** offline indicator, "pending changes", media upload progress, retry.
 - [ ] **Performance pass:** list virtualization, image/audio optimization, cold-start, bundle size.
 - [ ] **Accessibility pass:** labels, focus order, dynamic type, contrast (axe / manual SR test).
-- [ ] **UX polish:** onboarding, empty/error/loading states, micro-interactions.
+- [ ] **UX polish:** onboarding, empty/error/loading states, micro-interactions; **in-trip AI dock**
+      composer (wire mockup `option-4-map-ai-planner.html` — tap/type → chat for open trip; Phase 5
+      shipped chat on Assistant tab only).
 - [ ] **Privacy review:** consent gates, deletion/export, moderation paths verified end-to-end.
 - [ ] **Launch prep:** app icons, splash, store screenshots (all required sizes), privacy policy, listings.
 - [ ] **App store submission** (see [`deployment-and-app-stores.md`](../../docs/deployment-and-app-stores.md)):

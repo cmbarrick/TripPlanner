@@ -135,10 +135,6 @@ when no key).
 
 ## What's next
 
-**Phase 4 — Notes & Journaling:** capture the trip as it happens — text + voice notes (audio +
-Azure Speech-to-Text transcript), reflection prompts, offline-first capture, and photos attached
-to notes.
-
-**Phase 5 — AI Planning Assistant:** generate/refine itineraries via chat with tool-calling
-(search places, add/move items, gap-fill), preference-aware, with per-user token quotas and AI
-quality evals.
+Phases 4–5 are closed (2026-06-08). **Phase 6 — AI Recap & Export:** summarize notes into
+editable recaps; export to PDF/web. See [`phase-4-summary.md`](./phase-4-summary.md) and
+[`phase-5-summary.md`](./phase-5-summary.md).

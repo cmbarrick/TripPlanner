@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { AiChatHistoryMessage, AiTripChange, streamAiChat, undoAiBatch } from '.
 import { aiStatusQueryKey } from '../queries/ai';
 import { tripsQueryKey } from '../queries/trips';
 import { useAiBatchStore } from '../store/aiBatchStore';
+import { useUiStore } from '../store/uiStore';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -41,8 +42,8 @@ export function AssistantChatPanel({
   const markUndone = useAiBatchStore((s) => s.markUndone);
   const setBatch = useAiBatchStore((s) => s.setBatch);
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (textOverride?: string) => {
+    const text = (textOverride ?? input).trim();
     if (!text || !tripId || busy) return;
 
     setError(null);
@@ -96,6 +97,19 @@ export function AssistantChatPanel({
       setBusy(false);
     }
   };
+
+  // A prompt typed into the trip planner's AI dock arrives via uiStore; consume it once
+  // and send it as the first chat message for the pinned trip.
+  const consumedPendingRef = useRef(false);
+  const pendingAiPrompt = useUiStore((s) => s.pendingAiPrompt);
+  const clearPendingAiPrompt = useUiStore((s) => s.clearPendingAiPrompt);
+  useEffect(() => {
+    if (!pendingAiPrompt || consumedPendingRef.current || !tripId || busy) return;
+    consumedPendingRef.current = true;
+    clearPendingAiPrompt();
+    void send(pendingAiPrompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAiPrompt, tripId, busy]);
 
   const undoLastBatch = async () => {
     if (!tripId || !batch || batch.undone || undoing || busy) return;
@@ -190,11 +204,11 @@ export function AssistantChatPanel({
             onChangeText={setInput}
             editable={!busy && !!tripId}
             multiline
-            onSubmitEditing={send}
+            onSubmitEditing={() => send()}
           />
           <Pressable
             style={[s.sendBtn, (!input.trim() || busy || !tripId) && s.btnDisabled]}
-            onPress={send}
+            onPress={() => send()}
             disabled={!input.trim() || busy || !tripId}
           >
             {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.sendText}>↑</Text>}
