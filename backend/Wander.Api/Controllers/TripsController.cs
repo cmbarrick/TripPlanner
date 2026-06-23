@@ -25,7 +25,28 @@ public class TripsController : ControllerBase
     public ActionResult<IEnumerable<Trip>> GetAll()
     {
         var ownerId = User.GetUserId();
-        return ownerId is null ? Unauthorized() : Ok(_repo.GetAll(ownerId));
+        if (ownerId is null)
+            return Unauthorized();
+
+        var trips = new List<Trip>();
+
+        foreach (var owned in _repo.GetAll(ownerId))
+        {
+            owned.AccessRole = nameof(TripMemberRole.Owner);
+            trips.Add(owned);
+        }
+
+        // Trips shared *to* this caller via membership, loaded through their real owner partition.
+        foreach (var access in _access.ListMemberships(ownerId))
+        {
+            var shared = _repo.GetById(access.TripId, access.TripOwnerId);
+            if (shared is null)
+                continue;
+            shared.AccessRole = access.Role.ToString();
+            trips.Add(shared);
+        }
+
+        return Ok(trips.OrderBy(t => t.StartDate));
     }
 
     [HttpGet("{id:guid}")]
@@ -36,7 +57,11 @@ public class TripsController : ControllerBase
             return error;
 
         var trip = _repo.GetById(id, access!.TripOwnerId);
-        return trip is null ? NotFound() : Ok(trip);
+        if (trip is null)
+            return NotFound();
+
+        trip.AccessRole = access.Role.ToString();
+        return Ok(trip);
     }
 
     [HttpPost]

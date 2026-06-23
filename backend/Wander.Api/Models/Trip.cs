@@ -53,6 +53,14 @@ public class Trip : IValidatableObject
     [NotMapped]
     public List<ItineraryItem> UnscheduledItems { get; set; } = new();
 
+    /// <summary>
+    /// The requesting caller's capability on this trip ("Owner" / "Editor" / "Viewer"). Transport-only
+    /// (not persisted); set by the controller so clients can render read-only vs. editable. Null when
+    /// access wasn't resolved (e.g. legacy callers).
+    /// </summary>
+    [NotMapped]
+    public string? AccessRole { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? DeletedAt { get; set; }

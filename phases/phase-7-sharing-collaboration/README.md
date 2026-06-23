@@ -78,9 +78,16 @@ attach a `TripMember` to a real user row.
       (`Wander.Api.Tests/TripSharingTests.cs`).
 - [ ] Client UI (share sheet / link entry) — deferred to a client slice; backend is complete + tested.
 
-### Slice 2 — Share by account  ⬜
-- [ ] Invite by email/handle → resolve/lazy-create `User` → upsert `TripMember(role)`.
-- [ ] List members · change role · remove member (owner-only). Shared trips appear in `GET /api/trips`.
+### Slice 2 — Share by account  ✅ *(backend)*
+- [x] Shared trips appear in `GET /api/trips`: `ITripAccessService.ListMemberships(caller)` merges
+      member trips (loaded via their owner partition) with owned trips; each trip carries `AccessRole`.
+- [x] Caller's role exposed on `Trip` responses (`[NotMapped] AccessRole`) for `GetAll` + `GetById`.
+- [x] `TripMembersController` (owner-only): list members, invite a **registered** user by email,
+      change role, remove member — `ITripMemberService`/`TripMemberService`.
+- [x] Tests: memberships listing (excludes owned), invite/role-change/remove, unknown-user +
+      owner-invite guards.
+- [ ] **Pending invites for unregistered emails** — deferred (needs an invite/notification flow).
+- [ ] Client UI (members list, invite, role picker) — deferred to a client slice.
 
 ### Slice 3 — Real-time co-edit  ⬜  *(needs transport decision)*
 - [ ] **Decision:** self-hosted **SignalR** on the existing App Service (no new Azure resource —
@@ -115,5 +122,14 @@ attach a `TripMember` to a real user row.
   - **Deferred:** client share UI; applying the same access layer to Notes/Recaps controllers;
     "shared trips appear in `GET /api/trips`" (Slice 2). No new EF migration needed — Phase 0 already
     created `trip_members` / `trip_shares`.
-- **Next:** Slice 2 (share by account / invites + shared trips in the list) or the client share UI;
-  Slice 3 (realtime) once the SignalR-vs-Web-PubSub decision is made.
+- **2026-06-23** — **Slice 2 complete (backend, dev).** Shared trips now surface in `GET /api/trips`
+  (owned + member trips merged, ordered by start date), and every `Trip` response carries the
+  caller's `AccessRole` so clients can render read-only vs. editable. `ITripAccessService.ListMemberships`
+  returns member trips (excluding owned) with the trip's real owner id + role. `TripMembersController`
+  + `TripMemberService` add owner-only account management: list members (joined to user email/name),
+  invite a **registered** user by email (case-insensitive; rejects the owner; 404 for unknown email),
+  change role (viewer/editor), and remove. **Tests: backend 162/162** (3 new). Deferred: pending
+  invites for unregistered emails (needs a notification/invite-acceptance flow); client UI; applying
+  the access layer to Notes/Recaps controllers.
+- **Next:** the **client share UI** (consume share links + members/role pickers, render read-only for
+  viewers) or **Slice 3 (realtime)** once the SignalR-vs-Web-PubSub decision is made.

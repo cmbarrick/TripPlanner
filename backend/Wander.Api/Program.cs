@@ -140,6 +140,7 @@ builder.Services.AddScoped<IPreferenceService, PreferenceService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITripAccessService, TripAccessService>();
 builder.Services.AddScoped<ITripShareService, TripShareService>();
+builder.Services.AddScoped<ITripMemberService, TripMemberService>();
 
 // AI planning assistant (Phase 5): Azure OpenAI when configured; disabled/fake otherwise.
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));

@@ -22,6 +22,12 @@ public record TripAccess(Guid TripId, string TripOwnerId, TripMemberRole Role)
 public interface ITripAccessService
 {
     TripAccess? Resolve(Guid tripId, string callerOwnerId);
+
+    /// <summary>
+    /// Trips the caller can access via membership (i.e. shared *to* them), excluding trips they own.
+    /// Each entry carries the trip's real owner id (data partition) and the caller's role.
+    /// </summary>
+    IReadOnlyList<TripAccess> ListMemberships(string callerOwnerId);
 }
 
 public class TripAccessService(WanderDbContext db, IUserService users) : ITripAccessService
@@ -50,5 +56,21 @@ public class TripAccessService(WanderDbContext db, IUserService users) : ITripAc
             return null;
 
         return new TripAccess(tripId, trip.OwnerId, member.Role);
+    }
+
+    public IReadOnlyList<TripAccess> ListMemberships(string callerOwnerId)
+    {
+        var userId = users.FindUserId(callerOwnerId);
+        if (userId is null)
+            return [];
+
+        return db.TripMembers.AsNoTracking()
+            .Where(m => m.UserId == userId && m.DeletedAt == null)
+            .Join(
+                db.Trips.AsNoTracking().Where(t => t.DeletedAt == null && t.OwnerId != callerOwnerId),
+                m => m.TripId,
+                t => t.Id,
+                (m, t) => new TripAccess(t.Id, t.OwnerId, m.Role))
+            .ToList();
     }
 }

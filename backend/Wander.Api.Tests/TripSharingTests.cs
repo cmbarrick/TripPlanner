@@ -195,4 +195,92 @@ public class TripSharingTests
         Assert.NotNull(userId);
         Assert.Single(verify.TripMembers.Where(m => m.TripId == tripId && m.UserId == userId && m.DeletedAt == null));
     }
+
+    // ---- ListMemberships (shared trips in the list) -----------------------
+
+    [Fact]
+    public void ListMemberships_ReturnsSharedTrips_ExcludingOwned()
+    {
+        var db = Guid.NewGuid().ToString();
+        var ownedByA = SeedTrip(db, "owner-a");
+        var ownedByB = SeedTrip(db, "owner-b");
+
+        // friend-b is the owner of ownedByB and a member (editor) of ownedByA.
+        using (var ctx = NewContext(db))
+        {
+            var token = new TripShareService(ctx, new EfCoreTripRepository(ctx), new UserService(ctx))
+                .CreateLink(ownedByA, "owner-a", TripMemberRole.Editor, null).Token;
+            new TripShareService(ctx, new EfCoreTripRepository(ctx), new UserService(ctx))
+                .Redeem(token, "owner-b");
+        }
+
+        using var verify = NewContext(db);
+        var memberships = new TripAccessService(verify, new UserService(verify)).ListMemberships("owner-b");
+
+        var shared = Assert.Single(memberships);
+        Assert.Equal(ownedByA, shared.TripId);
+        Assert.Equal("owner-a", shared.TripOwnerId);
+        Assert.Equal(TripMemberRole.Editor, shared.Role);
+        // The trip owner-b actually owns is not returned as a "membership".
+        Assert.DoesNotContain(memberships, m => m.TripId == ownedByB);
+    }
+
+    // ---- TripMemberService: account management ----------------------------
+
+    [Fact]
+    public void InviteByEmail_AddsRegisteredUser_UpdatesRole_AndRemoves()
+    {
+        var db = Guid.NewGuid().ToString();
+        var tripId = SeedTrip(db, "owner-a");
+
+        // Register the invitee (lazy-create gives them a deterministic dev email).
+        string inviteeEmail;
+        using (var ctx = NewContext(db))
+            inviteeEmail = new UserService(ctx).GetOrCreate("friend-b").Email;
+
+        Guid memberId;
+        using (var ctx = NewContext(db))
+        {
+            var svc = new TripMemberService(ctx);
+            var outcome = svc.InviteByEmail(tripId, "owner-a", inviteeEmail.ToUpperInvariant(), TripMemberRole.Viewer);
+            Assert.Equal(InviteStatus.Invited, outcome.Status);
+            Assert.NotNull(outcome.Member);
+            Assert.Equal(TripMemberRole.Viewer, outcome.Member!.Role);
+            memberId = outcome.Member.Id;
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var svc = new TripMemberService(ctx);
+            Assert.Single(svc.ListMembers(tripId));
+            Assert.True(svc.ChangeRole(tripId, memberId, TripMemberRole.Editor));
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var svc = new TripMemberService(ctx);
+            Assert.Equal(TripMemberRole.Editor, svc.ListMembers(tripId).Single().Role);
+            Assert.True(svc.RemoveMember(tripId, memberId));
+            Assert.Empty(svc.ListMembers(tripId));
+        }
+    }
+
+    [Fact]
+    public void InviteByEmail_ReportsUnknownUser_AndRejectsOwner()
+    {
+        var db = Guid.NewGuid().ToString();
+        var tripId = SeedTrip(db, "owner-a");
+
+        string ownerEmail;
+        using (var ctx = NewContext(db))
+            ownerEmail = new UserService(ctx).GetOrCreate("owner-a").Email;
+
+        using var ctx2 = NewContext(db);
+        var svc = new TripMemberService(ctx2);
+
+        Assert.Equal(InviteStatus.UserNotFound,
+            svc.InviteByEmail(tripId, "owner-a", "nobody@example.com", TripMemberRole.Viewer).Status);
+        Assert.Equal(InviteStatus.AlreadyOwner,
+            svc.InviteByEmail(tripId, "owner-a", ownerEmail, TripMemberRole.Viewer).Status);
+    }
 }
