@@ -82,6 +82,7 @@ describe('RecapPanel', () => {
     (generateRecap as jest.Mock).mockResolvedValue(sampleRecap);
     const { getByLabelText } = renderPanel();
 
+    fireEvent.press(getByLabelText('Single day'));
     fireEvent.press(getByLabelText('Day 2'));
     fireEvent.press(getByLabelText('Highlights'));
     fireEvent.press(getByLabelText('Generate recap'));

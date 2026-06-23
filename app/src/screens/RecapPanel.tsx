@@ -45,13 +45,16 @@ export function RecapPanel({ trip, selectedDayId }: { trip: Trip; selectedDayId:
   const [scope, setScope] = useState<RecapScope>('Trip');
   const [tone, setTone] = useState<RecapTone>('Narrative');
   const [openRecapId, setOpenRecapId] = useState<string | null>(null);
+  // Day to recap — starts at the planner's selected day but any day is pickable here.
+  const [dayId, setDayId] = useState(
+    trip.days.some((d) => d.id === selectedDayId) ? selectedDayId : trip.days[0]?.id ?? '',
+  );
 
   const recaps = recapsQuery.data?.data ?? [];
-  const selectedDay = trip.days.find((d) => d.id === selectedDayId) ?? trip.days[0];
 
   const runGenerate = () => {
     if (generate.isPending) return;
-    const targetId = scope === 'Day' ? selectedDay?.id ?? null : null;
+    const targetId = scope === 'Day' ? dayId || null : null;
     generate.mutate(
       { scope, targetId, tone },
       { onSuccess: (recap) => setOpenRecapId(recap.id) },
@@ -93,14 +96,26 @@ export function RecapPanel({ trip, selectedDayId }: { trip: Trip; selectedDayId:
           <Text style={s.fieldLabel}>Scope</Text>
           <View style={s.segRow}>
             <SegBtn label="Whole trip" on={scope === 'Trip'} onPress={() => setScope('Trip')} />
-            {selectedDay ? (
-              <SegBtn
-                label={`Day ${selectedDay.dayNumber}`}
-                on={scope === 'Day'}
-                onPress={() => setScope('Day')}
-              />
+            {trip.days.length > 0 ? (
+              <SegBtn label="Single day" on={scope === 'Day'} onPress={() => setScope('Day')} />
             ) : null}
           </View>
+          {scope === 'Day' ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[s.segRow, { marginTop: 8, flexWrap: 'nowrap' }]}
+            >
+              {trip.days.map((d) => (
+                <SegBtn
+                  key={d.id}
+                  label={`Day ${d.dayNumber}`}
+                  on={d.id === dayId}
+                  onPress={() => setDayId(d.id)}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
 
           <Text style={s.fieldLabel}>Tone</Text>
           <View style={s.segRow}>

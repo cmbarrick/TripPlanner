@@ -59,41 +59,53 @@ npm run web        # opens http://localhost:8081 (or: npm run android / npm run 
 - `.\stop-wander.cmd`
 
 ### Current status
-- **Working now (Phase 0 local-first baseline):** API is PostgreSQL-backed through EF Core (with migration),
-  ownership checks are enforced per user, Entra JWT validation + dev bypass are wired, and local startup scripts
-  boot API + Expo together. The client uses TanStack Query + Zustand, Expo Router entrypoint, Entra auth-session
-  sign-in/sign-out scaffolding (with persisted token session), and includes Jest/RNTL plus Playwright smoke test scaffolding.
-- **Phase 1 (functionally complete) — Core itinerary & calendar:** The full manual planning loop works
-  end to end. Users can **create/edit/delete trips** (API-backed, owner-enforced, validated) and use the
-  **My Trips** list with search (title/destination), sort (date/name), upcoming/past grouping, and
-  loading/empty/error states. A unified **Trip Planner** (`List | Split | Map` view + `Day | Trip` scope
-  with drill-down) supports **itinerary items** (type, time, location, cost, confirmation #, notes) with
-  **add/edit/delete**, **reorder within a day**, and **move across days**; plus a **packing list**,
-  **conflict detection**, and **cost rollup** at day and trip scope. The **Calendar** has Day, Week
-  (multi-day), and Agenda views with tap-to-edit. Profile has **°F/°C** and **12h/24h** preferences that
-  persist on-device. A 16-day **Sicily** seed makes the loop demoable. Tests: backend **17**, app **16**,
-  web smoke green. _Remaining before exit: real test-Postgres integration run, literal touch
-  drag-and-drop, and the full E2E journey test._ See
-  [`phases/phase-1-core-itinerary`](./phases/phase-1-core-itinerary) for the full progress log and local checklist.
-- **Before building for real:** see the [pre-build checklist](./docs/pre-build-checklist.md)
-  (decisions to lock, Azure/Entra/OpenAI provisioning, local Postgres, CI).
-- **Next:** close the Phase 1 exit gaps (test-Postgres run, drag-and-drop, full E2E), then begin
-  **Phase 2** (maps & integrations). Deployment/app-store work is deferred to **Phase 3**.
+
+**Phases 0–6 are complete on the dev environment** (web target). The app runs end-to-end on Azure dev:
+plan a trip → capture it with notes → turn notes into an AI recap. Test health at last close: backend
+**152/152**, app **93/93**, `tsc` clean. See the per-phase summaries in [`/docs`](./docs).
+
+- **Phase 0 — Foundation (local-first):** PostgreSQL-backed API via EF Core (migrations), per-user
+  ownership enforcement, Entra JWT validation + dev bypass, CI (lint/typecheck/tests), and local
+  start/stop scripts. Client on TanStack Query + Zustand + Expo Router with Entra sign-in/sign-out.
+- **Phase 1 — Core itinerary & calendar:** Trip CRUD, **My Trips** (search/sort/grouping), a unified
+  **Trip Planner** (`List | Split | Map` × `Day | Trip`) with itinerary items (add/edit/delete, reorder,
+  move across days), packing list, conflict detection, cost rollup, and a **Calendar** (day/week/agenda).
+- **Phase 2 — Maps & integrations:** Map of stops + travel time, place search/autocomplete, live
+  weather, and `.ics` export.
+- **Phase 3 — Deployment & release foundations:** Dev environment **live on Azure** (App Service +
+  Postgres + Key Vault + Static Web Apps); CI deploys + runs migrations; **web Entra sign-in works
+  end-to-end** against the deployed API; EAS Build/Update wired. See [`phase-3-summary.md`](./docs/phase-3-summary.md).
+- **Phase 4 — Notes & journaling:** Text/voice/photo journaling scoped to event/day/trip, **cloud
+  transcription verified end-to-end**, reflection prompts + reminders, media via ownership-checked
+  streaming + short-lived SAS, and **offline-first** text/prompt capture. See [`phase-4-summary.md`](./docs/phase-4-summary.md).
+- **Phase 5 — AI planning assistant:** "Generate itinerary" + SSE chat assistant with tool-calling
+  (search places, add/move items, gap-fill), preference-aware, per-user token quotas, batch undo,
+  input guard + rate limit. Azure OpenAI on dev. See [`phase-5-summary.md`](./docs/phase-5-summary.md).
+- **Phase 6 — AI recap & export:** Grounded, versioned recaps (trip/day/event) from notes + transcripts
+  with per-section citations + historical weather actuals; tone picker; **PDF export** (QuestPDF) and an
+  unlisted `/share/recaps/{token}` page; in-trip AI dock composer. See [`phase-6-summary.md`](./docs/phase-6-summary.md).
+- **Consistent dev-only posture:** everything ships on **dev (web)**. Recurring deferred items: golden
+  AI evals, live integration/E2E, staging/prod stand-up, native mobile build/sign-in, and offline
+  **media** sync (→ Phase 9).
+- **Next:** **Phase 7 — Sharing & Collaboration** (share by link + accounts, real-time co-edit,
+  reactions). See [`phases/phase-7-sharing-collaboration`](./phases/phase-7-sharing-collaboration).
 
 ## What's next & handoff (read this if you're the next agent)
 
-**Where we are:** the [Phase −1 prototype](./phases/phase-minus-1-prototype) is done (fake data, no
-infra). Planning docs are current.
+**Where we are:** Phases 0–6 are closed on dev (web). The full **Plan → Capture → Recap** loop works
+end-to-end on Azure dev. Planning docs and per-phase summaries in [`/docs`](./docs) are current.
 
-**What to start with — Phase 0 (Foundation & Setup):**
-1. First clear the local-first critical path in the [pre-build checklist](./docs/pre-build-checklist.md) —
-   get the API/client running against **local Postgres**, keep Entra wired for auth flow, and track Azure/OpenAI
-   provisioning in parallel.
-2. Then do the Phase 0 entry work: add **EF Core + Npgsql**, create the first **migration** for the
-   base schema (incl. `consent_settings` + sharing fields), swap
-   `InMemoryTripRepository` → an EF Core repository behind the existing `ITripRepository`, wire
-   **Entra JWT auth** (replace the `DemoOwner` constant), lock down CORS, and stand up **CI**.
-3. Follow the tasks/exit criteria in [`phases/phase-0-foundation`](./phases/phase-0-foundation).
+**What to start with — Phase 7 (Sharing & Collaboration):**
+1. Read [`phases/phase-7-sharing-collaboration`](./phases/phase-7-sharing-collaboration) for goals,
+   tasks, and exit criteria.
+2. Build outward from the existing sharing/consent schema and the Phase 6 recap **share-token**
+   capability pattern (a single-recap preview of the Phase 7 link-capability model):
+   - **Share by link:** capability tokens with `viewer`/`editor` roles, expiry, and revoke.
+   - **Share by account:** invite friends; `TripMember` with **owner / editor / viewer** roles.
+   - **Real-time co-edit:** Azure Web PubSub / SignalR for presence + live itinerary updates.
+   - **Conflict handling:** move beyond last-write-wins toward operational merge.
+   - **Reactions** + **shared notes as comments** (reuse Phase 4 notes within shared trips).
+3. Honor the consent model: sharing is explicit opt-in; revocation unshares immediately.
 
 **Working agreement — document as you go.** Before ending your session:
 - [ ] **Tick off completed tasks** in the relevant `phases/phase-*/README.md` (check the boxes).
@@ -127,18 +139,18 @@ infra). Planning docs are current.
 
 ## Phases
 
-| Phase | Focus |
-|---|---|
-| 0 | Foundation & setup (local-first: repo, CI/CD, **accounts/auth**, design system) |
-| 1 | Core itinerary & calendar (manual planning, end-to-end) |
-| 2 | Maps & integrations (places, weather, .ics) |
-| 2.5 | Deployment & release foundations (Azure envs, CI/CD deploy, EAS/store setup) |
-| 3 | AI planning assistant (generate & refine itineraries) |
-| 4 | Notes & journaling (text + **voice notes**, reflection prompts, offline) |
-| 5 | AI recap & export (notes → recap, PDF/web) |
-| 6 | Sharing & collaboration (link + accounts, **real-time co-edit**, reactions) |
-| 7 | Public recaps & discovery (publish + moderation, search, **RAG** Q&A) |
-| 8 | Offline, polish & launch (sync, performance, a11y, privacy review) |
-| Later / v2 | Monetization & advanced (premium, booking, fine-tuning) |
+| Phase | Focus | Status |
+|---|---|---|
+| 0 | Foundation & setup (local-first: repo, CI/CD, **accounts/auth**, design system) | ✅ Complete |
+| 1 | Core itinerary & calendar (manual planning, end-to-end) | ✅ Complete |
+| 2 | Maps & integrations (places, weather, .ics) | ✅ Complete |
+| 3 | Deployment & release foundations (Azure envs, CI/CD deploy, EAS/store setup) | ✅ Complete |
+| 4 | Notes & journaling (text + **voice notes**, reflection prompts, offline) | ✅ Complete |
+| 5 | AI planning assistant (generate & refine itineraries) | ✅ Complete |
+| 6 | AI recap & export (notes → recap, PDF/web) | ✅ Complete |
+| 7 | Sharing & collaboration (link + accounts, **real-time co-edit**, reactions) | ⬜ Next |
+| 8 | Public recaps & discovery (publish + moderation, search, **RAG** Q&A) | ⬜ Pending |
+| 9 | Offline, polish & launch (sync, performance, a11y, privacy review) | ⬜ Pending |
+| Later / v2 | Monetization & advanced (premium, booking, fine-tuning) | ⬜ Pending |
 
 See [`docs/project-plan.md`](./docs/project-plan.md) for the full breakdown and testing strategy.

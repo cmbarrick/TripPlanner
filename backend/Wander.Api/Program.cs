@@ -136,6 +136,11 @@ builder.Services.AddDbContext<WanderDbContext>(options =>
 builder.Services.AddScoped<ITripRepository, EfCoreTripRepository>();
 builder.Services.AddScoped<IPreferenceService, PreferenceService>();
 
+// Sharing & collaboration (Phase 7): identity bridge + trip access resolution + link sharing.
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ITripAccessService, TripAccessService>();
+builder.Services.AddScoped<ITripShareService, TripShareService>();
+
 // AI planning assistant (Phase 5): Azure OpenAI when configured; disabled/fake otherwise.
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
 builder.Services.AddScoped<IAiTokenQuotaService, AiTokenQuotaService>();
