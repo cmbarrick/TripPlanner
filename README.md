@@ -60,13 +60,14 @@ npm run web        # opens http://localhost:8081 (or: npm run android / npm run 
 
 ### Current status
 
-**Phases 0–8 are complete**, on the dev environment (web target). The app runs end-to-end on Azure
-dev: plan a trip → capture it with notes → turn notes into an AI recap → share & co-edit it with
-friends in real time → publish a recap publicly after the trip ends, PII-reviewed and moderated by
-real Azure AI Content Safety with a reportable/reviewable queue → find it via search or ask a
-grounded, cited RAG assistant about it, all from the client's new **Discover** tab and publish sheet.
-Test health at last close: backend **231/231**, Functions **3/3**, app **97/97** + `tsc` clean. See
-the per-phase summaries in [`/docs`](./docs).
+**Phases 0–8 are complete, and Phase 9 (Offline, Polish & Launch) is in progress**, on the dev
+environment (web target). The app runs end-to-end on Azure dev: plan a trip → capture it with notes
+(text, voice, and photo — now offline-capable end to end) → turn notes into an AI recap → share &
+co-edit it with friends in real time → publish a recap publicly after the trip ends, PII-reviewed
+and moderated by real Azure AI Content Safety with a reportable/reviewable queue → find it via
+search or ask a grounded, cited RAG assistant about it, all from the client's **Discover** tab and
+publish sheet. Test health at last close: backend **231/231**, Functions **3/3**, app **106/106** +
+`tsc` clean. See the per-phase summaries in [`/docs`](./docs).
 
 - **Phase 0 — Foundation (local-first):** PostgreSQL-backed API via EF Core (migrations), per-user
   ownership enforcement, Entra JWT validation + dev bypass, CI (lint/typecheck/tests), and local
@@ -109,29 +110,31 @@ the per-phase summaries in [`/docs`](./docs).
   [`phase-8-summary.md`](./docs/phase-8-summary.md).
 - **Consistent dev-only posture:** everything ships on **dev (web)**. Recurring deferred items: golden
   AI evals, live integration/E2E (now started with Phase 7's realtime test), staging/prod stand-up,
-  native mobile build/sign-in, and offline **media** sync (→ Phase 9).
-- **Next:** Phase 9 — Offline, Polish & Launch. See
-  [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch).
+  and native mobile build/sign-in.
+- **Phase 9 — Offline, polish & launch (in progress):** the Phase 4 text/prompt outbox now covers
+  **voice/photo media** too — captured offline, the bytes are cached durably (native: `expo-file-system`
+  document directory; web: IndexedDB) and uploaded on reconnect via a new `note.media` outbox op,
+  with an optimistic "saved offline" indicator in the journal. Hand-verified live (simulated offline
+  → capture → optimistic entry → reconnect → synced, no duplicate; survives a reload while offline).
+  See [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch).
 
 ## What's next & handoff (read this if you're the next agent)
 
-**Where we are:** Phases 0–8 are closed on dev (web). **Phase 8 (Public Recaps & Discovery)** is
-fully done, backend and client: post-trip + consent publish gate; a PII gate for emails/phone
-numbers; real Azure AI Content Safety moderation with a fake-by-default seam; user reporting →
-admin review queue; search with facet filters + semantic ranking; a grounded RAG discovery
-assistant with citations; recap-delete → unpublish cascade; and client UI (`PublishRecapSheet`, a
-**Discover** tab for search + RAG Q&A, an admin `ModerationQueueScreen`) — hand-verified live in a
-browser against a running dev API. Planning docs and per-phase summaries in [`/docs`](./docs) are
-current, including [`phase-8-summary.md`](./docs/phase-8-summary.md).
+**Where we are:** Phases 0–8 are closed on dev (web). **Phase 9 (Offline, Polish & Launch)** is in
+progress: the offline outbox now covers voice/photo media (see above), hand-verified live against a
+running dev API. Planning docs and per-phase summaries in [`/docs`](./docs) are current, including
+[`phase-8-summary.md`](./docs/phase-8-summary.md).
 
 **What to continue — Phase 9 (Offline, Polish & Launch):**
 1. Read [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch) for the
-   phase plan.
-2. Harden offline sync, including **media** (audio/photo) resume — deferred since Phase 4; today
-   only text/prompt capture is offline-first.
+   phase plan and progress log.
+2. **Sync status UI:** offline indicator, a pending-changes list (including merging the outbox
+   queue into the notes list on load — right now a pending note disappears from view across a page
+   reload even though nothing is actually lost), media upload progress, retry.
 3. Conflict handling: Phase 7 shipped last-write-wins + presence; operational-merge/CRDT handling
    is a documented backlog item.
-4. Performance & accessibility passes, onboarding, store assets, final security/privacy review.
+4. Offline data layer (local SQLite as UI source of truth), performance & accessibility passes,
+   onboarding, store assets, final security/privacy review.
 5. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
    provider — regex only covers emails/phones today), location coarsening on public recaps, an async
    indexing job (indexing runs synchronously on publish/approve today), a golden RAG eval corpus

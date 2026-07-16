@@ -12,8 +12,8 @@ import {
   CreateVoiceNoteFields,
   UploadFile,
 } from '../api';
-import { Note } from '../types';
-import { enqueueNoteCreate, enqueueNoteUpdate, enqueueNoteDelete, isTempNoteId } from '../sync/outbox';
+import { Note, NoteScope } from '../types';
+import { enqueueNoteCreate, enqueueNoteUpdate, enqueueNoteDelete, enqueueMediaNote, isTempNoteId } from '../sync/outbox';
 
 export const tripNotesQueryKey = (tripId: string) => ['notes', tripId] as const;
 
@@ -100,21 +100,93 @@ export function useCreateNoteMutation(tripId: string) {
   });
 }
 
+/** Builds the placeholder note rendered while a queued voice/photo note awaits sync. There's no
+ *  MediaAsset yet (the bytes live in `mediaCache`, not the server) — `pendingMediaKind` tells the
+ *  UI what kind of media to indicate instead of rendering a player/photo. */
+function buildOptimisticMediaNote(
+  tripId: string,
+  tempId: string,
+  mediaKind: 'Voice' | 'Photo',
+  fields: { scope: NoteScope; targetId?: string | null; bodyText?: string | null },
+): Note {
+  const now = new Date().toISOString();
+  return {
+    id: tempId,
+    tripId,
+    ownerId: '',
+    scope: fields.scope,
+    targetId: fields.targetId ?? null,
+    // Matches the server's kind assignment: voice notes are kind 'Voice'; photo notes are kind
+    // 'Text' with a Photo MediaAsset attached (see NotesController).
+    kind: mediaKind === 'Voice' ? 'Voice' : 'Text',
+    bodyText: fields.bodyText ?? null,
+    promptId: null,
+    promptText: null,
+    mediaAssets: [],
+    createdAt: now,
+    updatedAt: now,
+    pendingSync: true,
+    pendingMediaKind: mediaKind,
+  };
+}
+
 export function useCreateVoiceNoteMutation(tripId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ fields, audio, fileName }: { fields: CreateVoiceNoteFields; audio: UploadFile; fileName: string }) =>
-      createVoiceNote(tripId, fields, audio, fileName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) }),
+    mutationFn: async ({
+      fields,
+      audio,
+      fileName,
+    }: {
+      fields: CreateVoiceNoteFields;
+      audio: UploadFile;
+      fileName: string;
+    }): Promise<Note> => {
+      try {
+        return await createVoiceNote(tripId, fields, audio, fileName);
+      } catch (e) {
+        if (!isOfflineError(e)) throw e;
+        const tempId = await enqueueMediaNote(tripId, 'Voice', fields, audio, fileName);
+        return buildOptimisticMediaNote(tripId, tempId, 'Voice', fields);
+      }
+    },
+    onSuccess: (note) => {
+      if (note.pendingSync) {
+        patchNotesCache(queryClient, tripId, (notes) => [note, ...notes]);
+      } else {
+        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
+      }
+    },
   });
 }
 
 export function useCreatePhotoNoteMutation(tripId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ fields, image, fileName }: { fields: CreatePhotoNoteFields; image: UploadFile; fileName: string }) =>
-      createPhotoNote(tripId, fields, image, fileName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) }),
+    mutationFn: async ({
+      fields,
+      image,
+      fileName,
+    }: {
+      fields: CreatePhotoNoteFields;
+      image: UploadFile;
+      fileName: string;
+    }): Promise<Note> => {
+      try {
+        return await createPhotoNote(tripId, fields, image, fileName);
+      } catch (e) {
+        if (!isOfflineError(e)) throw e;
+        const tempId = await enqueueMediaNote(tripId, 'Photo', fields, image, fileName);
+        return buildOptimisticMediaNote(tripId, tempId, 'Photo', fields);
+      }
+    },
+    onSuccess: (note) => {
+      if (note.pendingSync) {
+        patchNotesCache(queryClient, tripId, (notes) => [note, ...notes]);
+      } else {
+        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
+      }
+    },
   });
 }
 

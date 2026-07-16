@@ -1,12 +1,14 @@
 import { useSyncExternalStore } from 'react';
 import { readJson, writeJson } from '../storage';
-import { CreateNoteInput } from '../api';
+import { CreateNoteInput, CreateVoiceNoteFields, CreatePhotoNoteFields, UploadFile } from '../api';
+import { cacheMedia, deleteCachedMedia } from './mediaCache';
 
-// Lightweight offline-first outbox for journal writes (Phase 4, Slice 5). Text notes, prompt
-// responses, edits, and deletes created while offline are queued here, persisted to local storage,
-// and replayed in order once connectivity returns. Media capture (voice/photo) is intentionally out
-// of scope for this slice — large blobs can't live in the small KV store — and is deferred to the
-// Phase 9 sync hardening pass.
+// Lightweight offline-first outbox for journal writes (Phase 4, Slice 5; extended to voice/photo
+// media in Phase 9). Text notes, prompt responses, edits, and deletes created while offline are
+// queued here, persisted to local storage, and replayed in order once connectivity returns. Voice
+// and photo captures queue the same way, but the audio/image bytes themselves are too large for
+// this small KV store — they're copied into durable local storage by `mediaCache` (native:
+// document directory; web: IndexedDB) and the queued op just carries a lookup key.
 
 const STORAGE_KEY = 'wander.sync.outbox.v1';
 
@@ -15,7 +17,19 @@ const STORAGE_KEY = 'wander.sync.outbox.v1';
 export type OutboxOp =
   | { id: string; kind: 'note.create'; tripId: string; tempNoteId: string; input: CreateNoteInput; createdAt: string }
   | { id: string; kind: 'note.update'; tripId: string; noteId: string; bodyText: string; createdAt: string }
-  | { id: string; kind: 'note.delete'; tripId: string; noteId: string; createdAt: string };
+  | { id: string; kind: 'note.delete'; tripId: string; noteId: string; createdAt: string }
+  | {
+      id: string;
+      kind: 'note.media';
+      tripId: string;
+      tempNoteId: string;
+      mediaKind: 'Voice' | 'Photo';
+      /** Lookup key into `mediaCache` for the actual audio/image bytes. */
+      cacheKey: string;
+      fileName: string;
+      fields: CreateVoiceNoteFields | CreatePhotoNoteFields;
+      createdAt: string;
+    };
 
 /** Result of attempting one op during a flush. */
 export type FlushOutcome =
@@ -115,6 +129,17 @@ export async function enqueueNoteUpdate(tripId: string, noteId: string, bodyText
     );
     return;
   }
+  // Same for a still-queued photo note's caption (voice notes aren't caption-editable — see
+  // NoteCard's `editable` check — but photo notes are, same as once they've synced).
+  const pendingMedia = ops.find((o) => o.kind === 'note.media' && o.tempNoteId === noteId);
+  if (pendingMedia && pendingMedia.kind === 'note.media') {
+    await commit(
+      ops.map((o) =>
+        o === pendingMedia ? { ...o, fields: { ...o.fields, bodyText } } : o,
+      ),
+    );
+    return;
+  }
   // Collapse repeated edits of the same note into a single pending update.
   const pendingUpdate = ops.find((o) => o.kind === 'note.update' && o.noteId === noteId);
   if (pendingUpdate && pendingUpdate.kind === 'note.update') {
@@ -125,10 +150,43 @@ export async function enqueueNoteUpdate(tripId: string, noteId: string, bodyText
   await commit([...ops, op]);
 }
 
-/** Queues a note delete. If the note never synced, its queued create (and edits) are simply dropped. */
+/**
+ * Queues a voice/photo note captured offline. The file is copied into durable local storage
+ * (`mediaCache`) under a fresh key first — the outbox op itself only carries that key, never the
+ * bytes — then the op is queued like any other write. Returns the temp note id.
+ */
+export async function enqueueMediaNote(
+  tripId: string,
+  mediaKind: 'Voice' | 'Photo',
+  fields: CreateVoiceNoteFields | CreatePhotoNoteFields,
+  file: UploadFile,
+  fileName: string,
+): Promise<string> {
+  await ready();
+  const tempNoteId = newTempNoteId();
+  const cacheKey = tempNoteId;
+  await cacheMedia(cacheKey, file, fileName);
+  const op: OutboxOp = {
+    id: newId(),
+    kind: 'note.media',
+    tripId,
+    tempNoteId,
+    mediaKind,
+    cacheKey,
+    fileName,
+    fields,
+    createdAt: new Date().toISOString(),
+  };
+  await commit([...ops, op]);
+  return tempNoteId;
+}
+
+/** Queues a note delete. If the note never synced, its queued create/media (and edits) are simply
+ *  dropped, including any cached media bytes. */
 export async function enqueueNoteDelete(tripId: string, noteId: string): Promise<void> {
   await ready();
   const hasPendingCreate = ops.some((o) => o.kind === 'note.create' && o.tempNoteId === noteId);
+  const pendingMedia = ops.find((o) => o.kind === 'note.media' && o.tempNoteId === noteId);
   if (hasPendingCreate) {
     // Never reached the server — discard the create and any edits; no delete op needed.
     await commit(
@@ -138,6 +196,12 @@ export async function enqueueNoteDelete(tripId: string, noteId: string): Promise
           !(o.kind === 'note.update' && o.noteId === noteId),
       ),
     );
+    return;
+  }
+  if (pendingMedia && pendingMedia.kind === 'note.media') {
+    // Same story for a still-queued voice/photo note — plus its cached bytes never uploaded.
+    await commit(ops.filter((o) => o !== pendingMedia));
+    await deleteCachedMedia(pendingMedia.cacheKey);
     return;
   }
   // Drop any pending edits (the server copy is going away) and queue the delete.

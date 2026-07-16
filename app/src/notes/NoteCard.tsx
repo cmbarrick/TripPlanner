@@ -58,6 +58,11 @@ export function NoteCard({
       <View style={{ flex: 1 }}>
         {anchorLabel ? <Text style={st.anchor}>{anchorLabel}</Text> : null}
         {promptText ? <Text style={st.prompt}>💭 {promptText}</Text> : null}
+        {note.pendingMediaKind === 'Voice' ? (
+          <Text style={st.pendingMedia}>🎤 Voice note recorded</Text>
+        ) : note.pendingMediaKind === 'Photo' ? (
+          <Text style={st.pendingMedia}>📷 Photo added</Text>
+        ) : null}
         {audio ? <VoicePlayer tripId={tripId} media={audio} /> : null}
         {editing ? (
           <View>
@@ -132,6 +137,7 @@ const st = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10 },
   anchor: { fontSize: 10, fontWeight: '800', color: colors.brand, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
   prompt: { fontSize: 12, fontWeight: '700', color: colors.ink600, marginBottom: 4, lineHeight: 17 },
+  pendingMedia: { fontSize: 12, fontWeight: '700', color: colors.ink600, marginBottom: 4 },
   body: { fontSize: 13, color: colors.ink, lineHeight: 18 },
   photo: { marginTop: 8 },
   meta: { fontSize: 10, color: colors.ink400, fontWeight: '700', marginTop: 4 },

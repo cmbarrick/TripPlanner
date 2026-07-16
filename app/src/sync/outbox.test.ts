@@ -10,10 +10,26 @@ jest.mock('../storage', () => ({
   },
 }));
 
+// In-memory media cache mock — the real one talks to expo-file-system/IndexedDB, neither of
+// which the outbox itself should need to know about (see mediaCache.ts / mediaCache.web.ts).
+const mockMediaStore = new Map<string, unknown>();
+const mockCacheMedia = jest.fn(async (key: string, file: unknown, _fileName: string) => {
+  mockMediaStore.set(key, file);
+});
+const mockDeleteCachedMedia = jest.fn(async (key: string) => {
+  mockMediaStore.delete(key);
+});
+jest.mock('./mediaCache', () => ({
+  cacheMedia: (...args: [string, unknown, string]) => mockCacheMedia(...args),
+  loadCachedMedia: async (key: string) => mockMediaStore.get(key) ?? null,
+  deleteCachedMedia: (...args: [string]) => mockDeleteCachedMedia(...args),
+}));
+
 import {
   enqueueNoteCreate,
   enqueueNoteUpdate,
   enqueueNoteDelete,
+  enqueueMediaNote,
   flushOutbox,
   isTempNoteId,
   __resetOutboxForTests,
@@ -30,6 +46,9 @@ function persisted(): OutboxOp[] {
 
 beforeEach(() => {
   mockMem.clear();
+  mockMediaStore.clear();
+  mockCacheMedia.mockClear();
+  mockDeleteCachedMedia.mockClear();
   __resetOutboxForTests();
 });
 
@@ -72,6 +91,51 @@ describe('enqueue', () => {
     const q = persisted();
     expect(q).toHaveLength(1);
     expect(q[0].kind).toBe('note.delete');
+  });
+});
+
+describe('media notes', () => {
+  it('queues a voice note and caches its bytes under the temp note id', async () => {
+    const audio = { uri: 'file://rec.m4a', name: 'voice-note.m4a', type: 'audio/m4a' };
+    const tempId = await enqueueMediaNote('t1', 'Voice', { scope: 'Trip' }, audio, 'voice-note.m4a');
+    expect(isTempNoteId(tempId)).toBe(true);
+    expect(mockCacheMedia).toHaveBeenCalledWith(tempId, audio, 'voice-note.m4a');
+    const q = persisted();
+    expect(q).toHaveLength(1);
+    expect(q[0].kind).toBe('note.media');
+    if (q[0].kind === 'note.media') {
+      expect(q[0].mediaKind).toBe('Voice');
+      expect(q[0].cacheKey).toBe(tempId);
+    }
+  });
+
+  it('folds a caption edit into a still-pending photo note', async () => {
+    const photo = new Blob(['x']);
+    const tempId = await enqueueMediaNote('t1', 'Photo', { scope: 'Trip' }, photo, 'photo.jpg');
+    await enqueueNoteUpdate('t1', tempId, 'On the summit');
+    const q = persisted();
+    expect(q).toHaveLength(1);
+    if (q[0].kind === 'note.media') expect(q[0].fields.bodyText).toBe('On the summit');
+  });
+
+  it('deleting a still-pending media note drops the op and frees its cached bytes', async () => {
+    const photo = new Blob(['x']);
+    const tempId = await enqueueMediaNote('t1', 'Photo', { scope: 'Trip' }, photo, 'photo.jpg');
+    await enqueueNoteDelete('t1', tempId);
+    expect(persisted()).toHaveLength(0);
+    expect(mockDeleteCachedMedia).toHaveBeenCalledWith(tempId);
+  });
+
+  it('flushing a media op uploads the cached file and frees it on success', async () => {
+    const audio = { uri: 'file://rec.m4a', name: 'voice-note.m4a', type: 'audio/m4a' };
+    const tempId = await enqueueMediaNote('t1', 'Voice', { scope: 'Trip' }, audio, 'voice-note.m4a');
+    expect(mockMediaStore.get(tempId)).toEqual(audio);
+    const drained = await flushOutbox(async (op) => {
+      if (op.kind === 'note.media') expect(mockMediaStore.get(op.cacheKey)).toEqual(audio);
+      return 'done';
+    });
+    expect(drained).toBe(1);
+    expect(persisted()).toHaveLength(0);
   });
 });
 

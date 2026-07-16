@@ -1,10 +1,9 @@
 # Project Plan — Wander (Trip Planning App)
 
 > Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-07-16
-> Progress: Phases 0–8 **closed** on dev. **Phase 8 — Public Recaps & Discovery** shipped its
-> remaining slice: the recap-delete → unpublish cascade, plus client UI (publish sheet, Discover
-> tab with search + RAG Q&A, admin moderation queue) — see [`phase-8-summary.md`](./phase-8-summary.md).
-> **Phase 9 — Offline, Polish & Launch** is next.
+> Progress: Phases 0–8 **closed** on dev. **Phase 9 — Offline, Polish & Launch** is in progress:
+> the offline outbox (Phase 4) now covers voice/photo media, not just text — see
+> [`phases/phase-9-offline-polish-launch`](../phases/phase-9-offline-polish-launch).
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
 Every phase has explicit **goals**, **deliverables**, **exit criteria**, and a **testing plan**.
@@ -215,12 +214,25 @@ and discovery layers make it a community product over time.
 - **Discovery approach:** **RAG first** (controllable, current, consent-clean). Fine-tuning is a
   later evaluation, gated on explicit training consent — see the privacy doc.
 
-### Phase 9 — Offline, Polish & Launch
+### Phase 9 — Offline, Polish & Launch 🔄
 - **Goal:** Reliable in the field; production-ready.
 - **Deliverables:** Harden offline sync (incl. media), conflict handling, performance & accessibility
   passes, onboarding, store assets, final security/privacy review.
 - **Exit criteria:** Full plan + capture flow works offline and syncs; meets perf & a11y targets; passes
   store + privacy review.
+- **Progress (2026-07-16):** Offline **media** outbox shipped — voice/photo notes captured while
+  offline now queue (a new `note.media` op) instead of just failing. The bytes are copied into
+  durable local storage (`app/src/sync/mediaCache.ts`/`.web.ts`: native document directory via
+  `expo-file-system`'s new `File`/`Directory`/`Paths` API, web IndexedDB) so the small KV-backed
+  outbox never holds large blobs; the flush path uploads via the existing
+  `createVoiceNote`/`createPhotoNote` and frees the cache after. Hand-verified live: simulated
+  offline (request interception — `context.setOffline` hangs requests rather than rejecting them,
+  so it doesn't exercise the catch path) → picked a photo → optimistic "saved offline" entry
+  appeared instantly → reconnect → synced with no duplicate; a queued op + its cached bytes also
+  survive a page reload while still offline and sync correctly afterward, though the pending entry
+  doesn't reappear in the list until the flush completes (filed under **Sync status UI**, not this
+  item). App **106/106**, `tsc` clean. See
+  [`phases/phase-9-offline-polish-launch`](../phases/phase-9-offline-polish-launch).
 
 ### Later / v2 — Monetization & advanced
 - Premium tier (Stripe), booking/affiliate integrations, fine-tuning exploration, advanced analytics.

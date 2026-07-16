@@ -93,6 +93,9 @@ export interface Note {
   deletedAt?: string | null;
   /** Client-only: set on optimistic notes that are queued in the offline outbox and not yet synced. */
   pendingSync?: boolean;
+  /** Client-only: set on an optimistic voice/photo note so the UI can show what kind of media is
+   *  queued (there's no MediaAsset yet — the bytes live in `mediaCache`, not the server, until sync). */
+  pendingMediaKind?: 'Voice' | 'Photo';
 }
 
 export interface Trip {
