@@ -16,7 +16,8 @@ public class RecapsController(
     IRecapGenerationService generation,
     IRecapRepository recaps,
     IRecapExportService export,
-    ITripRepository trips) : ControllerBase
+    ITripRepository trips,
+    IPublicRecapService publicRecaps) : ControllerBase
 {
     /// <summary>
     /// POST /api/trips/{tripId}/recaps/generate — AI-draft a recap from the scope's notes.
@@ -163,6 +164,62 @@ public class RecapsController(
 
         var fileName = string.Join("_", $"{trip.Title} recap".Split(Path.GetInvalidFileNameChars()));
         return File(pdf, "application/pdf", $"{fileName}.pdf");
+    }
+
+    /// <summary>
+    /// POST /api/trips/{tripId}/recaps/{recapId}/publish — publish publicly (Phase 8). Blocked until
+    /// the trip has ended and the owner has opted in to publishing; if PII is detected and
+    /// <c>acknowledgePii</c> wasn't set, nothing is published and the findings come back for review
+    /// (422); content that clears both still goes through moderation, so a 200 can carry a
+    /// <c>Rejected</c> status.
+    /// </summary>
+    [HttpPost("{recapId:guid}/publish")]
+    public async Task<ActionResult<PublicRecapDto>> Publish(
+        Guid tripId, Guid recapId, [FromBody] PublishRecapRequest request, CancellationToken ct)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        var outcome = await publicRecaps.PublishAsync(
+            tripId, recapId, ownerId,
+            new PublishRequest(request.Places, request.Tags, request.Season, request.BudgetBand, request.AcknowledgePii),
+            ct);
+
+        return outcome.Status switch
+        {
+            PublishStatus.RecapNotFound => NotFound(),
+            PublishStatus.TripNotEnded => BadRequest(new { title = "This trip hasn't ended yet — public recaps can only be published after the trip." }),
+            PublishStatus.PublishNotConsented => StatusCode(403, new { title = "Publishing is disabled. Enable publishing in your privacy settings first." }),
+            PublishStatus.PiiReviewRequired => UnprocessableEntity(new PiiReviewRequiredDto(outcome.PiiFindings!)),
+            _ => Ok(RecapMapper.ToPublicDto(outcome.View!)),
+        };
+    }
+
+    /// <summary>GET /api/trips/{tripId}/recaps/{recapId}/publish — the owner's publish status, or 404 if never published.</summary>
+    [HttpGet("{recapId:guid}/publish")]
+    public ActionResult<PublicRecapDto> GetPublishStatus(Guid tripId, Guid recapId)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        var view = publicRecaps.GetStatus(recapId, ownerId);
+        if (view is null || view.TripId != tripId)
+            return NotFound();
+
+        return Ok(RecapMapper.ToPublicDto(view));
+    }
+
+    /// <summary>POST /api/trips/{tripId}/recaps/{recapId}/unpublish — pull it from discovery.</summary>
+    [HttpPost("{recapId:guid}/unpublish")]
+    public async Task<IActionResult> Unpublish(Guid tripId, Guid recapId, CancellationToken ct)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return Unauthorized();
+
+        return await publicRecaps.UnpublishAsync(tripId, recapId, ownerId, ct) ? NoContent() : NotFound();
     }
 
     /// <summary>DELETE /api/trips/{tripId}/recaps/{recapId}</summary>

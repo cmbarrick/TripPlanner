@@ -151,9 +151,16 @@ and the trade-offs we accepted. It is the single source of truth for technical d
 - **RAG discovery assistant:** question → retrieve relevant public recaps from the **vector index** →
   Azure OpenAI answers **with citations**, and surfaces **clonable itineraries**. Falls back to
   "no good source yet" rather than hallucinating.
-- **Vector store (locked):** start with **pgvector** in Postgres (fewer moving parts, lower early ops).
-  Keep the retrieval/indexing layer behind an abstraction so we can move to **Azure AI Search** later
-  if hybrid search, scale, or operational requirements justify it. Indexing runs async on publish.
+- **Vector store (locked, implemented as of Phase 8 Slice 2):** Postgres, not a separate service —
+  as planned. Embeddings are stored as a plain `float[]` column (`embedding_chunks.Vector`, `real[]`
+  under Npgsql) rather than the native pgvector `vector` type, and similarity is computed
+  **client-side** (cosine similarity) instead of via SQL/pgvector-operator translation. This avoids
+  depending on the `pgvector` Postgres extension being enabled and — more importantly — means the
+  exact same retrieval code runs identically against the EF Core in-memory provider in tests and
+  real Postgres in prod. Fine at today's corpus size; the retrieval/indexing layer sits behind
+  `ISearchService`, so swapping in a native `vector` column + ANN index (ivfflat/hnsw) or moving to
+  **Azure AI Search** later doesn't require touching callers. Indexing runs synchronously on the
+  publish/approve path today; a true async job is a future move once latency/scale justify it.
 - **Training:** **RAG first.** Any future **fine-tuning** requires separate, explicit training consent
   and a PII-scrubbed corpus — see `privacy-consent-moderation.md`.
 

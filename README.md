@@ -60,9 +60,13 @@ npm run web        # opens http://localhost:8081 (or: npm run android / npm run 
 
 ### Current status
 
-**Phases 0–6 are complete on the dev environment** (web target). The app runs end-to-end on Azure dev:
-plan a trip → capture it with notes → turn notes into an AI recap. Test health at last close: backend
-**152/152**, app **93/93**, `tsc` clean. See the per-phase summaries in [`/docs`](./docs).
+**Phases 0–7 are complete, and Phase 8 (Public Recaps & Discovery) is in progress**, on the dev
+environment (web target). The app runs end-to-end on Azure dev: plan a trip → capture it with notes →
+turn notes into an AI recap → share & co-edit it with friends in real time → publish a recap publicly
+after the trip ends, PII-reviewed and moderated by real Azure AI Content Safety with a reportable/
+reviewable queue → find it via search or ask a grounded, cited RAG assistant about it. Test health at
+last close: backend **229/229**, Functions **3/3**, app **93/93** + `tsc` clean. See the per-phase
+summaries in [`/docs`](./docs).
 
 - **Phase 0 — Foundation (local-first):** PostgreSQL-backed API via EF Core (migrations), per-user
   ownership enforcement, Entra JWT validation + dev bypass, CI (lint/typecheck/tests), and local
@@ -84,28 +88,56 @@ plan a trip → capture it with notes → turn notes into an AI recap. Test heal
 - **Phase 6 — AI recap & export:** Grounded, versioned recaps (trip/day/event) from notes + transcripts
   with per-section citations + historical weather actuals; tone picker; **PDF export** (QuestPDF) and an
   unlisted `/share/recaps/{token}` page; in-trip AI dock composer. See [`phase-6-summary.md`](./docs/phase-6-summary.md).
+- **Phase 7 — Sharing & collaboration:** Share a trip by **link** (anonymous view) or **in-app
+  account** (owner/editor/viewer roles); **real-time co-edit** via self-hosted SignalR with presence,
+  verified with a live two-client integration test; **reactions** (client UI on trips/items/recaps) +
+  **shared notes as comments**; and **consent enforcement** — sharing is explicit opt-in, and turning
+  it off unshares every active link/membership immediately. See
+  [`phase-7-summary.md`](./docs/phase-7-summary.md).
+- **Phase 8 — Public recaps & discovery (backend-complete):** The safety-critical **post-trip
+  publish gate** (a recap can't go public until after the trip ends, API-enforced) plus a **consent
+  gate** (`ConsentSetting.PublishEnabled`), a **PII gate** (emails/phone numbers block publish with
+  the findings until reviewed or acknowledged), moderated by real **Azure AI Content Safety**
+  (config-selected; a fake reviewer is the dev/CI default). Any user can **report** a published
+  recap, which pulls it from discovery immediately; an admin-gated **review queue** approves/rejects.
+  Approved recaps are **searchable** (`GET /api/discovery/search`, anonymous) by place/tag/season/
+  budget facets and free-text **semantic ranking** against an embedding index, and queryable via a
+  **RAG discovery assistant** (`POST /api/discovery/ask`, authed) that answers with citations and
+  refuses (rather than hallucinating) when nothing in the corpus actually answers the question.
+  Publish/unpublish/republish work end-to-end, and disabling publish consent unpublishes everything
+  immediately. Only client UI (and a recap-delete → unpublish cascade) remain. See
+  [`phase-8-summary.md`](./docs/phase-8-summary.md).
 - **Consistent dev-only posture:** everything ships on **dev (web)**. Recurring deferred items: golden
-  AI evals, live integration/E2E, staging/prod stand-up, native mobile build/sign-in, and offline
-  **media** sync (→ Phase 9).
-- **Next:** **Phase 7 — Sharing & Collaboration** (share by link + accounts, real-time co-edit,
-  reactions). See [`phases/phase-7-sharing-collaboration`](./phases/phase-7-sharing-collaboration).
+  AI evals, live integration/E2E (now started with Phase 7's realtime test), staging/prod stand-up,
+  native mobile build/sign-in, and offline **media** sync (→ Phase 9).
+- **Next:** Phase 8 client UI (publish sheet, search screen, RAG Q&A screen) — the backend is done.
+  See [`phases/phase-8-public-discovery`](./phases/phase-8-public-discovery).
 
 ## What's next & handoff (read this if you're the next agent)
 
-**Where we are:** Phases 0–6 are closed on dev (web). The full **Plan → Capture → Recap** loop works
-end-to-end on Azure dev. Planning docs and per-phase summaries in [`/docs`](./docs) are current.
+**Where we are:** Phases 0–7 are closed on dev (web); **Phase 8 (Public Recaps & Discovery)**'s
+backend is complete — Slices 0–3 of 5 are built and closed out (post-trip + consent publish gate; a
+PII gate for emails/phone numbers; real Azure AI Content Safety moderation with a fake-by-default
+seam; user reporting → admin review queue; search with facet filters + semantic ranking; a grounded
+RAG discovery assistant with citations). Planning docs and per-phase summaries in [`/docs`](./docs)
+are current, including [`phase-8-summary.md`](./docs/phase-8-summary.md).
 
-**What to start with — Phase 7 (Sharing & Collaboration):**
-1. Read [`phases/phase-7-sharing-collaboration`](./phases/phase-7-sharing-collaboration) for goals,
-   tasks, and exit criteria.
-2. Build outward from the existing sharing/consent schema and the Phase 6 recap **share-token**
-   capability pattern (a single-recap preview of the Phase 7 link-capability model):
-   - **Share by link:** capability tokens with `viewer`/`editor` roles, expiry, and revoke.
-   - **Share by account:** invite friends; `TripMember` with **owner / editor / viewer** roles.
-   - **Real-time co-edit:** Azure Web PubSub / SignalR for presence + live itinerary updates.
-   - **Conflict handling:** move beyond last-write-wins toward operational merge.
-   - **Reactions** + **shared notes as comments** (reuse Phase 4 notes within shared trips).
-3. Honor the consent model: sharing is explicit opt-in; revocation unshares immediately.
+**What to continue — Phase 8, Slice 4 (client UI + hardening):**
+1. Read [`phases/phase-8-public-discovery`](./phases/phase-8-public-discovery) for the full slice
+   plan and progress log — the design decisions (why `PublicRecap` is a separate table, gate
+   ordering post-trip → consent → PII → moderation, the moderation seam, the config-admin-allowlist
+   gate for the review queue, why search similarity is computed client-side instead of via a native
+   pgvector column — see `architecture.md` §3 — and the RAG assistant's relevance floor before
+   calling the model) are documented there.
+2. Client UI: publish sheet (with the PII review step and post-trip lock explanation), report
+   button, admin queue screen, search screen, RAG Q&A screen. Every backend endpoint it needs
+   already exists and is tested.
+3. Recap-delete → unpublish cascade (today only the consent-off path cascades a delete from
+   discovery).
+4. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
+   provider — regex only covers emails/phones today), location coarsening on public recaps, an async
+   indexing job (indexing runs synchronously on publish/approve today), a golden RAG eval corpus
+   against a real model, Phase 7's operational-merge/CRDT conflict handling.
 
 **Working agreement — document as you go.** Before ending your session:
 - [ ] **Tick off completed tasks** in the relevant `phases/phase-*/README.md` (check the boxes).
@@ -148,8 +180,8 @@ end-to-end on Azure dev. Planning docs and per-phase summaries in [`/docs`](./do
 | 4 | Notes & journaling (text + **voice notes**, reflection prompts, offline) | ✅ Complete |
 | 5 | AI planning assistant (generate & refine itineraries) | ✅ Complete |
 | 6 | AI recap & export (notes → recap, PDF/web) | ✅ Complete |
-| 7 | Sharing & collaboration (link + accounts, **real-time co-edit**, reactions) | ⬜ Next |
-| 8 | Public recaps & discovery (publish + moderation, search, **RAG** Q&A) | ⬜ Pending |
+| 7 | Sharing & collaboration (link + accounts, **real-time co-edit**, reactions) | ✅ Complete |
+| 8 | Public recaps & discovery (publish + moderation, search, **RAG** Q&A) | 🔄 In progress |
 | 9 | Offline, polish & launch (sync, performance, a11y, privacy review) | ⬜ Pending |
 | Later / v2 | Monetization & advanced (premium, booking, fine-tuning) | ⬜ Pending |
 

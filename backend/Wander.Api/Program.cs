@@ -141,6 +141,15 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITripAccessService, TripAccessService>();
 builder.Services.AddScoped<ITripShareService, TripShareService>();
 builder.Services.AddScoped<ITripMemberService, TripMemberService>();
+builder.Services.AddScoped<IReactionService, ReactionService>();
+builder.Services.AddScoped<IConsentService, ConsentService>();
+
+// Real-time co-editing (Phase 7, Slice 3): self-hosted SignalR + in-memory presence. The notifier
+// is the transport seam (swappable for Azure Web PubSub). Presence/notifier are process-local
+// singletons that pair with the single-instance dev hub.
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<Wander.Api.Realtime.ITripPresenceTracker, Wander.Api.Realtime.TripPresenceTracker>();
+builder.Services.AddSingleton<Wander.Api.Realtime.ITripRealtimeNotifier, Wander.Api.Realtime.SignalRTripRealtimeNotifier>();
 
 // AI planning assistant (Phase 5): Azure OpenAI when configured; disabled/fake otherwise.
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
@@ -156,6 +165,25 @@ builder.Services.AddScoped<IAiPlanningService, AiPlanningService>();
 builder.Services.AddScoped<IRecapRepository, EfCoreRecapRepository>();
 builder.Services.AddScoped<IRecapGenerationService, RecapGenerationService>();
 builder.Services.AddScoped<IRecapExportService, RecapExportService>();
+
+// Public recaps & discovery (Phase 8): publish gate (post-trip + consent) + content moderation.
+// Real Azure AI Content Safety when configured (Slice 1); the deterministic fake otherwise —
+// same config-presence convention as Weather/Places/AI provider selection.
+builder.Services.AddScoped<IPublicRecapService, PublicRecapService>();
+builder.Services.AddScoped<IModerationQueueService, ModerationQueueService>();
+builder.Services.AddSingleton<IPiiDetectionService, RegexPiiDetectionService>();
+var moderationEndpoint = builder.Configuration["Moderation:Endpoint"];
+var moderationApiKey = builder.Configuration["Moderation:ApiKey"];
+if (!string.IsNullOrWhiteSpace(moderationEndpoint) && !string.IsNullOrWhiteSpace(moderationApiKey))
+{
+    builder.Services.AddSingleton(_ => new Azure.AI.ContentSafety.ContentSafetyClient(
+        new Uri(moderationEndpoint), new Azure.AzureKeyCredential(moderationApiKey)));
+    builder.Services.AddScoped<IContentModerationService, AzureContentModerationService>();
+}
+else
+{
+    builder.Services.AddScoped<IContentModerationService, FakeContentModerationService>();
+}
 var aiSection = builder.Configuration.GetSection(AiOptions.SectionName);
 var useFakeAi = aiSection.GetValue<bool>(nameof(AiOptions.UseFake));
 var aiEndpoint = aiSection[nameof(AiOptions.Endpoint)];
@@ -173,6 +201,29 @@ else
 {
     builder.Services.AddSingleton<IAiProvider, DisabledAiProvider>();
 }
+
+// Discovery search (Phase 8, Slice 2): semantic ranking over an embedding index of approved public
+// recaps. Same Azure OpenAI resource as chat/recap generation, just the embedding deployment; the
+// fake embedding provider (dev/CI default) is deterministic so ranking logic is fully testable
+// without a model call.
+if (useFakeAi)
+{
+    builder.Services.AddSingleton<IEmbeddingProvider, FakeEmbeddingProvider>();
+}
+else if (!string.IsNullOrWhiteSpace(aiEndpoint) && !string.IsNullOrWhiteSpace(aiApiKey))
+{
+    builder.Services.AddSingleton<IEmbeddingProvider, AzureOpenAiEmbeddingProvider>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmbeddingProvider, FakeEmbeddingProvider>();
+}
+builder.Services.AddScoped<ISearchIndexService, SearchIndexService>();
+builder.Services.AddScoped<ISearchService, SearchService>();
+
+// RAG discovery assistant (Phase 8, Slice 3): retrieves via ISearchService, then a grounded,
+// cited answer over the shared AI token quota (same posture as chat/recap generation).
+builder.Services.AddScoped<Wander.Api.Discovery.IDiscoveryAssistantService, Wander.Api.Discovery.DiscoveryAssistantService>();
 
 // Notes & journaling (Phase 4): media blobs + async voice-note transcription.
 // Cloud: Azure Blob Storage + an Azure Storage queue (drained by the transcription Function) when
@@ -231,6 +282,22 @@ builder.Services
     {
         options.Authority = authority;
         options.Audience = audience;
+
+        // Browsers can't set Authorization headers on the WebSocket handshake, so SignalR clients
+        // pass the bearer token in the query string for hub connections. Lift it into the context.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 if (devBypassEnabled)
@@ -254,7 +321,9 @@ builder.Services.AddCors(options =>
         if (builder.Environment.IsDevelopment())
         {
             var allowLocalhostAnyPort = builder.Configuration.GetValue<bool?>("Cors:AllowAnyLocalhostPort") ?? true;
-            policy.AllowAnyHeader().AllowAnyMethod();
+            // AllowCredentials so the SignalR negotiate (and long-polling fallback) works; valid with
+            // a specific-origin predicate (not the "*" wildcard).
+            policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
 
             if (allowLocalhostAnyPort)
             {
@@ -282,7 +351,7 @@ builder.Services.AddCors(options =>
             throw new InvalidOperationException("Cors:AllowedOrigins must include at least one origin outside development.");
         }
 
-        policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
+        policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
     });
 });
 
@@ -315,6 +384,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<Wander.Api.Realtime.TripHub>("/hubs/trips");
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "wander-api" }));
 
 app.Run();
+
+// Exposes the generated top-level Program class so WebApplicationFactory<Program> in the test
+// project can host it in-memory (realtime SignalR integration tests, Phase 7 Slice 5).
+public partial class Program;

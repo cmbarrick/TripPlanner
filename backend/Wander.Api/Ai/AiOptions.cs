@@ -14,6 +14,9 @@ public sealed class AiOptions
     /// <summary>Cheaper model deployment for drafts/gap-fill (e.g. gpt-4o-mini).</summary>
     public string DraftDeployment { get; set; } = "gpt-4o-mini";
 
+    /// <summary>Embedding model deployment for semantic search (Phase 8, Slice 2).</summary>
+    public string EmbeddingDeployment { get; set; } = "text-embedding-3-small";
+
     /// <summary>Per-user daily token cap (prompt + completion). Enforced via Postgres.</summary>
     public int DailyTokenLimit { get; set; } = 50_000;
 

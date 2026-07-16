@@ -23,6 +23,10 @@ public sealed class FakeAiProvider : IAiProvider
         ]}
         """;
 
+    public const string SampleDiscoveryJson = """
+        {"hasAnswer":true,"answer":"One traveler's recap mentions this — see the cited trip for details.","sourceLabels":["r1"]}
+        """;
+
     public bool IsEnabled => true;
 
     public async IAsyncEnumerable<AiCompletionDelta> CompleteAsync(
@@ -33,8 +37,12 @@ public sealed class FakeAiProvider : IAiProvider
 
         if (request.Format == AiResponseFormat.JsonSchema)
         {
-            yield return new TextDelta(
-                request.DeploymentKind == "recap" ? SampleRecapJson : SampleDraftJson);
+            yield return new TextDelta(request.DeploymentKind switch
+            {
+                "recap" => SampleRecapJson,
+                "discovery" => SampleDiscoveryJson,
+                _ => SampleDraftJson,
+            });
             yield return new CompletionDone(new AiUsage(40, 60), AiFinishReason.Stop);
             yield break;
         }

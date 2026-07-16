@@ -102,10 +102,12 @@ public sealed class AzureOpenAiProvider : IAiProvider
         yield return new CompletionDone(usage, finish);
     }
 
-    // Recaps ride the cheaper draft deployment — first drafts are user-edited anyway.
+    // Recaps and discovery Q&A ride the cheaper draft deployment — both are structured-output,
+    // high-frequency tasks (first drafts are user-edited anyway; discovery answers are short).
     private string ResolveDeployment(string? kind) =>
         string.Equals(kind, "draft", StringComparison.OrdinalIgnoreCase)
         || string.Equals(kind, "recap", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(kind, "discovery", StringComparison.OrdinalIgnoreCase)
             ? _options.DraftDeployment
             : _options.ChatDeployment;
 

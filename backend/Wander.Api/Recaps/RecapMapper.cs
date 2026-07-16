@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Wander.Api.Ai;
+using Wander.Api.Data;
 using Wander.Api.Models;
 
 namespace Wander.Api.Recaps;
@@ -8,6 +9,18 @@ public static class RecapMapper
 {
     /// <summary>Relative URL of the unlisted share page for a token.</summary>
     public static string ShareUrl(string shareToken) => $"/share/recaps/{shareToken}";
+
+    public static PublicRecapDto ToPublicDto(PublicRecapView view) => new(
+        view.Id,
+        view.RecapId,
+        view.TripId,
+        view.ModerationStatus,
+        view.ModerationReason,
+        view.Places,
+        view.Tags,
+        view.Season,
+        view.BudgetBand,
+        view.PublishedAt);
 
     public static RecapDto ToDto(Recap recap) => new(
         recap.Id,

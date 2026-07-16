@@ -18,6 +18,10 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
     public DbSet<AiTokenUsage> AiTokenUsages => Set<AiTokenUsage>();
     public DbSet<Recap> Recaps => Set<Recap>();
+    public DbSet<Reaction> Reactions => Set<Reaction>();
+    public DbSet<PublicRecap> PublicRecaps => Set<PublicRecap>();
+    public DbSet<PublicRecapReport> PublicRecapReports => Set<PublicRecapReport>();
+    public DbSet<EmbeddingChunk> EmbeddingChunks => Set<EmbeddingChunk>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -137,6 +141,20 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
             entity.HasIndex(x => new { x.OwnerId, x.UsageDate }).IsUnique();
         });
 
+        modelBuilder.Entity<Reaction>(entity =>
+        {
+            entity.ToTable("reactions");
+            // Listing pulls every reaction for a trip; the per-target index keeps grouping fast.
+            entity.HasIndex(x => new { x.TripId, x.TargetType, x.TargetId });
+            // One active reaction per (target, user, emoji) — enforced in code via revive-on-toggle
+            // because soft delete means the row may linger; this index just keeps lookups fast.
+            entity.HasIndex(x => new { x.TargetType, x.TargetId, x.OwnerId, x.Emoji });
+            entity.HasOne<Trip>()
+                .WithMany()
+                .HasForeignKey(x => x.TripId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Recap>(entity =>
         {
             entity.ToTable("recaps");
@@ -148,6 +166,37 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
                 .WithMany()
                 .HasForeignKey(x => x.TripId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PublicRecap>(entity =>
+        {
+            entity.ToTable("public_recaps");
+            // One active publish row per recap; re-publishing revives it (see PublicRecapService).
+            entity.HasIndex(x => x.RecapId).IsUnique();
+            entity.HasIndex(x => x.OwnerId);
+            // Discovery listing (Slice 2) filters approved + non-revoked recaps.
+            entity.HasIndex(x => new { x.ModerationStatus, x.DeletedAt });
+            entity.HasOne<Recap>()
+                .WithMany()
+                .HasForeignKey(x => x.RecapId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PublicRecapReport>(entity =>
+        {
+            entity.ToTable("public_recap_reports");
+            entity.HasIndex(x => new { x.PublicRecapId, x.Status });
+            entity.HasOne<PublicRecap>()
+                .WithMany()
+                .HasForeignKey(x => x.PublicRecapId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmbeddingChunk>(entity =>
+        {
+            entity.ToTable("embedding_chunks");
+            // One chunk per (source, sourceId) today — re-indexing updates it in place.
+            entity.HasIndex(x => new { x.Source, x.SourceId }).IsUnique();
         });
     }
 }

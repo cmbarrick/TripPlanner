@@ -1,7 +1,10 @@
 # Project Plan — Wander (Trip Planning App)
 
-> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-06-08
-> Progress: Phases 0–6 **closed** on dev (see per-phase summaries in `/docs`). Next: **Phase 7 — Sharing & Collaboration**.
+> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-07-14
+> Progress: Phases 0–7 **closed** on dev. **Phase 8 — Public Recaps & Discovery** is in progress
+> (Slices 0–3 of 5 built — publish gate, moderation, PII gate, search, and a grounded RAG discovery
+> assistant are all backend-complete; only client UI + a hardening item remain — see
+> [`phase-8-summary.md`](./phase-8-summary.md)).
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
 Every phase has explicit **goals**, **deliverables**, **exit criteria**, and a **testing plan**.
@@ -66,8 +69,8 @@ and discovery layers make it a community product over time.
 | **4** | Notes & Journaling | Text + **voice notes** (audio+transcript), reflection prompts, offline capture | ~3–4 wks |
 | **5** | AI Planning Assistant ✅ | Generate & refine itineraries via chat | ~3 wks |
 | **6** | AI Recap & Export ✅ | Summarize notes → recap (event/day/trip), export to PDF/web | ~2–3 wks |
-| **7** | Sharing & Collaboration | Share by link + accounts, **real-time co-edit**, reactions | ~3–4 wks |
-| **8** | Public Recaps & Discovery | Publish + moderation, search, **RAG** location Q&A + itinerary discovery | ~4–5 wks |
+| **7** | Sharing & Collaboration ✅ | Share by link + accounts, **real-time co-edit**, reactions | ~3–4 wks |
+| **8** | Public Recaps & Discovery 🔄 | Publish + moderation, search, **RAG** location Q&A + itinerary discovery | ~4–5 wks |
 | **9** | Offline, Polish & Launch | Robust sync, performance, accessibility, launch hardening | ~2–3 wks |
 | **Later / v2** | Monetization & advanced | Premium tier, booking, fine-tuning exploration | post-launch |
 
@@ -158,15 +161,24 @@ and discovery layers make it a community product over time.
   deferred Phase 5 **in-trip AI dock** composer. Deferred: golden faithfulness evals, event-scope UI
   entry, photos on the share page, live E2E. See [`phase-6-summary.md`](./phase-6-summary.md).
 
-### Phase 7 — Sharing & Collaboration  *(expanded from old v2)*
+### Phase 7 — Sharing & Collaboration ✅  *(expanded from old v2)*
 - **Goal:** Plan and relive trips together.
 - **Deliverables:** Share a trip via **link** (viewer needs no account) and **in-app friends/accounts**;
   roles (owner/editor/viewer); **real-time co-editing** (Azure Web PubSub/SignalR) with presence;
   **reactions**; shared notes act as comments. Conflict handling upgraded for multi-user edits.
 - **Exit criteria:** Two users co-edit a trip in real time with correct roles; link sharing works for
-  non-users; reactions + shared notes propagate live.
+  non-users; reactions + shared notes propagate live. **All met.**
+- **Closed (2026-07-14):** All 6 slices shipped on dev — `ITripAccessService` access resolution, link
+  sharing (anonymous view + redeem), account sharing (invite/roles), self-hosted SignalR co-edit with
+  presence, reactions + shared notes as comments (incl. client reactions UI), and **consent
+  enforcement** (`ConsentSetting.ShareEnabled` explicit opt-in; disabling it unshares every active
+  link/membership immediately). Closed out with a real two-client SignalR integration test
+  (`RealtimeE2ETests.cs`, `WebApplicationFactory<Program>` against the real hub) and a full
+  Phases 0–6 regression pass: backend **180/180**, Functions **3/3**, app **93/93** + `tsc` clean.
+  Operational-merge/CRDT conflict handling is a documented backlog item (last-write-wins + presence
+  ships today; not required by the exit criteria). See [`phase-7-summary.md`](./phase-7-summary.md).
 
-### Phase 8 — Public Recaps & Discovery  *(NEW)*
+### Phase 8 — Public Recaps & Discovery 🔄  *(NEW)*
 - **Goal:** A searchable, AI-powered travel knowledge layer from public recaps.
 - **Deliverables:**
   - **Publish** a recap publicly (explicit opt-in, per recap), with PII review.
@@ -176,6 +188,27 @@ and discovery layers make it a community product over time.
     recaps, plus **surfaced itineraries** you can clone. Vector index over consented public content.
 - **Exit criteria:** Publish/unpublish with consent; moderation blocks unsafe content; search returns
   relevant recaps; discovery Q&A answers are grounded in and cite public recaps.
+- **Progress (2026-07-14):** Slices 0–3 built on dev. **Slice 0:** the safety-critical **post-trip
+  gate** (publishing rejected server-side while `today < trip.EndDate`) plus a **consent gate**
+  (`ConsentSetting.PublishEnabled`), ahead of a swappable moderation seam. Publish/unpublish
+  round-trips, republish revives rather than duplicates, and disabling publish consent cascades an
+  immediate unpublish (same pattern as Phase 7's share-revocation). **Slice 1:** the moderation seam
+  now has a real implementation — `AzureContentModerationService` (real Azure AI Content Safety,
+  selected when configured; the fake reviewer is the dev/CI default) — plus user reporting that pulls
+  a recap back to `Pending` immediately and a config-admin-gated review queue to approve/reject. A
+  **PII gate** (`RegexPiiDetectionService`) now also sits between consent and moderation: emails/
+  phone numbers block publish with a `422` + findings until reviewed or explicitly acknowledged.
+  **Slice 2:** search over approved recaps — facet filters (place/tag/season/budget) plus semantic
+  ranking against an `EmbeddingChunk` index (real Azure OpenAI embeddings when configured, a
+  deterministic fake otherwise), kept in sync on publish/unpublish/approve/reject/report. Vectors are
+  a plain `float[]` column with **client-side cosine similarity** rather than a native pgvector
+  column — a deliberate simplification (no Postgres extension dependency, identical behavior in
+  tests and prod) documented in `architecture.md` §3. **Slice 3:** the RAG discovery assistant
+  (`POST /api/discovery/ask`, authed) retrieves via search, applies a relevance floor before ever
+  calling the model, then reuses Phase 6's exact grounding discipline (labeled citations, invented
+  ones dropped, refuses via `hasAnswer:false` rather than hallucinating). Backend **229/229**. All
+  three of Phase 8's core objectives are now backend-complete; open: client UI, recap-delete →
+  unpublish cascade. See [`phase-8-summary.md`](./phase-8-summary.md).
 - **Discovery approach:** **RAG first** (controllable, current, consent-clean). Fine-tuning is a
   later evaluation, gated on explicit training consent — see the privacy doc.
 
@@ -246,13 +279,17 @@ checklist are signed off.
 ---
 
 ## Milestones
-- **M1:** Authenticated app shell on all platforms (end of Phase 0)
-- **M2:** Manual planning end-to-end (end of Phase 1)
-- **M3:** Map + live weather + integrations (end of Phase 2)
+- **M1:** Authenticated app shell on all platforms (end of Phase 0) ✅
+- **M2:** Manual planning end-to-end (end of Phase 1) ✅
+- **M3:** Map + live weather + integrations (end of Phase 2) ✅
 - **M4:** Deployment/release foundations in place (end of Phase 3) ✅
 - **M5:** Notes & voice journaling, offline (end of Phase 4) ✅
 - **M6:** AI planning assistant usable (end of Phase 5) ✅
 - **M7:** AI recap + export (end of Phase 6) ✅
-- **M8:** Sharing + real-time collaboration (end of Phase 7)
-- **M9:** Public discovery + RAG Q&A (end of Phase 8)
+- **M8:** Sharing + real-time collaboration (end of Phase 7) ✅ *All 6 slices shipped and closed out
+  with a live two-client realtime test + full regression pass (backend 180/180, app 93/93).*
+- **M9:** Public discovery + RAG Q&A (end of Phase 8) 🔄 *Slices 0–3 shipped: post-trip + consent
+  publish gate, real Azure Content Safety moderation, reporting → review queue, PII detection gate,
+  search (facets + semantic ranking), and a grounded RAG discovery assistant with citations — all
+  backend-complete; client UI still open.*
 - **M10:** Public launch — offline, polished, privacy-reviewed (end of Phase 9)

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Wander.Api.Data;
@@ -12,9 +13,11 @@ using Wander.Api.Data;
 namespace Wander.Api.Data.Migrations
 {
     [DbContext(typeof(WanderDbContext))]
-    partial class WanderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260714124402_AddPublicRecapReports")]
+    partial class AddPublicRecapReports
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -141,43 +144,6 @@ namespace Wander.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Days");
-                });
-
-            modelBuilder.Entity("Wander.Api.Models.EmbeddingChunk", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("SourceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("TripId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.PrimitiveCollection<float[]>("Vector")
-                        .IsRequired()
-                        .HasColumnType("real[]");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Source", "SourceId")
-                        .IsUnique();
-
-                    b.ToTable("embedding_chunks", (string)null);
                 });
 
             modelBuilder.Entity("Wander.Api.Models.ItineraryItem", b =>
