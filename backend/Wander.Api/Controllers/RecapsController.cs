@@ -222,9 +222,9 @@ public class RecapsController(
         return await publicRecaps.UnpublishAsync(tripId, recapId, ownerId, ct) ? NoContent() : NotFound();
     }
 
-    /// <summary>DELETE /api/trips/{tripId}/recaps/{recapId}</summary>
+    /// <summary>DELETE /api/trips/{tripId}/recaps/{recapId} — also unpublishes it if it was public.</summary>
     [HttpDelete("{recapId:guid}")]
-    public IActionResult Delete(Guid tripId, Guid recapId)
+    public async Task<IActionResult> Delete(Guid tripId, Guid recapId, CancellationToken ct)
     {
         var ownerId = User.GetUserId();
         if (ownerId is null)
@@ -234,6 +234,10 @@ public class RecapsController(
         if (recap is null || recap.TripId != tripId)
             return NotFound();
 
-        return recaps.Delete(recapId, ownerId) ? NoContent() : NotFound();
+        if (!recaps.Delete(recapId, ownerId))
+            return NotFound();
+
+        await publicRecaps.UnpublishAsync(tripId, recapId, ownerId, ct);
+        return NoContent();
     }
 }

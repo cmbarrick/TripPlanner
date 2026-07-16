@@ -65,9 +65,8 @@
       pre-filter keeps weakly-related retrieval from being fed to the model at all) — exercised
       against the fake AI provider/embeddings; no golden eval corpus against a real model yet (same
       posture as Phases 5–6).
-- [x] **Privacy:** unpublish/reject/report-pending all remove the recap's chunk from the search
-      index immediately (`SearchTests.cs`). Recap-delete → unpublish → de-index is still a gap (see
-      Slice 0/1's carried-over item).
+- [x] **Privacy:** unpublish/reject/report-pending, and now recap-delete, all remove the recap's
+      chunk from the search index immediately (`SearchTests.cs`, `PublicRecapTests.cs`).
 - [x] **Integration:** publish → index → searchable; facet filters return only matching results;
       semantic query ranks the more topically similar recap first, with a keyword fallback for any
       approved-but-unindexed recap (`SearchTests.cs`; hand-verified live against real Postgres).
@@ -207,7 +206,9 @@ actually exists to index.
       (`Wander.Api.Tests/DiscoveryTests.cs`).
 
 ### Slice 4 — Consent/lifecycle hardening + client UI  ⬜
-- [ ] Deleting a recap cascades to unpublish (currently only the consent-off path cascades).
+- [x] Deleting a recap cascades to unpublish (`RecapsController.Delete` now calls
+      `IPublicRecapService.UnpublishAsync` after a successful delete — same soft-delete +
+      de-index path as an explicit unpublish; a no-op if the recap was never published).
 - [ ] Client: publish sheet with the post-trip lock explanation, discovery facets form, search screen,
       RAG Q&A screen.
 
@@ -267,5 +268,9 @@ actually exists to index.
   caveat as every other fake-provider check in this phase). Phase 8's three core objectives
   (post-trip-gated publish, moderated + PII-reviewed content, searchable + RAG-queryable) are now
   all backend-complete.
-- **Next:** Slice 4 — recap-delete → unpublish cascade, then client UI (publish sheet, report
-  button, admin queue, search screen, RAG Q&A screen) is the remaining backlog before Phase 8 closes.
+- **2026-07-16** — **Slice 4's cascade item complete.** `RecapsController.Delete` now calls
+  `IPublicRecapService.UnpublishAsync` after a successful delete, closing the last gap carried over
+  from Slices 0/1 (deleting a published recap left it discoverable). **Tests: backend 231/231**
+  (+2 `PublicRecapTests.cs`).
+- **Next:** client UI (publish sheet, report button, admin queue, search screen, RAG Q&A screen) is
+  the only remaining item before Phase 8 closes.

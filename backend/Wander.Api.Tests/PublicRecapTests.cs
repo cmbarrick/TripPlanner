@@ -275,6 +275,34 @@ public class PublicRecapTests
         Assert.IsType<NotFoundResult>(statusAfter.Result);
     }
 
+    [Fact]
+    public async Task Controller_DeleteRecap_UnpublishesIt()
+    {
+        var ctx = NewContext();
+        var (trip, recap) = SeedEndedTripWithRecap(ctx);
+        await new ConsentService(ctx, new UserService(ctx)).UpdateAsync(OwnerId, new ConsentUpdate(PublishEnabled: true));
+        var ctrl = BuildController(ctx);
+        await ctrl.Publish(trip.Id, recap.Id, new PublishRecapRequest(), default);
+        Assert.Single(ctx.PublicRecaps.Where(p => p.DeletedAt == null));
+
+        var result = await ctrl.Delete(trip.Id, recap.Id, default);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Empty(ctx.PublicRecaps.Where(p => p.DeletedAt == null));
+    }
+
+    [Fact]
+    public async Task Controller_DeleteRecap_NeverPublished_StillDeletesCleanly()
+    {
+        var ctx = NewContext();
+        var (trip, recap) = SeedEndedTripWithRecap(ctx);
+        var ctrl = BuildController(ctx);
+
+        var result = await ctrl.Delete(trip.Id, recap.Id, default);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
     private static RecapsController BuildController(WanderDbContext ctx)
     {
         var users = new UserService(ctx);
