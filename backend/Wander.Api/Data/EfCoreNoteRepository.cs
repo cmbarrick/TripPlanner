@@ -24,11 +24,26 @@ public class EfCoreNoteRepository : INoteRepository
             .ToList();
     }
 
+    public IEnumerable<Note> GetAllForTrip(Guid tripId) =>
+        _ctx.Notes
+            .Include(n => n.MediaAssets)
+            .Where(n => n.TripId == tripId && n.DeletedAt == null)
+            .OrderByDescending(n => n.CreatedAt)
+            .ToList();
+
     public Note? Add(Guid tripId, string ownerId, Note note)
     {
         if (!OwnsTrip(tripId, ownerId))
             return null;
 
+        return Persist(tripId, ownerId, note);
+    }
+
+    public Note AddAuthored(Guid tripId, string authorOwnerId, Note note) =>
+        Persist(tripId, authorOwnerId, note);
+
+    private Note Persist(Guid tripId, string ownerId, Note note)
+    {
         var now = DateTimeOffset.UtcNow;
         note.TripId = tripId;
         note.OwnerId = ownerId;
@@ -45,6 +60,18 @@ public class EfCoreNoteRepository : INoteRepository
         _ctx.SaveChanges();
         return note;
     }
+
+    public Guid? GetTripIdForMediaAsset(Guid mediaAssetId) =>
+        _ctx.MediaAssets
+            .Where(m => m.Id == mediaAssetId)
+            .Join(_ctx.Notes, m => m.NoteId, n => n.Id, (m, n) => (Guid?)n.TripId)
+            .FirstOrDefault();
+
+    public Guid? GetTripIdForNote(Guid noteId, string ownerId) =>
+        _ctx.Notes
+            .Where(n => n.Id == noteId && n.OwnerId == ownerId && n.DeletedAt == null)
+            .Select(n => (Guid?)n.TripId)
+            .FirstOrDefault();
 
     public Note? UpdateBody(Guid noteId, string ownerId, string? bodyText)
     {

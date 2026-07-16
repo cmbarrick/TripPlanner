@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wander.Api.Data;
 using Wander.Api.Media;
 using Wander.Api.Models;
+using Wander.Api.Realtime;
 using Wander.Api.Security;
 using Wander.Api.Transcription;
 
@@ -31,30 +32,41 @@ public class NotesController : ControllerBase
     private readonly INoteRepository _notes;
     private readonly IBlobStore _blobs;
     private readonly ITranscriptionQueue _queue;
+    private readonly ITripAccessService _access;
+    private readonly ITripRealtimeNotifier _realtime;
 
-    public NotesController(INoteRepository notes, IBlobStore blobs, ITranscriptionQueue queue)
+    public NotesController(
+        INoteRepository notes,
+        IBlobStore blobs,
+        ITranscriptionQueue queue,
+        ITripAccessService access,
+        ITripRealtimeNotifier realtime)
     {
         _notes = notes;
         _blobs = blobs;
         _queue = queue;
+        _access = access;
+        _realtime = realtime;
     }
 
     [HttpGet("trips/{tripId:guid}/notes")]
     public ActionResult<IEnumerable<Note>> GetForTrip(Guid tripId)
     {
-        var ownerId = User.GetUserId();
-        return ownerId is null ? Unauthorized() : Ok(_notes.GetForTrip(tripId, ownerId));
+        // Notes on a shared trip are a shared comment stream: any member can read all of them.
+        var (access, error) = Authorize(tripId);
+        return error ?? Ok(_notes.GetAllForTrip(access!.TripId));
     }
 
     [HttpPost("trips/{tripId:guid}/notes")]
     public ActionResult<Note> Create(Guid tripId, [FromBody] CreateNoteRequest request)
     {
-        var ownerId = User.GetUserId();
-        if (ownerId is null)
-            return Unauthorized();
+        var (_, error) = Authorize(tripId);
+        if (error is not null)
+            return error;
 
-        if (Validate(request.Scope, request.TargetId, request.BodyText) is { } error)
-            return BadRequest(new { error });
+        var ownerId = User.GetUserId()!;
+        if (Validate(request.Scope, request.TargetId, request.BodyText) is { } validationError)
+            return BadRequest(new { error = validationError });
 
         var note = new Note
         {
@@ -66,8 +78,9 @@ public class NotesController : ControllerBase
             PromptText = request.PromptText,
         };
 
-        var created = _notes.Add(tripId, ownerId, note);
-        return created is null ? NotFound() : Ok(created);
+        var created = _notes.AddAuthored(tripId, ownerId, note);
+        _realtime.NotifyTripChanged(tripId, "notes", ownerId);
+        return Ok(created);
     }
 
     [HttpPost("trips/{tripId:guid}/notes/voice")]
@@ -77,10 +90,11 @@ public class NotesController : ControllerBase
         [FromForm] CreateVoiceNoteRequest request,
         CancellationToken ct)
     {
-        var ownerId = User.GetUserId();
-        if (ownerId is null)
-            return Unauthorized();
+        var (_, authError) = Authorize(tripId);
+        if (authError is not null)
+            return authError;
 
+        var ownerId = User.GetUserId()!;
         if (request.Audio is null || request.Audio.Length == 0)
             return BadRequest(new { error = "An audio file is required." });
         if (request.Audio.Length > MaxAudioBytes)
@@ -122,11 +136,9 @@ public class NotesController : ControllerBase
             ],
         };
 
-        var created = _notes.Add(tripId, ownerId, note);
-        if (created is null)
-            return NotFound();
-
+        var created = _notes.AddAuthored(tripId, ownerId, note);
         await _queue.EnqueueAsync(new TranscriptionJob(mediaId, blobName, request.Locale), ct);
+        _realtime.NotifyTripChanged(tripId, "notes", ownerId);
         return Ok(created);
     }
 
@@ -137,10 +149,11 @@ public class NotesController : ControllerBase
         [FromForm] CreatePhotoNoteRequest request,
         CancellationToken ct)
     {
-        var ownerId = User.GetUserId();
-        if (ownerId is null)
-            return Unauthorized();
+        var (_, authError) = Authorize(tripId);
+        if (authError is not null)
+            return authError;
 
+        var ownerId = User.GetUserId()!;
         if (request.Image is null || request.Image.Length == 0)
             return BadRequest(new { error = "An image file is required." });
         if (request.Image.Length > MaxImageBytes)
@@ -180,19 +193,16 @@ public class NotesController : ControllerBase
             ],
         };
 
-        var created = _notes.Add(tripId, ownerId, note);
-        return created is null ? NotFound() : Ok(created);
+        var created = _notes.AddAuthored(tripId, ownerId, note);
+        _realtime.NotifyTripChanged(tripId, "notes", ownerId);
+        return Ok(created);
     }
 
     [HttpGet("trips/{tripId:guid}/notes/media/{mediaAssetId:guid}")]
     public async Task<IActionResult> GetMedia(Guid tripId, Guid mediaAssetId, CancellationToken ct)
     {
-        var ownerId = User.GetUserId();
-        if (ownerId is null)
-            return Unauthorized();
-
-        var asset = _notes.GetMediaAsset(mediaAssetId);
-        if (asset is null || asset.OwnerId != ownerId)
+        var asset = AuthorizeMedia(mediaAssetId);
+        if (asset is null)
             return NotFound();
 
         Stream stream;
@@ -218,12 +228,8 @@ public class NotesController : ControllerBase
     [HttpGet("trips/{tripId:guid}/notes/media/{mediaAssetId:guid}/sas")]
     public async Task<IActionResult> GetMediaSas(Guid tripId, Guid mediaAssetId, CancellationToken ct)
     {
-        var ownerId = User.GetUserId();
-        if (ownerId is null)
-            return Unauthorized();
-
-        var asset = _notes.GetMediaAsset(mediaAssetId);
-        if (asset is null || asset.OwnerId != ownerId)
+        var asset = AuthorizeMedia(mediaAssetId);
+        if (asset is null)
             return NotFound();
 
         var uri = await _blobs.TryGetReadSasUriAsync(asset.BlobName, SasLifetime, ct);
@@ -244,16 +250,57 @@ public class NotesController : ControllerBase
             return BadRequest(new { error = $"Note body cannot exceed {Note.MaxBodyLength} characters." });
 
         var updated = _notes.UpdateBody(noteId, ownerId, request.BodyText);
-        return updated is null ? NotFound() : Ok(updated);
+        if (updated is null)
+            return NotFound();
+
+        _realtime.NotifyTripChanged(updated.TripId, "notes", ownerId);
+        return Ok(updated);
     }
 
     [HttpDelete("notes/{noteId:guid}")]
     public IActionResult Delete(Guid noteId)
     {
         var ownerId = User.GetUserId();
-        return ownerId is null
-            ? Unauthorized()
-            : (_notes.Delete(noteId, ownerId) ? NoContent() : NotFound());
+        if (ownerId is null)
+            return Unauthorized();
+
+        // Capture the trip before deletion so we can broadcast the change to co-editors.
+        var tripId = _notes.GetTripIdForNote(noteId, ownerId);
+        if (!_notes.Delete(noteId, ownerId))
+            return NotFound();
+
+        if (tripId is { } id)
+            _realtime.NotifyTripChanged(id, "notes", ownerId);
+        return NoContent();
+    }
+
+    /// <summary>Resolves the caller's access to a trip; NotFound when there's no access at all.</summary>
+    private (TripAccess? access, ActionResult? error) Authorize(Guid tripId)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return (null, Unauthorized());
+
+        var access = _access.Resolve(tripId, ownerId);
+        return access is null ? (null, NotFound()) : (access, null);
+    }
+
+    /// <summary>Returns the media asset only when the caller has access to its trip (any member).</summary>
+    private MediaAsset? AuthorizeMedia(Guid mediaAssetId)
+    {
+        var ownerId = User.GetUserId();
+        if (ownerId is null)
+            return null;
+
+        var asset = _notes.GetMediaAsset(mediaAssetId);
+        if (asset is null)
+            return null;
+
+        var tripId = _notes.GetTripIdForMediaAsset(mediaAssetId);
+        if (tripId is null || _access.Resolve(tripId.Value, ownerId) is null)
+            return null;
+
+        return asset;
     }
 
     /// <summary>Shared scope/body validation; returns an error message or null when valid.</summary>

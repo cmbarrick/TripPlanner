@@ -10,8 +10,26 @@ public interface INoteRepository
     /// <summary>Notes for a trip (newest first), including media. Empty if the trip isn't the owner's.</summary>
     IEnumerable<Note> GetForTrip(Guid tripId, string ownerId);
 
+    /// <summary>
+    /// All notes on a trip (newest first), regardless of author — the shared comment stream for
+    /// trip members (Phase 7). Caller must have already authorized trip access.
+    /// </summary>
+    IEnumerable<Note> GetAllForTrip(Guid tripId);
+
     /// <summary>Adds a note (and any attached media) to a trip the owner controls; null if not owned.</summary>
     Note? Add(Guid tripId, string ownerId, Note note);
+
+    /// <summary>
+    /// Adds a note authored by <paramref name="authorOwnerId"/> to a trip the caller has already been
+    /// authorized to access (used for member "comments" on shared trips). Skips the owns-trip check.
+    /// </summary>
+    Note AddAuthored(Guid tripId, string authorOwnerId, Note note);
+
+    /// <summary>The trip a media asset belongs to (via its note), or null when the asset is unknown.</summary>
+    Guid? GetTripIdForMediaAsset(Guid mediaAssetId);
+
+    /// <summary>The trip a note (owned by the caller) belongs to, or null when not found.</summary>
+    Guid? GetTripIdForNote(Guid noteId, string ownerId);
 
     /// <summary>Updates a note's body text (the editable field); null if the note isn't the owner's.</summary>
     Note? UpdateBody(Guid noteId, string ownerId, string? bodyText);

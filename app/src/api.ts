@@ -1,5 +1,17 @@
 import { Platform } from 'react-native';
-import { Trip, ItineraryItem, PackingItem, Note, NoteScope, NoteKind } from './types';
+import {
+  Trip,
+  ItineraryItem,
+  PackingItem,
+  Note,
+  NoteScope,
+  NoteKind,
+  TripRole,
+  TripShareLink,
+  TripMember,
+  Reaction,
+  ReactionTargetType,
+} from './types';
 import { mockTrips } from './mockData';
 import { getAuthStateSnapshot } from './auth/session';
 
@@ -665,6 +677,91 @@ export async function downloadRecapPdf(
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(path, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
   }
+}
+
+// ── Sharing & collaboration (Phase 7) ────────────────────────────────────────
+
+/** Owner-side: list a trip's active (non-revoked) share links. */
+export async function getTripShares(tripId: string): Promise<TripShareLink[]> {
+  return sendJson<TripShareLink[]>(`/api/trips/${tripId}/shares`, 'GET');
+}
+
+/** Owner-side: mint a new share link granting Viewer or Editor access. */
+export async function createTripShare(
+  tripId: string,
+  role: Exclude<TripRole, 'Owner'>,
+  expiresAt?: string | null,
+): Promise<TripShareLink> {
+  return sendJson<TripShareLink>(`/api/trips/${tripId}/shares`, 'POST', {
+    role,
+    expiresAt: expiresAt ?? null,
+  });
+}
+
+export async function revokeTripShare(tripId: string, shareId: string): Promise<void> {
+  await sendJson<void>(`/api/trips/${tripId}/shares/${shareId}`, 'DELETE');
+}
+
+/** Absolute, shareable URL for a link token (the API hosts the landing/redeem flow). */
+export function shareAbsoluteUrl(shareUrl: string): string {
+  return `${API_BASE}${shareUrl}`;
+}
+
+/** Owner-side: list a trip's account members. */
+export async function getTripMembers(tripId: string): Promise<TripMember[]> {
+  return sendJson<TripMember[]>(`/api/trips/${tripId}/members`, 'GET');
+}
+
+/** Owner-side: invite a registered user by email at the given role. */
+export async function inviteTripMember(
+  tripId: string,
+  email: string,
+  role: Exclude<TripRole, 'Owner'>,
+): Promise<TripMember> {
+  return sendJson<TripMember>(`/api/trips/${tripId}/members`, 'POST', { email, role });
+}
+
+export async function changeTripMemberRole(
+  tripId: string,
+  memberId: string,
+  role: Exclude<TripRole, 'Owner'>,
+): Promise<void> {
+  await sendJson<void>(`/api/trips/${tripId}/members/${memberId}`, 'PUT', { role });
+}
+
+export async function removeTripMember(tripId: string, memberId: string): Promise<void> {
+  await sendJson<void>(`/api/trips/${tripId}/members/${memberId}`, 'DELETE');
+}
+
+/** Caller's sharing/publishing/AI consent flags. Sharing is explicit opt-in (Phase 7, Slice 5). */
+export interface ConsentSettings {
+  shareEnabled: boolean;
+  publishEnabled: boolean;
+  aiUseEnabled: boolean;
+  aiTrainingEnabled: boolean;
+}
+
+export async function getConsent(): Promise<ConsentSettings> {
+  return sendJson<ConsentSettings>('/api/consent', 'GET');
+}
+
+export async function updateConsent(update: Partial<ConsentSettings>): Promise<ConsentSettings> {
+  return sendJson<ConsentSettings>('/api/consent', 'PUT', update);
+}
+
+/** All (non-revoked) reactions across a trip — trip/item/recap targets alike. */
+export async function getTripReactions(tripId: string): Promise<Reaction[]> {
+  return sendJson<Reaction[]>(`/api/trips/${tripId}/reactions`, 'GET');
+}
+
+/** Toggles the caller's emoji on a target; a second toggle of the same emoji removes it. */
+export async function toggleReaction(
+  tripId: string,
+  targetType: ReactionTargetType,
+  targetId: string,
+  emoji: string,
+): Promise<{ added: boolean; reaction: Reaction }> {
+  return sendJson(`/api/trips/${tripId}/reactions`, 'POST', { targetType, targetId, emoji });
 }
 
 // ── Notes & journaling (Phase 4) ─────────────────────────────────────────────

@@ -13,7 +13,7 @@ namespace Wander.Api.Controllers;
 [ApiController]
 [Route("api/trips/{tripId:guid}/shares")]
 [Authorize]
-public class TripSharesController(ITripAccessService access, ITripShareService shares) : ControllerBase
+public class TripSharesController(ITripAccessService access, ITripShareService shares, IConsentService consent) : ControllerBase
 {
     [HttpGet]
     public ActionResult<IEnumerable<TripShareView>> List(Guid tripId)
@@ -23,11 +23,15 @@ public class TripSharesController(ITripAccessService access, ITripShareService s
     }
 
     [HttpPost]
-    public ActionResult<TripShareView> Create(Guid tripId, [FromBody] CreateShareRequest request)
+    public async Task<ActionResult<TripShareView>> Create(Guid tripId, [FromBody] CreateShareRequest request, CancellationToken ct)
     {
         var (resolved, error) = RequireManage(tripId);
         if (error is not null)
             return error;
+
+        var setting = await consent.GetOrCreateAsync(resolved!.TripOwnerId, ct);
+        if (!setting.ShareEnabled)
+            return StatusCode(403, new { title = "Sharing is disabled. Enable sharing in your privacy settings first." });
 
         // A link can only confer viewer/editor access — never owner.
         if (request.Role is not (TripMemberRole.Viewer or TripMemberRole.Editor))

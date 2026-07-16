@@ -1,5 +1,10 @@
+using System.Text.Json.Serialization;
+
 namespace Wander.Api.Models;
 
+/// <summary>A member's capability on a trip. Serialized as a string ("Owner"/"Editor"/"Viewer") so
+/// it matches <see cref="Trip.AccessRole"/> and is stable for clients.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TripMemberRole
 {
     Owner,

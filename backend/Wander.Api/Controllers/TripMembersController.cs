@@ -14,7 +14,7 @@ namespace Wander.Api.Controllers;
 [ApiController]
 [Route("api/trips/{tripId:guid}/members")]
 [Authorize]
-public class TripMembersController(ITripAccessService access, ITripMemberService members) : ControllerBase
+public class TripMembersController(ITripAccessService access, ITripMemberService members, IConsentService consent) : ControllerBase
 {
     [HttpGet]
     public ActionResult<IEnumerable<TripMemberView>> List(Guid tripId)
@@ -24,11 +24,15 @@ public class TripMembersController(ITripAccessService access, ITripMemberService
     }
 
     [HttpPost]
-    public ActionResult<TripMemberView> Invite(Guid tripId, [FromBody] InviteMemberRequest request)
+    public async Task<ActionResult<TripMemberView>> Invite(Guid tripId, [FromBody] InviteMemberRequest request, CancellationToken ct)
     {
         var (resolved, error) = RequireManage(tripId);
         if (error is not null)
             return error;
+
+        var setting = await consent.GetOrCreateAsync(resolved!.TripOwnerId, ct);
+        if (!setting.ShareEnabled)
+            return StatusCode(403, new { title = "Sharing is disabled. Enable sharing in your privacy settings first." });
 
         if (string.IsNullOrWhiteSpace(request.Email))
             return BadRequest("Email is required.");

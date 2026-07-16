@@ -12,9 +12,11 @@ import {
 } from 'react-native';
 import { Card, Pill } from '../components';
 import { colors, radius } from '../theme';
-import { Trip } from '../types';
+import { Trip, Reaction } from '../types';
 import { Recap, RecapScope, RecapTone, recapShareAbsoluteUrl, downloadRecapPdf } from '../api';
 import { useAiStatusQuery } from '../queries/ai';
+import { useTripReactionsQuery } from '../queries/reactions';
+import { ReactionBar } from '../reactions/ReactionBar';
 import {
   useRecapsQuery,
   useGenerateRecapMutation,
@@ -41,6 +43,7 @@ export function RecapPanel({ trip, selectedDayId }: { trip: Trip; selectedDayId:
   const aiEnabled = statusQuery.data?.enabled ?? false;
   const recapsQuery = useRecapsQuery(trip.id);
   const generate = useGenerateRecapMutation(trip.id);
+  const { data: reactions = [] } = useTripReactionsQuery(trip.id);
 
   const [scope, setScope] = useState<RecapScope>('Trip');
   const [tone, setTone] = useState<RecapTone>('Narrative');
@@ -152,6 +155,7 @@ export function RecapPanel({ trip, selectedDayId }: { trip: Trip; selectedDayId:
           scopeLabel={scopeLabelFor(recap)}
           open={openRecapId === recap.id}
           onToggle={() => setOpenRecapId((cur) => (cur === recap.id ? null : recap.id))}
+          reactions={reactions}
         />
       ))}
       <View style={{ height: 40 }} />
@@ -173,12 +177,14 @@ function RecapCard({
   scopeLabel,
   open,
   onToggle,
+  reactions,
 }: {
   trip: Trip;
   recap: Recap;
   scopeLabel: string;
   open: boolean;
   onToggle: () => void;
+  reactions: Reaction[];
 }) {
   const update = useUpdateRecapMutation(trip.id);
   const finalize = useFinalizeRecapMutation(trip.id);
@@ -226,6 +232,10 @@ function RecapCard({
           {recap.generatedFromNoteIds.length === 1 ? 'journal entry' : 'journal entries'}
         </Text>
       </Pressable>
+
+      <View style={{ marginTop: 8 }}>
+        <ReactionBar tripId={trip.id} targetType="Recap" targetId={recap.id} reactions={reactions} compact />
+      </View>
 
       {open ? (
         <View style={{ marginTop: 10 }}>

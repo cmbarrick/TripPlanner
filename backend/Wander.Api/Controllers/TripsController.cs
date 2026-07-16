@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wander.Api.Data;
 using Wander.Api.Models;
+using Wander.Api.Realtime;
 using Wander.Api.Security;
 
 namespace Wander.Api.Controllers;
@@ -14,11 +15,13 @@ public class TripsController : ControllerBase
 {
     private readonly ITripRepository _repo;
     private readonly ITripAccessService _access;
+    private readonly ITripRealtimeNotifier _realtime;
 
-    public TripsController(ITripRepository repo, ITripAccessService access)
+    public TripsController(ITripRepository repo, ITripAccessService access, ITripRealtimeNotifier realtime)
     {
         _repo = repo;
         _access = access;
+        _realtime = realtime;
     }
 
     [HttpGet]
@@ -84,7 +87,11 @@ public class TripsController : ControllerBase
             return error;
 
         var updated = _repo.Update(id, access!.TripOwnerId, trip);
-        return updated is null ? NotFound() : Ok(updated);
+        if (updated is null)
+            return NotFound();
+
+        Notify(id, "trip");
+        return Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
@@ -95,7 +102,11 @@ public class TripsController : ControllerBase
         if (error is not null)
             return error;
 
-        return _repo.Delete(id, access!.TripOwnerId) ? NoContent() : NotFound();
+        if (!_repo.Delete(id, access!.TripOwnerId))
+            return NotFound();
+
+        Notify(id, "trip");
+        return NoContent();
     }
 
     [HttpPost("{tripId:guid}/days/{dayId:guid}/items")]
@@ -106,7 +117,11 @@ public class TripsController : ControllerBase
             return error;
 
         var created = _repo.AddItem(tripId, access!.TripOwnerId, dayId, item);
-        return created is null ? NotFound() : Ok(created);
+        if (created is null)
+            return NotFound();
+
+        Notify(tripId, "items");
+        return Ok(created);
     }
 
     [HttpPost("{tripId:guid}/items")]
@@ -117,7 +132,11 @@ public class TripsController : ControllerBase
             return error;
 
         var created = _repo.AddUnscheduledItem(tripId, access!.TripOwnerId, item);
-        return created is null ? NotFound() : Ok(created);
+        if (created is null)
+            return NotFound();
+
+        Notify(tripId, "items");
+        return Ok(created);
     }
 
     [HttpPut("{tripId:guid}/items/{itemId:guid}")]
@@ -128,7 +147,11 @@ public class TripsController : ControllerBase
             return error;
 
         var updated = _repo.UpdateItem(tripId, access!.TripOwnerId, itemId, item);
-        return updated is null ? NotFound() : Ok(updated);
+        if (updated is null)
+            return NotFound();
+
+        Notify(tripId, "items");
+        return Ok(updated);
     }
 
     [HttpDelete("{tripId:guid}/items/{itemId:guid}")]
@@ -138,7 +161,11 @@ public class TripsController : ControllerBase
         if (error is not null)
             return error;
 
-        return _repo.DeleteItem(tripId, access!.TripOwnerId, itemId) ? NoContent() : NotFound();
+        if (!_repo.DeleteItem(tripId, access!.TripOwnerId, itemId))
+            return NotFound();
+
+        Notify(tripId, "items");
+        return NoContent();
     }
 
     [HttpPut("{tripId:guid}/items/{itemId:guid}/status")]
@@ -149,7 +176,11 @@ public class TripsController : ControllerBase
             return error;
 
         var updated = _repo.SetItemStatus(tripId, access!.TripOwnerId, itemId, request.Status);
-        return updated is null ? NotFound() : Ok(updated);
+        if (updated is null)
+            return NotFound();
+
+        Notify(tripId, "items");
+        return Ok(updated);
     }
 
     [HttpPut("{tripId:guid}/days/{dayId:guid}/items/order")]
@@ -160,7 +191,11 @@ public class TripsController : ControllerBase
             return error;
 
         var itemIds = request.ItemIds ?? [];
-        return _repo.ReorderDayItems(tripId, access!.TripOwnerId, dayId, itemIds) ? NoContent() : NotFound();
+        if (!_repo.ReorderDayItems(tripId, access!.TripOwnerId, dayId, itemIds))
+            return NotFound();
+
+        Notify(tripId, "items");
+        return NoContent();
     }
 
     [HttpPut("{tripId:guid}/items/order")]
@@ -171,7 +206,11 @@ public class TripsController : ControllerBase
             return error;
 
         var itemIds = request.ItemIds ?? [];
-        return _repo.ReorderDayItems(tripId, access!.TripOwnerId, null, itemIds) ? NoContent() : NotFound();
+        if (!_repo.ReorderDayItems(tripId, access!.TripOwnerId, null, itemIds))
+            return NotFound();
+
+        Notify(tripId, "items");
+        return NoContent();
     }
 
     [HttpPut("{tripId:guid}/items/{itemId:guid}/move")]
@@ -183,7 +222,11 @@ public class TripsController : ControllerBase
 
         // TargetDayId == null moves the item to the trip backlog.
         var moved = _repo.MoveItem(tripId, access!.TripOwnerId, itemId, request.TargetDayId);
-        return moved is null ? NotFound() : Ok(moved);
+        if (moved is null)
+            return NotFound();
+
+        Notify(tripId, "items");
+        return Ok(moved);
     }
 
     [HttpGet("{tripId:guid}/packing")]
@@ -204,7 +247,11 @@ public class TripsController : ControllerBase
             return error;
 
         var created = _repo.AddPackingItem(tripId, access!.TripOwnerId, request.Name.Trim());
-        return created is null ? NotFound() : Ok(created);
+        if (created is null)
+            return NotFound();
+
+        Notify(tripId, "packing");
+        return Ok(created);
     }
 
     [HttpPut("{tripId:guid}/packing/{packingItemId:guid}")]
@@ -215,7 +262,11 @@ public class TripsController : ControllerBase
             return error;
 
         var updated = _repo.SetPackingItemPacked(tripId, access!.TripOwnerId, packingItemId, request.IsPacked);
-        return updated is null ? NotFound() : Ok(updated);
+        if (updated is null)
+            return NotFound();
+
+        Notify(tripId, "packing");
+        return Ok(updated);
     }
 
     [HttpDelete("{tripId:guid}/packing/{packingItemId:guid}")]
@@ -225,7 +276,11 @@ public class TripsController : ControllerBase
         if (error is not null)
             return error;
 
-        return _repo.DeletePackingItem(tripId, access!.TripOwnerId, packingItemId) ? NoContent() : NotFound();
+        if (!_repo.DeletePackingItem(tripId, access!.TripOwnerId, packingItemId))
+            return NotFound();
+
+        Notify(tripId, "packing");
+        return NoContent();
     }
 
     /// <summary>
@@ -245,6 +300,10 @@ public class TripsController : ControllerBase
 
         return allowed(access) ? (access, null) : (null, Forbid());
     }
+
+    // Best-effort realtime broadcast to co-editors; the write has already committed.
+    private void Notify(Guid tripId, string changeKind) =>
+        _realtime.NotifyTripChanged(tripId, changeKind, User.GetUserId());
 }
 
 public record ReorderRequest(List<Guid> ItemIds);

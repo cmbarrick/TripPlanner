@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking, TextInput, Platform } from 'react-native';
 import { WanderMapView } from '../WanderMapView';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
-import { Trip, Day, ItineraryItem, PackingItem, Note, NoteScope } from '../types';
+import { Trip, Day, ItineraryItem, PackingItem, Note, NoteScope, Reaction } from '../types';
 import { Card, Pill } from '../components';
 import { colors, radius, itemAccent, itemEmoji } from '../theme';
 import { dateRange, dayLabel, formatClock, fmtMoney, wmoEmoji, formatTemp, fmtMinutes } from '../format';
@@ -21,6 +21,10 @@ import { addTripToCalendar } from '../calendar';
 import { ClockPref } from '../store/uiStore';
 import { AiDock } from './AiDock';
 import { RecapPanel } from './RecapPanel';
+import { ShareTripSheet } from './ShareTripSheet';
+import { useTripRealtime } from '../realtime/useTripRealtime';
+import { useTripReactionsQuery } from '../queries/reactions';
+import { ReactionBar } from '../reactions/ReactionBar';
 import {
   Scope,
   scopedDays,
@@ -73,6 +77,12 @@ export function TripPlannerScreen({
   const [panel, setPanel] = useState<'none' | 'packing' | 'ideas' | 'export' | 'journal' | 'recap'>('none');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+
+  // Access role (Phase 7). Trips you own arrive without a stamped role → treated as Owner.
+  const role = trip.accessRole ?? 'Owner';
+  const canManage = role === 'Owner';
+  const canEdit = role !== 'Viewer';
 
   const summary = useMemo(() => scopeSummary(trip, scope, selectedDayId), [trip, scope, selectedDayId]);
   const days = scopedDays(trip, scope, selectedDayId);
@@ -81,6 +91,12 @@ export function TripPlannerScreen({
   const { data: weatherData } = useWeatherQuery(trip.id);
   const { data: travelData }  = useTravelTimesQuery(trip.id);
   const { data: notesData }   = useTripNotesQuery(trip.id);
+  const { data: reactions = [] } = useTripReactionsQuery(trip.id);
+
+  // Live co-editing: refetch on peers' changes + show who else is viewing this trip.
+  const { present } = useTripRealtime(trip.id);
+  // Others currently viewing (this client is included in the server's presence set).
+  const others = present.length > 1 ? present.length - 1 : 0;
 
   // Count of journal notes per itinerary event, so the timeline can flag "has notes".
   const notesByItem = useMemo<Record<string, number>>(() => {
@@ -143,13 +159,40 @@ export function TripPlannerScreen({
             {trip.days.reduce((n, d) => n + d.items.length, 0)} stops
           </Text>
         </View>
-        <Pressable style={s.iconBtn} onPress={onEditTrip} accessibilityLabel="Edit trip">
-          <Text style={{ fontSize: 15, color: colors.ink600 }}>✎</Text>
-        </Pressable>
-        <Pressable style={[s.iconBtn, { marginLeft: 8 }]} onPress={() => setConfirmDelete(true)} accessibilityLabel="Delete trip">
-          <Text style={{ fontSize: 15 }}>🗑</Text>
-        </Pressable>
+        {!canManage ? (
+          <View style={s.roleBadge} accessibilityLabel={`Shared with you as ${role}`}>
+            <Text style={s.roleBadgeText}>{role === 'Viewer' ? 'View only' : role}</Text>
+          </View>
+        ) : null}
+        {others > 0 ? (
+          <View
+            style={s.presence}
+            accessibilityLabel={`${others} other ${others === 1 ? 'person' : 'people'} viewing`}
+          >
+            <View style={s.presenceDot} />
+            <Text style={s.presenceText}>{others}</Text>
+          </View>
+        ) : null}
+        {canManage ? (
+          <Pressable style={s.iconBtn} onPress={() => setShowShare(true)} accessibilityLabel="Share trip">
+            <Text style={{ fontSize: 15, color: colors.brand }}>🔗</Text>
+          </Pressable>
+        ) : null}
+        {canManage ? (
+          <Pressable style={[s.iconBtn, { marginLeft: 8 }]} onPress={onEditTrip} accessibilityLabel="Edit trip">
+            <Text style={{ fontSize: 15, color: colors.ink600 }}>✎</Text>
+          </Pressable>
+        ) : null}
+        {canManage ? (
+          <Pressable style={[s.iconBtn, { marginLeft: 8 }]} onPress={() => setConfirmDelete(true)} accessibilityLabel="Delete trip">
+            <Text style={{ fontSize: 15 }}>🗑</Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      {canManage ? (
+        <ShareTripSheet tripId={trip.id} visible={showShare} onClose={() => setShowShare(false)} />
+      ) : null}
 
       {confirmDelete ? (
         <View style={s.confirm}>
@@ -218,6 +261,10 @@ export function TripPlannerScreen({
         </Pressable>
       </View>
 
+      <View style={s.tripReactionRow}>
+        <ReactionBar tripId={trip.id} targetType="Trip" targetId={trip.id} reactions={reactions} compact />
+      </View>
+
       {scope === 'day' && trip.days.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.dayBar} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
           {trip.days.map((d) => {
@@ -243,6 +290,7 @@ export function TripPlannerScreen({
           onAdd={onAddIdea}
           onEdit={onEditItem}
           onReorder={onReorderBacklog}
+          canEdit={canEdit}
         />
       ) : showPacking ? (
         <PackingPanel
@@ -250,6 +298,7 @@ export function TripPlannerScreen({
           onAdd={onAddPacking}
           onToggle={onTogglePacking}
           onDelete={onDeletePacking}
+          canEdit={canEdit}
         />
       ) : showExport ? (
         <ExportPanel
@@ -292,17 +341,20 @@ export function TripPlannerScreen({
                     onHeaderPress={scope === 'trip' ? () => drillIntoDay(day.id) : undefined}
                     onEditItem={onEditItem}
                     onReorder={onReorder}
+                    canEdit={canEdit}
+                    tripId={trip.id}
+                    reactions={reactions}
                   />
                 ))
               )}
             </>
           )}
-          {view !== 'map' ? <AiDock tripId={trip.id} /> : null}
+          {view !== 'map' && canEdit ? <AiDock tripId={trip.id} /> : null}
           <View style={{ height: 90 }} />
         </ScrollView>
       )}
 
-      {panel === 'none' && fabDayId ? (
+      {panel === 'none' && fabDayId && canEdit ? (
         <Pressable style={s.fab} onPress={() => onAddItem(fabDayId)} accessibilityLabel="Add item">
           <Text style={{ color: '#fff', fontSize: 28, marginTop: -2 }}>+</Text>
         </Pressable>
@@ -323,6 +375,9 @@ function DayBlock({
   onHeaderPress,
   onEditItem,
   onReorder,
+  canEdit = true,
+  tripId,
+  reactions,
 }: {
   day: Day;
   unit: 'F' | 'C';
@@ -335,6 +390,9 @@ function DayBlock({
   onHeaderPress?: () => void;
   onEditItem: (item: ItineraryItem) => void;
   onReorder: (dayId: string, itemIds: string[]) => void;
+  canEdit?: boolean;
+  tripId?: string;
+  reactions?: Reaction[];
 }) {
   const label = dayLabel(day.date, day.dayNumber);
   const conflicts = useMemo(() => conflictIdsForDay(day), [day]);
@@ -385,6 +443,8 @@ function DayBlock({
               unit={unit}
               showOrder={false}
               onEdit={() => onEditItem(item)}
+              tripId={tripId}
+              reactions={reactions}
             />
             {idx < timed.length - 1 ? (
               <TravelRow
@@ -409,12 +469,14 @@ function DayBlock({
             weather={itemWeather[item.id]}
             noteCount={notesByItem[item.id] ?? 0}
             unit={unit}
-            showOrder
+            showOrder={canEdit}
             canUp={index > 0}
             canDown={index < anytime.length - 1}
             onEdit={() => onEditItem(item)}
             onUp={() => moveAnytime(index, -1)}
             onDown={() => moveAnytime(index, 1)}
+            tripId={tripId}
+            reactions={reactions}
           />
         ))}
       </View>
@@ -435,6 +497,8 @@ function ItemRow({
   onEdit,
   onUp,
   onDown,
+  tripId,
+  reactions,
 }: {
   item: ItineraryItem;
   clock: ClockPref;
@@ -448,6 +512,8 @@ function ItemRow({
   onEdit: () => void;
   onUp?: () => void;
   onDown?: () => void;
+  tripId?: string;
+  reactions?: Reaction[];
 }) {
   const tentative = item.status === 'Tentative';
   return (
@@ -497,6 +563,11 @@ function ItemRow({
             <Pressable onPress={() => Linking.openURL(item.bookingUrl!)} hitSlop={6}>
               <Text style={s.itemLink}>🔗 View booking</Text>
             </Pressable>
+          ) : null}
+          {tripId && reactions ? (
+            <View style={{ marginTop: 6 }}>
+              <ReactionBar tripId={tripId} targetType="Item" targetId={item.id} reactions={reactions} compact />
+            </View>
           ) : null}
         </Card>
       </Pressable>
@@ -777,11 +848,13 @@ function PackingPanel({
   onAdd,
   onToggle,
   onDelete,
+  canEdit = true,
 }: {
   items: PackingItem[];
   onAdd: (name: string) => void;
   onToggle: (id: string, isPacked: boolean) => void;
   onDelete: (id: string) => void;
+  canEdit?: boolean;
 }) {
   const [name, setName] = useState('');
   const add = () => {
@@ -797,21 +870,23 @@ function PackingPanel({
       <Text style={s.packTitle}>Packing & to-dos</Text>
       <Text style={s.packSub}>{packed} of {items.length} packed</Text>
 
-      <View style={s.packAddRow}>
-        <TextInput
-          style={s.packInput}
-          placeholder="Add an item (e.g. Passport)"
-          placeholderTextColor={colors.ink400}
-          value={name}
-          onChangeText={setName}
-          onSubmitEditing={add}
-          returnKeyType="done"
-          accessibilityLabel="New packing item"
-        />
-        <Pressable style={s.packAddBtn} onPress={add} accessibilityLabel="Add packing item">
-          <Text style={s.packAddText}>Add</Text>
-        </Pressable>
-      </View>
+      {canEdit ? (
+        <View style={s.packAddRow}>
+          <TextInput
+            style={s.packInput}
+            placeholder="Add an item (e.g. Passport)"
+            placeholderTextColor={colors.ink400}
+            value={name}
+            onChangeText={setName}
+            onSubmitEditing={add}
+            returnKeyType="done"
+            accessibilityLabel="New packing item"
+          />
+          <Pressable style={s.packAddBtn} onPress={add} accessibilityLabel="Add packing item">
+            <Text style={s.packAddText}>Add</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {items.length === 0 ? (
         <Card style={{ marginTop: 12 }}>
@@ -819,14 +894,22 @@ function PackingPanel({
         </Card>
       ) : (
         items.map((item) => (
-          <Pressable key={item.id} style={s.packRow} onPress={() => onToggle(item.id, !item.isPacked)} accessibilityLabel={`Toggle ${item.name}`}>
+          <Pressable
+            key={item.id}
+            style={s.packRow}
+            onPress={canEdit ? () => onToggle(item.id, !item.isPacked) : undefined}
+            disabled={!canEdit}
+            accessibilityLabel={`Toggle ${item.name}`}
+          >
             <View style={[s.checkbox, item.isPacked && s.checkboxOn]}>
               {item.isPacked ? <Text style={{ color: '#fff', fontSize: 12 }}>✓</Text> : null}
             </View>
             <Text style={[s.packName, item.isPacked && s.packNameDone]}>{item.name}</Text>
-            <Pressable onPress={() => onDelete(item.id)} hitSlop={8} accessibilityLabel={`Delete ${item.name}`}>
-              <Text style={{ color: colors.ink400, fontSize: 16 }}>✕</Text>
-            </Pressable>
+            {canEdit ? (
+              <Pressable onPress={() => onDelete(item.id)} hitSlop={8} accessibilityLabel={`Delete ${item.name}`}>
+                <Text style={{ color: colors.ink400, fontSize: 16 }}>✕</Text>
+              </Pressable>
+            ) : null}
           </Pressable>
         ))
       )}
@@ -840,11 +923,13 @@ function IdeasPanel({
   onAdd,
   onEdit,
   onReorder,
+  canEdit = true,
 }: {
   items: ItineraryItem[];
   onAdd: (title: string) => void;
   onEdit: (item: ItineraryItem) => void;
   onReorder: (itemIds: string[]) => void;
+  canEdit?: boolean;
 }) {
   const [title, setTitle] = useState('');
   const add = () => {
@@ -869,25 +954,29 @@ function IdeasPanel({
     <View>
       <Text style={s.packTitle}>💡 Ideas</Text>
       <Text style={s.packSub}>
-        {useArrows
+        {!canEdit
+          ? 'Unscheduled wishes for this trip.'
+          : useArrows
           ? 'Unscheduled wishes. Reorder with the arrows, tap to give one a date or confirm it.'
           : 'Unscheduled wishes. Drag to reorder, tap to give one a date or confirm it.'}
       </Text>
-      <View style={s.packAddRow}>
-        <TextInput
-          style={s.packInput}
-          placeholder="Add an idea (e.g. Valley of the Temples)"
-          placeholderTextColor={colors.ink400}
-          value={title}
-          onChangeText={setTitle}
-          onSubmitEditing={add}
-          returnKeyType="done"
-          accessibilityLabel="New idea"
-        />
-        <Pressable style={s.packAddBtn} onPress={add} accessibilityLabel="Add idea">
-          <Text style={s.packAddText}>Add</Text>
-        </Pressable>
-      </View>
+      {canEdit ? (
+        <View style={s.packAddRow}>
+          <TextInput
+            style={s.packInput}
+            placeholder="Add an idea (e.g. Valley of the Temples)"
+            placeholderTextColor={colors.ink400}
+            value={title}
+            onChangeText={setTitle}
+            onSubmitEditing={add}
+            returnKeyType="done"
+            accessibilityLabel="New idea"
+          />
+          <Pressable style={s.packAddBtn} onPress={add} accessibilityLabel="Add idea">
+            <Text style={s.packAddText}>Add</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {items.length === 0 ? (
         <Card style={{ marginTop: 12 }}>
           <Text style={{ color: colors.ink600, fontSize: 13 }}>No ideas yet. Jot down places you might want to fit in.</Text>
@@ -902,7 +991,7 @@ function IdeasPanel({
     return (
       <ScaleDecorator>
         <View style={[s.ideaRow, isActive && s.ideaRowActive]}>
-          {useArrows ? (
+          {!canEdit ? null : useArrows ? (
             <View style={s.dragHandle}>
               <Pressable
                 onPress={() => moveBy(index, -1)}
@@ -931,7 +1020,7 @@ function IdeasPanel({
               <Text style={s.dragGrip}>⠿</Text>
             </Pressable>
           )}
-          <Pressable style={{ flex: 1 }} onPress={() => onEdit(item)} onLongPress={drag} accessibilityLabel={`Edit ${item.title}`}>
+          <Pressable style={{ flex: 1 }} onPress={() => onEdit(item)} onLongPress={canEdit ? drag : undefined} accessibilityLabel={`Edit ${item.title}`}>
             <Card style={tentative ? s.cardTentative : undefined}>
               <View style={s.itemHeader}>
                 <Text style={[s.itemName, tentative && s.itemNameMuted]} numberOfLines={2}>{itemEmoji[item.type]} {item.title}</Text>
@@ -955,7 +1044,7 @@ function IdeasPanel({
     <DraggableFlatList
       data={items}
       keyExtractor={(i) => i.id}
-      onDragEnd={({ data }) => onReorder(data.map((i) => i.id))}
+      onDragEnd={({ data }) => canEdit && onReorder(data.map((i) => i.id))}
       renderItem={renderItem}
       ListHeaderComponent={Header}
       ListFooterComponent={<View style={{ height: 40 }} />}
@@ -972,6 +1061,11 @@ const s = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '800', color: colors.ink },
   sub: { fontSize: 12, color: colors.ink400, marginTop: 1 },
   iconBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  roleBadge: { marginRight: 8, paddingHorizontal: 10, height: 26, justifyContent: 'center', borderRadius: 999, backgroundColor: colors.brand100, borderWidth: 1, borderColor: colors.brand100 },
+  roleBadgeText: { fontSize: 11, fontWeight: '800', color: colors.brand },
+  presence: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8, paddingHorizontal: 8, height: 26, borderRadius: 999, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0' },
+  presenceDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: '#10b981' },
+  presenceText: { fontSize: 12, fontWeight: '700', color: '#047857' },
   confirm: { marginHorizontal: 16, marginBottom: 8, backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 14, padding: 12 },
   confirmText: { color: '#991b1b', fontSize: 13, fontWeight: '600', marginBottom: 10 },
   confirmRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
@@ -987,6 +1081,7 @@ const s = StyleSheet.create({
   segText: { fontSize: 12, fontWeight: '700', color: colors.ink600 },
   segTextOn: { color: '#fff' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, marginBottom: 6, flexWrap: 'wrap' },
+  tripReactionRow: { paddingHorizontal: 16, marginBottom: 6 },
   packToggle: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
   packToggleOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   packToggleText: { fontSize: 11, fontWeight: '800', color: colors.ink600 },

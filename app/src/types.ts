@@ -114,4 +114,42 @@ export interface Trip {
   createdAt: string;
   updatedAt: string;
   nights: number;
+  /**
+   * The caller's role on this trip when it was shared with them (Phase 7): 'Owner' | 'Editor' |
+   * 'Viewer'. Absent on trips the server didn't stamp (treated as 'Owner' — your own trips).
+   */
+  accessRole?: TripRole | null;
+}
+
+export type TripRole = 'Owner' | 'Editor' | 'Viewer';
+
+// ── Sharing & collaboration (Phase 7) ────────────────────────────────────────
+
+export interface TripShareLink {
+  id: string;
+  token: string;
+  /** Relative URL of the share endpoint, e.g. "/api/shared/trips/{token}". */
+  shareUrl: string;
+  role: TripRole;
+  expiresAt?: string | null;
+  createdAt: string;
+}
+
+export interface TripMember {
+  id: string;
+  userId: string;
+  email: string;
+  role: TripRole;
+  createdAt: string;
+}
+
+export type ReactionTargetType = 'Trip' | 'Item' | 'Recap';
+
+export interface Reaction {
+  id: string;
+  targetType: ReactionTargetType;
+  targetId: string;
+  emoji: string;
+  ownerId: string;
+  createdAt: string;
 }

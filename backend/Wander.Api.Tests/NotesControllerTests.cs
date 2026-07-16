@@ -59,15 +59,15 @@ public class NotesControllerTests
     }
 
     [Fact]
-    public void GetForTrip_AsOtherUser_ReturnsEmpty()
+    public void GetForTrip_AsNonMember_ReturnsNotFound()
     {
+        // A user with no access to the trip can't see its (now shared) notes — NotFound, not an
+        // empty list, so trip existence isn't leaked.
         var (ctrl, _, trip) = Build();
         ctrl.Create(trip.Id, new CreateNoteRequest(NoteScope.Trip, null, NoteKind.Text, "secret", null));
 
         ctrl.ControllerContext = FakeAuth.ForUser(OtherUserId);
-        var ok = Assert.IsType<OkObjectResult>(ctrl.GetForTrip(trip.Id).Result);
-        var notes = Assert.IsAssignableFrom<IEnumerable<Note>>(ok.Value);
-        Assert.Empty(notes);
+        Assert.IsType<NotFoundResult>(ctrl.GetForTrip(trip.Id).Result);
     }
 
     [Fact]
@@ -327,7 +327,12 @@ public class NotesControllerTests
         var ctx = NewContext();
         var trip = SeedTrip(ctx);
         blobs = new FakeBlobStore();
-        var ctrl = new NotesController(new EfCoreNoteRepository(ctx), blobs, new FakeTranscriptionQueue())
+        var ctrl = new NotesController(
+            new EfCoreNoteRepository(ctx),
+            blobs,
+            new FakeTranscriptionQueue(),
+            new TripAccessService(ctx, new UserService(ctx)),
+            new NoopRealtimeNotifier())
         {
             ControllerContext = FakeAuth.ForUser(OwnerId),
         };
@@ -339,11 +344,22 @@ public class NotesControllerTests
         var ctx = NewContext();
         var trip = SeedTrip(ctx);
         queue = new FakeTranscriptionQueue();
-        var ctrl = new NotesController(new EfCoreNoteRepository(ctx), new FakeBlobStore(), queue)
+        var ctrl = new NotesController(
+            new EfCoreNoteRepository(ctx),
+            new FakeBlobStore(),
+            queue,
+            new TripAccessService(ctx, new UserService(ctx)),
+            new NoopRealtimeNotifier())
         {
             ControllerContext = FakeAuth.ForUser(OwnerId),
         };
         return (ctrl, ctx, trip);
+    }
+
+    /// <summary>No-op realtime notifier — these tests assert HTTP results, not broadcasts.</summary>
+    private sealed class NoopRealtimeNotifier : Wander.Api.Realtime.ITripRealtimeNotifier
+    {
+        public void NotifyTripChanged(Guid tripId, string changeKind, string? actorUserId = null) { }
     }
 
     private static InternalTranscriptionController CallbackController(WanderDbContext ctx, string configuredKey, string providedKey)

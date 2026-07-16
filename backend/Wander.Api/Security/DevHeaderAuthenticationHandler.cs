@@ -21,6 +21,12 @@ public class DevHeaderAuthenticationHandler(
         }
 
         var userId = Request.Headers["X-Dev-User-Id"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(userId) && Request.Path.StartsWithSegments("/hubs"))
+        {
+            // SignalR WebSocket handshakes can't carry custom headers; the dev client passes the
+            // identity in the query string instead (mirrors the JWT access_token convention).
+            userId = Request.Query["dev_user_id"].FirstOrDefault();
+        }
         if (string.IsNullOrWhiteSpace(userId))
         {
             userId = configuration["Authentication:DevBypass:DefaultUserId"];
