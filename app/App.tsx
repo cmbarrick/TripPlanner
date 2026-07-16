@@ -12,6 +12,7 @@ import { AddActivityScreen } from './src/screens/AddActivityScreen';
 import { CalendarScreen } from './src/screens/CalendarScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AssistantScreen } from './src/screens/AssistantScreen';
+import { DiscoverScreen } from './src/screens/DiscoverScreen';
 import { SignInScreen, AuthSplash } from './src/screens/SignInScreen';
 import {
   useTripsQuery,
@@ -285,6 +286,8 @@ function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSess
     content = <CalendarScreen trips={trips} unit={unit} clock={clock} onEditItem={(tripId, item) => { openTrip(tripId); showEditItem(item.id); }} />;
   } else if (tab === 'assistant') {
     content = <AssistantScreen trips={trips} initialTripId={openTripId} />;
+  } else if (tab === 'discover') {
+    content = <DiscoverScreen />;
   } else {
     content = (
       <ProfileScreen

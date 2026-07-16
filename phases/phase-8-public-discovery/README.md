@@ -1,4 +1,4 @@
-# Phase 8 — Public Recaps & Discovery 🔄 In progress (dev)
+# Phase 8 — Public Recaps & Discovery ✅ Complete (dev)
 
 > Goal: A searchable, AI-powered travel knowledge layer built from **consented** public recaps.
 > Est: ~4–5 weeks · Depends on: Phase 6 (recaps), Phase 7 (sharing), privacy workstream
@@ -70,10 +70,12 @@
 - [x] **Integration:** publish → index → searchable; facet filters return only matching results;
       semantic query ranks the more topically similar recap first, with a keyword fallback for any
       approved-but-unindexed recap (`SearchTests.cs`; hand-verified live against real Postgres).
-- [ ] **Regression:** Phases 0–7 suites green.
+- [x] **Regression:** Phases 0–7 suites green (single shared test projects — backend 231/231,
+      app 97/97, Functions 3/3 — cover every phase, not just Phase 8's additions).
 
 ## Exit criteria
-- [x] **Public publishing is impossible until after the trip ends** (enforced by the API, not just UI).
+- [x] **Public publishing is impossible until after the trip ends** (enforced by the API, not just UI;
+      the client also shows the lock explanation until then).
 - [x] Publish/unpublish with consent; moderation blocks unsafe content (real Azure AI Content Safety
       when configured, fake reviewer otherwise) and takes reports through to takedown.
 - [x] Search returns relevant public recaps (facets + semantic ranking); discovery Q&A is **grounded
@@ -205,12 +207,18 @@ actually exists to index.
       hash output isn't reliably controllable per-test), controller 200/503
       (`Wander.Api.Tests/DiscoveryTests.cs`).
 
-### Slice 4 — Consent/lifecycle hardening + client UI  ⬜
+### Slice 4 — Consent/lifecycle hardening + client UI  ✅
 - [x] Deleting a recap cascades to unpublish (`RecapsController.Delete` now calls
       `IPublicRecapService.UnpublishAsync` after a successful delete — same soft-delete +
       de-index path as an explicit unpublish; a no-op if the recap was never published).
-- [ ] Client: publish sheet with the post-trip lock explanation, discovery facets form, search screen,
-      RAG Q&A screen.
+- [x] Client: `PublishRecapSheet.tsx` (owner-only, opened from a recap card) shows the post-trip
+      lock explanation before the trip ends, a places/tags/season/budget facets form, the PII
+      review-and-acknowledge step on a `422`, the live moderation status once published, and
+      unpublish. A new **Discover** tab (`DiscoverScreen.tsx`) holds facet + free-text search
+      (anonymous) with a per-result **Report** action, and an **Ask AI** panel for the grounded RAG
+      Q&A with citations. `ModerationQueueScreen.tsx` (reachable from Profile) lists pending/reported
+      recaps with approve/reject — the server's admin allowlist is the real gate; the screen just
+      shows "no access" on a `403`. New `queries/discovery.ts` react-query hooks back all of it.
 
 ## Progress log
 - **2026-07-14** — **Slice 0 complete (backend).** `PublicRecap` + `AddPublicRecaps` migration;
@@ -272,5 +280,10 @@ actually exists to index.
   `IPublicRecapService.UnpublishAsync` after a successful delete, closing the last gap carried over
   from Slices 0/1 (deleting a published recap left it discoverable). **Tests: backend 231/231**
   (+2 `PublicRecapTests.cs`).
-- **Next:** client UI (publish sheet, report button, admin queue, search screen, RAG Q&A screen) is
-  the only remaining item before Phase 8 closes.
+- **2026-07-16** — **Slice 4 complete — Phase 8 closed.** Client UI shipped: `PublishRecapSheet.tsx`
+  (post-trip lock, facets form, PII review-and-acknowledge, moderation status, unpublish), a new
+  **Discover** tab (`DiscoverScreen.tsx`: facet + free-text search with a per-result report action,
+  plus an Ask AI panel for the RAG Q&A with citations), and `ModerationQueueScreen.tsx` (reachable
+  from Profile; server's admin allowlist is the real gate, screen just shows "no access" on `403`).
+  **Tests: backend 231/231, app 97/97** (+4 `DiscoverScreen.test.tsx`), `tsc` clean. All three of
+  Phase 8's exit criteria are met.

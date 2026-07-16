@@ -1,10 +1,10 @@
 # Project Plan — Wander (Trip Planning App)
 
-> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-07-14
-> Progress: Phases 0–7 **closed** on dev. **Phase 8 — Public Recaps & Discovery** is in progress
-> (Slices 0–3 of 5 built — publish gate, moderation, PII gate, search, and a grounded RAG discovery
-> assistant are all backend-complete; only client UI + a hardening item remain — see
-> [`phase-8-summary.md`](./phase-8-summary.md)).
+> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-07-16
+> Progress: Phases 0–8 **closed** on dev. **Phase 8 — Public Recaps & Discovery** shipped its
+> remaining slice: the recap-delete → unpublish cascade, plus client UI (publish sheet, Discover
+> tab with search + RAG Q&A, admin moderation queue) — see [`phase-8-summary.md`](./phase-8-summary.md).
+> **Phase 9 — Offline, Polish & Launch** is next.
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
 Every phase has explicit **goals**, **deliverables**, **exit criteria**, and a **testing plan**.
@@ -70,7 +70,7 @@ and discovery layers make it a community product over time.
 | **5** | AI Planning Assistant ✅ | Generate & refine itineraries via chat | ~3 wks |
 | **6** | AI Recap & Export ✅ | Summarize notes → recap (event/day/trip), export to PDF/web | ~2–3 wks |
 | **7** | Sharing & Collaboration ✅ | Share by link + accounts, **real-time co-edit**, reactions | ~3–4 wks |
-| **8** | Public Recaps & Discovery 🔄 | Publish + moderation, search, **RAG** location Q&A + itinerary discovery | ~4–5 wks |
+| **8** | Public Recaps & Discovery ✅ | Publish + moderation, search, **RAG** location Q&A + itinerary discovery | ~4–5 wks |
 | **9** | Offline, Polish & Launch | Robust sync, performance, accessibility, launch hardening | ~2–3 wks |
 | **Later / v2** | Monetization & advanced | Premium tier, booking, fine-tuning exploration | post-launch |
 
@@ -178,7 +178,7 @@ and discovery layers make it a community product over time.
   Operational-merge/CRDT conflict handling is a documented backlog item (last-write-wins + presence
   ships today; not required by the exit criteria). See [`phase-7-summary.md`](./phase-7-summary.md).
 
-### Phase 8 — Public Recaps & Discovery 🔄  *(NEW)*
+### Phase 8 — Public Recaps & Discovery ✅  *(NEW)*
 - **Goal:** A searchable, AI-powered travel knowledge layer from public recaps.
 - **Deliverables:**
   - **Publish** a recap publicly (explicit opt-in, per recap), with PII review.
@@ -206,9 +206,12 @@ and discovery layers make it a community product over time.
   tests and prod) documented in `architecture.md` §3. **Slice 3:** the RAG discovery assistant
   (`POST /api/discovery/ask`, authed) retrieves via search, applies a relevance floor before ever
   calling the model, then reuses Phase 6's exact grounding discipline (labeled citations, invented
-  ones dropped, refuses via `hasAnswer:false` rather than hallucinating). Backend **229/229**. All
-  three of Phase 8's core objectives are now backend-complete; open: client UI, recap-delete →
-  unpublish cascade. See [`phase-8-summary.md`](./phase-8-summary.md).
+  ones dropped, refuses via `hasAnswer:false` rather than hallucinating). **Slice 4 (2026-07-16),
+  closing the phase:** the last backend gap — recap-delete now cascades to unpublish/de-index — plus
+  full client UI: `PublishRecapSheet` (post-trip lock, facets, PII review-and-acknowledge, moderation
+  status, unpublish), a new **Discover** tab (search + a per-result report action, Ask AI panel for
+  RAG Q&A with citations), and an admin-gated `ModerationQueueScreen` off Profile. Backend
+  **231/231**, app **97/97**, `tsc` clean. See [`phase-8-summary.md`](./phase-8-summary.md).
 - **Discovery approach:** **RAG first** (controllable, current, consent-clean). Fine-tuning is a
   later evaluation, gated on explicit training consent — see the privacy doc.
 
@@ -288,8 +291,9 @@ checklist are signed off.
 - **M7:** AI recap + export (end of Phase 6) ✅
 - **M8:** Sharing + real-time collaboration (end of Phase 7) ✅ *All 6 slices shipped and closed out
   with a live two-client realtime test + full regression pass (backend 180/180, app 93/93).*
-- **M9:** Public discovery + RAG Q&A (end of Phase 8) 🔄 *Slices 0–3 shipped: post-trip + consent
+- **M9:** Public discovery + RAG Q&A (end of Phase 8) ✅ *All 5 slices shipped: post-trip + consent
   publish gate, real Azure Content Safety moderation, reporting → review queue, PII detection gate,
-  search (facets + semantic ranking), and a grounded RAG discovery assistant with citations — all
-  backend-complete; client UI still open.*
+  search (facets + semantic ranking), a grounded RAG discovery assistant with citations, the
+  recap-delete → unpublish cascade, and full client UI (publish sheet, Discover tab, admin queue).
+  Backend 231/231, app 97/97.*
 - **M10:** Public launch — offline, polished, privacy-reviewed (end of Phase 9)

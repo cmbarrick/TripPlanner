@@ -54,12 +54,13 @@ export function TripCover({
   );
 }
 
-export type TabKey = 'trips' | 'calendar' | 'assistant' | 'profile';
+export type TabKey = 'trips' | 'calendar' | 'assistant' | 'discover' | 'profile';
 
 const TABS: { key: TabKey; icon: string; label: string }[] = [
   { key: 'trips', icon: '🧭', label: 'Trips' },
   { key: 'calendar', icon: '🗓️', label: 'Calendar' },
   { key: 'assistant', icon: '✨', label: 'Assistant' },
+  { key: 'discover', icon: '🔎', label: 'Discover' },
   { key: 'profile', icon: '👤', label: 'Profile' },
 ];
 

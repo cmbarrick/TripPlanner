@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { Card } from '../components';
 import { colors, radius } from '../theme';
 import { AuthState } from '../auth/session';
 import { PromptSettingsCard } from '../prompts/PromptSettingsCard';
 import { NotificationSettingsCard } from '../notifications/NotificationSettingsCard';
+import { ModerationQueueScreen } from './ModerationQueueScreen';
 import {
   BUDGET_OPTIONS,
   DIET_OPTIONS,
@@ -47,6 +48,7 @@ export function ProfileScreen({
   const authModeLabel =
     auth.mode === 'entra' ? 'Entra session' : auth.mode === 'dev-bypass' ? 'Development bypass' : 'Signed out';
 
+  const [showModerationQueue, setShowModerationQueue] = useState(false);
   const prefsEnabled = auth.isAuthenticated;
   const prefsQuery = usePreferencesQuery(prefsEnabled);
   const updatePrefs = useUpdatePreferencesMutation();
@@ -69,6 +71,10 @@ export function ProfileScreen({
     onChangeUnit(u);
     if (prefsLive) updatePrefs.mutate({ temperatureUnit: u });
   };
+
+  if (showModerationQueue) {
+    return <ModerationQueueScreen onBack={() => setShowModerationQueue(false)} />;
+  }
 
   return (
     <View style={s.root}>
@@ -213,6 +219,21 @@ export function ProfileScreen({
 
         <NotificationSettingsCard />
 
+        <Text style={s.section}>Moderation</Text>
+        <Card>
+          <Pressable
+            style={s.row}
+            onPress={() => setShowModerationQueue(true)}
+            accessibilityLabel="Open moderation queue"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={s.rowLabel}>Moderation queue</Text>
+              <Text style={s.rowHint}>Review reported and pending public recaps (admin only).</Text>
+            </View>
+            <Text style={s.chevron}>›</Text>
+          </Pressable>
+        </Card>
+
         <Text style={s.note}>
           Display settings (temperature, clock) stay on-device until synced via the preferences API.
           Travel planning preferences sync to your account when the API is reachable.
@@ -298,6 +319,7 @@ const s = StyleSheet.create({
   },
   authBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   error: { marginTop: 10, fontSize: 11, color: '#b91c1c' },
+  chevron: { fontSize: 20, color: colors.ink400 },
   seg: { flexDirection: 'row', backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm, padding: 3, gap: 3 },
   segWrap: { flexWrap: 'wrap', alignSelf: 'stretch' },
   opt: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.sm - 2 },

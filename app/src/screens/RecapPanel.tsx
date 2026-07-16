@@ -17,6 +17,7 @@ import { Recap, RecapScope, RecapTone, recapShareAbsoluteUrl, downloadRecapPdf }
 import { useAiStatusQuery } from '../queries/ai';
 import { useTripReactionsQuery } from '../queries/reactions';
 import { ReactionBar } from '../reactions/ReactionBar';
+import { PublishRecapSheet } from './PublishRecapSheet';
 import {
   useRecapsQuery,
   useGenerateRecapMutation,
@@ -196,6 +197,7 @@ function RecapCard({
   const [includePhotos, setIncludePhotos] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [publishSheetOpen, setPublishSheetOpen] = useState(false);
 
   const dirty = title !== recap.title || body !== recap.body;
   const isFinal = recap.status === 'Final';
@@ -312,7 +314,21 @@ function RecapCard({
             >
               <Text style={s.secondaryBtnText}>{shareUrl ? 'Link ready' : '🔗 Share link'}</Text>
             </Pressable>
+            <Pressable
+              style={[s.secondaryBtn, { flex: 1 }]}
+              onPress={() => setPublishSheetOpen(true)}
+              accessibilityLabel="Publish recap publicly"
+            >
+              <Text style={s.secondaryBtnText}>🌐 Publish</Text>
+            </Pressable>
           </View>
+          <PublishRecapSheet
+            tripId={trip.id}
+            tripEndDate={trip.endDate}
+            recap={recap}
+            visible={publishSheetOpen}
+            onClose={() => setPublishSheetOpen(false)}
+          />
           <Pressable
             style={s.photoToggle}
             onPress={() => setIncludePhotos((v) => !v)}

@@ -60,13 +60,13 @@ npm run web        # opens http://localhost:8081 (or: npm run android / npm run 
 
 ### Current status
 
-**Phases 0–7 are complete, and Phase 8 (Public Recaps & Discovery) is in progress**, on the dev
-environment (web target). The app runs end-to-end on Azure dev: plan a trip → capture it with notes →
-turn notes into an AI recap → share & co-edit it with friends in real time → publish a recap publicly
-after the trip ends, PII-reviewed and moderated by real Azure AI Content Safety with a reportable/
-reviewable queue → find it via search or ask a grounded, cited RAG assistant about it. Test health at
-last close: backend **229/229**, Functions **3/3**, app **93/93** + `tsc` clean. See the per-phase
-summaries in [`/docs`](./docs).
+**Phases 0–8 are complete**, on the dev environment (web target). The app runs end-to-end on Azure
+dev: plan a trip → capture it with notes → turn notes into an AI recap → share & co-edit it with
+friends in real time → publish a recap publicly after the trip ends, PII-reviewed and moderated by
+real Azure AI Content Safety with a reportable/reviewable queue → find it via search or ask a
+grounded, cited RAG assistant about it, all from the client's new **Discover** tab and publish sheet.
+Test health at last close: backend **231/231**, Functions **3/3**, app **97/97** + `tsc` clean. See
+the per-phase summaries in [`/docs`](./docs).
 
 - **Phase 0 — Foundation (local-first):** PostgreSQL-backed API via EF Core (migrations), per-user
   ownership enforcement, Entra JWT validation + dev bypass, CI (lint/typecheck/tests), and local
@@ -94,50 +94,49 @@ summaries in [`/docs`](./docs).
   **shared notes as comments**; and **consent enforcement** — sharing is explicit opt-in, and turning
   it off unshares every active link/membership immediately. See
   [`phase-7-summary.md`](./docs/phase-7-summary.md).
-- **Phase 8 — Public recaps & discovery (backend-complete):** The safety-critical **post-trip
-  publish gate** (a recap can't go public until after the trip ends, API-enforced) plus a **consent
-  gate** (`ConsentSetting.PublishEnabled`), a **PII gate** (emails/phone numbers block publish with
-  the findings until reviewed or acknowledged), moderated by real **Azure AI Content Safety**
-  (config-selected; a fake reviewer is the dev/CI default). Any user can **report** a published
-  recap, which pulls it from discovery immediately; an admin-gated **review queue** approves/rejects.
-  Approved recaps are **searchable** (`GET /api/discovery/search`, anonymous) by place/tag/season/
-  budget facets and free-text **semantic ranking** against an embedding index, and queryable via a
-  **RAG discovery assistant** (`POST /api/discovery/ask`, authed) that answers with citations and
-  refuses (rather than hallucinating) when nothing in the corpus actually answers the question.
-  Publish/unpublish/republish work end-to-end, and disabling publish consent unpublishes everything
-  immediately. Only client UI (and a recap-delete → unpublish cascade) remain. See
+- **Phase 8 — Public recaps & discovery:** The safety-critical **post-trip publish gate** (a recap
+  can't go public until after the trip ends, API-enforced, with a client lock explanation until
+  then) plus a **consent gate** (`ConsentSetting.PublishEnabled`), a **PII gate** (emails/phone
+  numbers block publish with the findings until reviewed or acknowledged), moderated by real
+  **Azure AI Content Safety** (config-selected; a fake reviewer is the dev/CI default). Any user can
+  **report** a published recap from the client's **Discover** tab, which pulls it from discovery
+  immediately; an admin-gated **review queue** screen approves/rejects. Approved recaps are
+  **searchable** (facet + free-text **semantic ranking**) and queryable via a **RAG discovery
+  assistant** that answers with citations and refuses (rather than hallucinating) when nothing in
+  the corpus actually answers the question — both live in the Discover tab's Search/Ask AI modes.
+  Publish/unpublish/republish work end-to-end (including on recap delete), and disabling publish
+  consent unpublishes everything immediately. See
   [`phase-8-summary.md`](./docs/phase-8-summary.md).
 - **Consistent dev-only posture:** everything ships on **dev (web)**. Recurring deferred items: golden
   AI evals, live integration/E2E (now started with Phase 7's realtime test), staging/prod stand-up,
   native mobile build/sign-in, and offline **media** sync (→ Phase 9).
-- **Next:** Phase 8 client UI (publish sheet, search screen, RAG Q&A screen) — the backend is done.
-  See [`phases/phase-8-public-discovery`](./phases/phase-8-public-discovery).
+- **Next:** Phase 9 — Offline, Polish & Launch. See
+  [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch).
 
 ## What's next & handoff (read this if you're the next agent)
 
-**Where we are:** Phases 0–7 are closed on dev (web); **Phase 8 (Public Recaps & Discovery)**'s
-backend is complete — Slices 0–3 of 5 are built and closed out (post-trip + consent publish gate; a
-PII gate for emails/phone numbers; real Azure AI Content Safety moderation with a fake-by-default
-seam; user reporting → admin review queue; search with facet filters + semantic ranking; a grounded
-RAG discovery assistant with citations). Planning docs and per-phase summaries in [`/docs`](./docs)
-are current, including [`phase-8-summary.md`](./docs/phase-8-summary.md).
+**Where we are:** Phases 0–8 are closed on dev (web). **Phase 8 (Public Recaps & Discovery)** is
+fully done, backend and client: post-trip + consent publish gate; a PII gate for emails/phone
+numbers; real Azure AI Content Safety moderation with a fake-by-default seam; user reporting →
+admin review queue; search with facet filters + semantic ranking; a grounded RAG discovery
+assistant with citations; recap-delete → unpublish cascade; and client UI (`PublishRecapSheet`, a
+**Discover** tab for search + RAG Q&A, an admin `ModerationQueueScreen`) — hand-verified live in a
+browser against a running dev API. Planning docs and per-phase summaries in [`/docs`](./docs) are
+current, including [`phase-8-summary.md`](./docs/phase-8-summary.md).
 
-**What to continue — Phase 8, Slice 4 (client UI + hardening):**
-1. Read [`phases/phase-8-public-discovery`](./phases/phase-8-public-discovery) for the full slice
-   plan and progress log — the design decisions (why `PublicRecap` is a separate table, gate
-   ordering post-trip → consent → PII → moderation, the moderation seam, the config-admin-allowlist
-   gate for the review queue, why search similarity is computed client-side instead of via a native
-   pgvector column — see `architecture.md` §3 — and the RAG assistant's relevance floor before
-   calling the model) are documented there.
-2. Client UI: publish sheet (with the PII review step and post-trip lock explanation), report
-   button, admin queue screen, search screen, RAG Q&A screen. Every backend endpoint it needs
-   already exists and is tested.
-3. Recap-delete → unpublish cascade (today only the consent-off path cascades a delete from
-   discovery).
-4. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
+**What to continue — Phase 9 (Offline, Polish & Launch):**
+1. Read [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch) for the
+   phase plan.
+2. Harden offline sync, including **media** (audio/photo) resume — deferred since Phase 4; today
+   only text/prompt capture is offline-first.
+3. Conflict handling: Phase 7 shipped last-write-wins + presence; operational-merge/CRDT handling
+   is a documented backlog item.
+4. Performance & accessibility passes, onboarding, store assets, final security/privacy review.
+5. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
    provider — regex only covers emails/phones today), location coarsening on public recaps, an async
    indexing job (indexing runs synchronously on publish/approve today), a golden RAG eval corpus
-   against a real model, Phase 7's operational-merge/CRDT conflict handling.
+   against a real model, a "clone this itinerary" action from discovery citations, native mobile
+   layout pass on Phase 8's new screens (verified on web only so far).
 
 **Working agreement — document as you go.** Before ending your session:
 - [ ] **Tick off completed tasks** in the relevant `phases/phase-*/README.md` (check the boxes).

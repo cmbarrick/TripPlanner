@@ -1,12 +1,12 @@
 # Phase 8 Summary — Public Recaps & Discovery
 
-Date: 2026-07-14
-Status: **🔄 In progress on dev (web).** Slices 0–3 built: the safety-critical post-trip publish
+Date: 2026-07-14 (backend), closed 2026-07-16 (Slice 4 + client UI)
+Status: **✅ Complete on dev (web).** All 5 slices shipped: the safety-critical post-trip publish
 gate, a consent gate, real Azure AI Content Safety moderation (behind a fake-by-default seam), user
 reporting through to an admin review queue, a PII detection gate (emails/phone numbers), search
-(facet filters + semantic ranking), and a grounded RAG discovery assistant with citations. All three
-of Phase 8's core objectives (gated publish, moderated/PII-reviewed content, searchable + queryable)
-are now backend-complete. Only client UI and a couple of hardening items remain (Slice 4).
+(facet filters + semantic ranking), a grounded RAG discovery assistant with citations, the
+recap-delete → unpublish cascade, and full client UI (publish sheet, a Discover tab for search + RAG
+Q&A, and an admin moderation queue screen).
 
 ---
 
@@ -74,9 +74,9 @@ might not have an answer, and the assistant says so instead of guessing.
 | `POST /api/moderation/queue/{id}/approve` \| `/reject` | Admin-only: resolve the recap + its reports |
 | `GET /api/discovery/search` | Anonymous: search approved public recaps (facets + free-text) |
 | `POST /api/discovery/ask` | Authed: grounded Q&A with citations over public recaps |
-
-No client UI yet — every slice so far is backend-only, verified via automated tests and manual curl
-passes against a running dev API (see below).
+| **Discover tab** (`DiscoverScreen.tsx`) | Facet + free-text search over public recaps; per-result **Report** action; **Ask AI** panel for the RAG Q&A with citations |
+| **Publish sheet** (`PublishRecapSheet.tsx`, opened from a recap card) | Post-trip lock explanation, facets form, PII review-and-acknowledge, live moderation status, unpublish |
+| **Moderation queue** (`ModerationQueueScreen.tsx`, off Profile) | Admin-gated: approve/reject pending or reported recaps (server 403s non-admins) |
 
 ## What was completed
 
@@ -138,6 +138,27 @@ passes against a running dev API (see below).
 - `FakeAiProvider` gained a `"discovery"` deployment-kind branch; `AzureOpenAiProvider` routes
   `"discovery"` to the cheaper draft deployment (same reasoning as recaps).
 
+### Slice 4 — Cascade hardening + client UI
+- `RecapsController.Delete` now calls `IPublicRecapService.UnpublishAsync` after a successful
+  delete, closing the last cascade gap (previously only the consent-revocation path unpublished).
+- `PublishRecapSheet.tsx`: owner-only modal opened from a recap card. Shows the post-trip lock
+  message with the unlock date before the trip ends; once it's ended, a places/tags/season/budget
+  facets form; on a `422` (PII found), a review step listing the findings with a "publish anyway"
+  path (`AcknowledgePii: true`); once published, the live moderation status and an unpublish button.
+- `DiscoverScreen.tsx`: a new **Discover** tab with two modes. **Search** — facet filters (place/
+  season/budget) plus free text against `GET /api/discovery/search` (anonymous), each result
+  showing a snippet, places/tags/season/budget pills, and a **Report** action (reason + submit,
+  posts to `POST /api/moderation/reports`). **Ask AI** — a question box against `POST
+  /api/discovery/ask`, rendering the grounded answer with its cited recap titles/places, or a
+  refusal message when `hasAnswer:false`.
+- `ModerationQueueScreen.tsx`: reachable from a new "Moderation queue" row on Profile. Lists
+  pending/reported recaps with approve/reject (reject requires a reason); the server's admin
+  allowlist (`Moderation:AdminOwnerIds`) is the real gate — the screen just renders "you don't have
+  access" on a `403` rather than trying to replicate the check client-side.
+- `queries/discovery.ts`: the react-query hooks backing all of the above (publish status/mutation,
+  unpublish, search, ask, report, queue + approve/reject), following the same pattern as
+  `queries/recaps.ts` and `queries/reactions.ts`.
+
 ## Key API surface
 
 | Endpoint | Purpose |
@@ -152,7 +173,23 @@ passes against a running dev API (see below).
 
 ## Tests at close
 
-- Backend **229/229** (+10 `PublicRecapTests.cs` and 3 more, +8 `ModerationTests.cs`, +5
+- Backend **231/231** (+2 `PublicRecapTests.cs` for the delete → unpublish cascade, owner and
+  never-published cases), app **97/97** (+4 `DiscoverScreen.test.tsx`: search + results, report
+  flow, grounded-answer-with-citations, and the `hasAnswer:false` refusal message), `tsc` clean.
+  Hand-verified in a real Chromium browser against a running dev API + local Postgres (Playwright):
+  fixed a real layout bug in the process (the third facet input in `DiscoverScreen`'s search row
+  overflowed the phone frame on web — flex children need an explicit `minWidth: 0` to shrink below
+  content size in RN-web; `RecapPanel`/`ShareTripSheet` don't hit this since they don't pack three
+  flex inputs in one row). Walked the full loop live: opened `PublishRecapSheet` on an ended trip's
+  recap → publish blocked with "Publishing is disabled" (403, no consent) → enabled
+  `publishEnabled` → published → sheet showed "Live — discoverable" → **Discover** tab search found
+  it by keyword with the right facet pills → **Report** flagged it (recap flipped `Pending`,
+  confirmed server-side) → **Ask AI** surfaced the correct "AI is not configured on this server"
+  message (dev has no AI configured) rather than crashing → Profile → **Moderation queue** correctly
+  showed "you don't have access" for a non-admin dev user (403). Positive-admin-path (listing +
+  approve/reject) is exercised by the backend test suite; local env-var admin-override plumbing
+  didn't take effect in the time available, so it wasn't re-confirmed live on top of that.
+- Backend **229/229** at the start of this slice (+10 `PublicRecapTests.cs` and 3 more, +8 `ModerationTests.cs`, +5
   `PiiDetectionTests.cs`, +9 `SearchTests.cs`, +14 `DiscoveryTests.cs`): gate ordering
   (trip-not-ended → not-consented → PII → moderation), moderation-flagged content recorded as
   `Rejected` not silently dropped, republish revives rather than duplicates, unpublish clears status,
@@ -196,12 +233,10 @@ passes against a running dev API (see below).
 | Native pgvector column + ANN index | Future | Client-side cosine similarity is fine at today's scale; `ISearchService` absorbs the swap without callers changing |
 | Async indexing job | Future | Indexing runs synchronously on the publish/approve path today |
 | Golden RAG eval corpus against a real model | Future | Today's groundedness tests use the fake AI provider, same posture as Phases 5–6 |
-| Recap delete → unpublish cascade | Slice 4 | Today only the consent-off path cascades; a direct recap delete doesn't |
-| Client UI | Slice 4 | Publish sheet w/ PII review + report button + admin queue screen + search screen + RAG Q&A screen |
+| "Clone this itinerary" client action | Future | Discovery citations already carry `tripId`/`places`; only the clone action itself is unbuilt |
+| Native mobile pass on the new screens | Future | Verified on web only (RNTL + a live Chromium/Playwright pass); iOS/Android layout for Discover/Publish/Queue not yet checked |
 
 ## What's next
 
-Slice 4 — recap-delete → unpublish cascade, then client UI (publish sheet, report button, admin
-queue, search screen, RAG Q&A screen). Phase 8's backend is otherwise complete: all three core
-objectives (gated publish, moderated/PII-reviewed content, searchable + RAG-queryable) now work
-end-to-end.
+Phase 8 is closed — all five slices shipped and hand-verified live (see Tests at close). Phase 9
+(Offline, Polish & Launch) is next; see `docs/project-plan.md`.

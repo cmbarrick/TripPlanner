@@ -764,6 +764,164 @@ export async function toggleReaction(
   return sendJson(`/api/trips/${tripId}/reactions`, 'POST', { targetType, targetId, emoji });
 }
 
+// ── Public recaps & discovery (Phase 8) ──────────────────────────────────────
+
+export type ModerationStatus = 'Pending' | 'Approved' | 'Rejected';
+export type PiiType = 'Email' | 'Phone';
+
+export interface PiiFinding {
+  type: PiiType;
+  value: string;
+}
+
+export interface PublicRecap {
+  id: string;
+  recapId: string;
+  tripId: string;
+  moderationStatus: ModerationStatus;
+  moderationReason: string | null;
+  places: string[];
+  tags: string[];
+  season: string | null;
+  budgetBand: string | null;
+  publishedAt: string;
+}
+
+export interface PublishRecapInput {
+  places?: string[];
+  tags?: string[];
+  season?: string | null;
+  budgetBand?: string | null;
+  acknowledgePii?: boolean;
+}
+
+/** Thrown by {@link publishRecap} when PII is found and `acknowledgePii` wasn't set — nothing was
+ * published. Carries the findings so the caller can offer a review-and-acknowledge step. */
+export class PiiReviewRequiredError extends ApiError {
+  constructor(readonly findings: PiiFinding[]) {
+    super('This recap mentions an email or phone number. Remove it, or confirm it’s fine to publish.', 422);
+    this.name = 'PiiReviewRequiredError';
+  }
+}
+
+export async function publishRecap(
+  tripId: string,
+  recapId: string,
+  input: PublishRecapInput,
+): Promise<PublicRecap> {
+  const baseHeaders = (await buildHeaders()) ?? {};
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/recaps/${recapId}/publish`, {
+    method: 'POST',
+    headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (res.status === 422) {
+    const body = await res.json();
+    throw new PiiReviewRequiredError(body.findings ?? []);
+  }
+  if (!res.ok) throw new ApiError(await readError(res), res.status);
+  return (await res.json()) as PublicRecap;
+}
+
+/** The owner's publish status for a recap, or null if it's never been published. */
+export async function getPublishStatus(tripId: string, recapId: string): Promise<PublicRecap | null> {
+  const baseHeaders = (await buildHeaders()) ?? {};
+  const res = await fetch(`${API_BASE}/api/trips/${tripId}/recaps/${recapId}/publish`, {
+    headers: baseHeaders,
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiError(await readError(res), res.status);
+  return (await res.json()) as PublicRecap;
+}
+
+export async function unpublishRecap(tripId: string, recapId: string): Promise<void> {
+  await sendJson<void>(`/api/trips/${tripId}/recaps/${recapId}/unpublish`, 'POST');
+}
+
+export interface SearchResult {
+  publicRecapId: string;
+  recapId: string;
+  tripId: string;
+  title: string;
+  snippet: string;
+  places: string[];
+  tags: string[];
+  season: string | null;
+  budgetBand: string | null;
+  publishedAt: string;
+  relevance: number | null;
+}
+
+export interface SearchDiscoveryInput {
+  q?: string;
+  place?: string;
+  tag?: string;
+  season?: string;
+  budgetBand?: string;
+  take?: number;
+}
+
+/** Anonymous keyword + semantic search over approved public recaps. */
+export async function searchDiscovery(input: SearchDiscoveryInput): Promise<SearchResult[]> {
+  const params = new URLSearchParams();
+  if (input.q) params.set('q', input.q);
+  if (input.place) params.set('place', input.place);
+  if (input.tag) params.set('tag', input.tag);
+  if (input.season) params.set('season', input.season);
+  if (input.budgetBand) params.set('budgetBand', input.budgetBand);
+  if (input.take) params.set('take', String(input.take));
+  const qs = params.toString();
+  return sendJson<SearchResult[]>(`/api/discovery/search${qs ? `?${qs}` : ''}`, 'GET');
+}
+
+export interface DiscoveryCitation {
+  publicRecapId: string;
+  recapId: string;
+  tripId: string;
+  title: string;
+  places: string[];
+}
+
+export interface DiscoveryAnswer {
+  hasAnswer: boolean;
+  answer: string | null;
+  citations: DiscoveryCitation[];
+}
+
+/** Grounded Q&A over public recaps (authed — spends the caller's shared AI token quota). */
+export async function askDiscovery(question: string): Promise<DiscoveryAnswer> {
+  return sendJson<DiscoveryAnswer>('/api/discovery/ask', 'POST', { question });
+}
+
+/** Flags a published recap for moderator review; pulls it out of discovery immediately. */
+export async function reportPublicRecap(publicRecapId: string, reason: string): Promise<void> {
+  await sendJson<void>('/api/moderation/reports', 'POST', { publicRecapId, reason });
+}
+
+export interface ModerationQueueItem {
+  publicRecapId: string;
+  recapId: string;
+  tripId: string;
+  ownerId: string;
+  moderationStatus: ModerationStatus;
+  moderationReason: string | null;
+  openReportCount: number;
+  publishedAt: string;
+}
+
+/** Admin-gated: recaps pending review or carrying an open report. 403s for non-admins. */
+export async function getModerationQueue(): Promise<ModerationQueueItem[]> {
+  return sendJson<ModerationQueueItem[]>('/api/moderation/queue', 'GET');
+}
+
+export async function approveModerationItem(publicRecapId: string): Promise<void> {
+  await sendJson<void>(`/api/moderation/queue/${publicRecapId}/approve`, 'POST');
+}
+
+export async function rejectModerationItem(publicRecapId: string, reason: string): Promise<void> {
+  await sendJson<void>(`/api/moderation/queue/${publicRecapId}/reject`, 'POST', { reason });
+}
+
 // ── Notes & journaling (Phase 4) ─────────────────────────────────────────────
 
 export interface CreateNoteInput {
