@@ -18,6 +18,7 @@ export function VoiceControls({ tripId, scope, targetId }: VoiceControlsProps) {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [denied, setDenied] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => {
@@ -52,10 +53,12 @@ export function VoiceControls({ tripId, scope, targetId }: VoiceControlsProps) {
       const uri = recorder.uri;
       if (!uri) return;
       const ext = (uri.split('.').pop() || 'm4a').toLowerCase();
+      setUploadProgress(0);
       createVoice.mutate({
         fields: { scope, targetId, durationSeconds: seconds, locale: 'en-US' },
         audio: { uri, name: `voice-note.${ext}`, type: `audio/${ext === 'm4a' ? 'm4a' : ext}` },
         fileName: `voice-note.${ext}`,
+        onProgress: setUploadProgress,
       });
     } catch {
       // recording failed — nothing persisted
@@ -66,7 +69,9 @@ export function VoiceControls({ tripId, scope, targetId }: VoiceControlsProps) {
     return (
       <View style={st.row}>
         <ActivityIndicator size="small" color={colors.brand} />
-        <Text style={st.recText}>Uploading voice note…</Text>
+        <Text style={st.recText}>
+          Uploading voice note{uploadProgress > 0 ? `… ${Math.round(uploadProgress * 100)}%` : '…'}
+        </Text>
       </View>
     );
   }

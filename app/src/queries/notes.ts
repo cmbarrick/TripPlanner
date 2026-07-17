@@ -179,13 +179,16 @@ export function useCreateVoiceNoteMutation(tripId: string) {
       fields,
       audio,
       fileName,
+      onProgress,
     }: {
       fields: CreateVoiceNoteFields;
       audio: UploadFile;
       fileName: string;
+      /** Upload progress only (0–1) — doesn't cover server-side transcription. */
+      onProgress?: (fraction: number) => void;
     }): Promise<Note> => {
       try {
-        return await createVoiceNote(tripId, fields, audio, fileName);
+        return await createVoiceNote(tripId, fields, audio, fileName, onProgress);
       } catch (e) {
         if (!isOfflineError(e)) throw e;
         const tempId = await enqueueMediaNote(tripId, 'Voice', fields, audio, fileName);
@@ -205,13 +208,15 @@ export function useCreatePhotoNoteMutation(tripId: string) {
       fields,
       image,
       fileName,
+      onProgress,
     }: {
       fields: CreatePhotoNoteFields;
       image: UploadFile;
       fileName: string;
+      onProgress?: (fraction: number) => void;
     }): Promise<Note> => {
       try {
-        return await createPhotoNote(tripId, fields, image, fileName);
+        return await createPhotoNote(tripId, fields, image, fileName, onProgress);
       } catch (e) {
         if (!isOfflineError(e)) throw e;
         const tempId = await enqueueMediaNote(tripId, 'Photo', fields, image, fileName);

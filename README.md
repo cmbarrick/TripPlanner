@@ -66,7 +66,7 @@ environment (web target). The app runs end-to-end on Azure dev: plan a trip → 
 co-edit it with friends in real time → publish a recap publicly after the trip ends, PII-reviewed
 and moderated by real Azure AI Content Safety with a reportable/reviewable queue → find it via
 search or ask a grounded, cited RAG assistant about it, all from the client's **Discover** tab and
-publish sheet. Test health at last close: backend **231/231**, Functions **3/3**, app **106/106** +
+publish sheet. Test health at last close: backend **231/231**, Functions **3/3**, app **123/123** +
 `tsc` clean. See the per-phase summaries in [`/docs`](./docs).
 
 - **Phase 0 — Foundation (local-first):** PostgreSQL-backed API via EF Core (migrations), per-user
@@ -114,28 +114,33 @@ publish sheet. Test health at last close: backend **231/231**, Functions **3/3**
 - **Phase 9 — Offline, polish & launch (in progress):** the Phase 4 text/prompt outbox now covers
   **voice/photo media** too — captured offline, the bytes are cached durably (native: `expo-file-system`
   document directory; web: IndexedDB) and uploaded on reconnect via a new `note.media` outbox op,
-  with an optimistic "saved offline" indicator in the journal. Hand-verified live (simulated offline
-  → capture → optimistic entry → reconnect → synced, no duplicate; survives a reload while offline).
+  with an optimistic "saved offline" indicator in the journal that now **survives a page reload**
+  (derived reactively from the outbox instead of a one-shot cache patch). A `SyncStatusBar` shows a
+  soft "N pending" or a red "Offline — N pending" with a manual **Retry** action, and voice/photo
+  uploads show live progress (`postMultipart` moved from `fetch` to `XMLHttpRequest` for the
+  upload-progress event neither web nor native `fetch` has). Hand-verified live end to end: capture
+  offline → pending indicator → reconnect → synced with no duplicate; survives a reload while
+  offline; retry while still blocked stays blocked, retry once reconnected clears it.
   See [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch).
 
 ## What's next & handoff (read this if you're the next agent)
 
 **Where we are:** Phases 0–8 are closed on dev (web). **Phase 9 (Offline, Polish & Launch)** is in
-progress: the offline outbox now covers voice/photo media (see above), hand-verified live against a
-running dev API. Planning docs and per-phase summaries in [`/docs`](./docs) are current, including
+progress: the offline outbox now covers voice/photo media, pending captures survive a reload, and
+there's a live sync-status indicator with manual retry and upload progress (see above), all
+hand-verified live against a running dev API. Planning docs and per-phase summaries in
+[`/docs`](./docs) are current, including
 [`phase-8-summary.md`](./docs/phase-8-summary.md).
 
 **What to continue — Phase 9 (Offline, Polish & Launch):**
 1. Read [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch) for the
-   phase plan and progress log.
-2. **Sync status UI:** offline indicator, a pending-changes list (including merging the outbox
-   queue into the notes list on load — right now a pending note disappears from view across a page
-   reload even though nothing is actually lost), media upload progress, retry.
-3. Conflict handling: Phase 7 shipped last-write-wins + presence; operational-merge/CRDT handling
+   phase plan and progress log. Offline media, reload-persistence, and the Sync status UI (offline
+   indicator, pending count, upload progress, manual retry) are all done — see above.
+2. Conflict handling: Phase 7 shipped last-write-wins + presence; operational-merge/CRDT handling
    is a documented backlog item.
-4. Offline data layer (local SQLite as UI source of truth), performance & accessibility passes,
+3. Offline data layer (local SQLite as UI source of truth), performance & accessibility passes,
    onboarding, store assets, final security/privacy review.
-5. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
+4. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
    provider — regex only covers emails/phones today), location coarsening on public recaps, an async
    indexing job (indexing runs synchronously on publish/approve today), a golden RAG eval corpus
    against a real model, a "clone this itinerary" action from discovery citations, native mobile

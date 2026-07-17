@@ -990,21 +990,70 @@ function appendFile(form: FormData, field: string, file: UploadFile, fileName: s
   }
 }
 
-async function postMultipart(path: string, form: FormData): Promise<Note> {
-  // Don't set Content-Type — the platform adds the multipart boundary automatically.
-  const headers = (await buildHeaders()) ?? {};
-  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: form as any });
-  if (!res.ok) throw new ApiError(await readError(res), res.status);
-  return (await res.json()) as Note;
+/** Parses an XHR error response the same way {@link readError} does for a fetch `Response`. */
+function xhrError(status: number, responseText: string): ApiError {
+  try {
+    const problem = JSON.parse(responseText);
+    if (problem?.errors) {
+      const first = Object.values(problem.errors as Record<string, string[]>)[0];
+      if (first?.length) return new ApiError(first[0], status);
+    }
+    if (problem?.title) return new ApiError(problem.title as string, status);
+  } catch {
+    // fall through to the generic message below
+  }
+  return new ApiError(`Request failed (HTTP ${status})`, status);
+}
+
+/**
+ * Uploads a multipart form via XMLHttpRequest rather than `fetch` — `fetch` has no upload-progress
+ * event in any environment this app targets (web or React Native), while XHR's `upload.onprogress`
+ * works in both, same as it always has for browser file uploads. An `ApiError` with `status`
+ * `undefined` (no HTTP response at all — offline, DNS failure, timeout) matches `fetch`'s rejection
+ * shape closely enough that {@link isOfflineError} still treats it as "queue for later".
+ */
+function postMultipart(path: string, form: FormData, onProgress?: (fraction: number) => void): Promise<Note> {
+  return buildHeaders().then(
+    (headers) =>
+      new Promise<Note>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}${path}`);
+        for (const [key, value] of Object.entries((headers ?? {}) as Record<string, string>)) {
+          xhr.setRequestHeader(key, value);
+        }
+        if (onProgress) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) onProgress(e.loaded / e.total);
+          };
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText) as Note);
+            } catch {
+              reject(new ApiError('Malformed response from server.', xhr.status));
+            }
+          } else {
+            reject(xhrError(xhr.status, xhr.responseText));
+          }
+        };
+        xhr.onerror = () => reject(new ApiError('Network request failed', undefined));
+        xhr.ontimeout = () => reject(new ApiError('Network request failed', undefined));
+        // Don't set Content-Type — the platform adds the multipart boundary automatically.
+        xhr.send(form as any);
+      }),
+  );
 }
 
 /** Uploads a recorded audio clip as a voice note (multipart). The API stores the audio and queues
- *  it for transcription; the transcript arrives asynchronously (visible after a refetch). */
+ *  it for transcription; the transcript arrives asynchronously (visible after a refetch).
+ *  `onProgress` (0–1) reports upload progress only — it doesn't cover server-side processing. */
 export async function createVoiceNote(
   tripId: string,
   fields: CreateVoiceNoteFields,
   audio: UploadFile,
   fileName: string,
+  onProgress?: (fraction: number) => void,
 ): Promise<Note> {
   const form = new FormData();
   form.append('Scope', fields.scope);
@@ -1013,7 +1062,7 @@ export async function createVoiceNote(
   if (fields.durationSeconds != null) form.append('DurationSeconds', String(Math.round(fields.durationSeconds)));
   if (fields.locale) form.append('Locale', fields.locale);
   appendFile(form, 'Audio', audio, fileName);
-  return postMultipart(`/api/trips/${tripId}/notes/voice`, form);
+  return postMultipart(`/api/trips/${tripId}/notes/voice`, form, onProgress);
 }
 
 /** Uploads a photo as a photo note (multipart). No transcription is queued for images. */
@@ -1022,13 +1071,14 @@ export async function createPhotoNote(
   fields: CreatePhotoNoteFields,
   image: UploadFile,
   fileName: string,
+  onProgress?: (fraction: number) => void,
 ): Promise<Note> {
   const form = new FormData();
   form.append('Scope', fields.scope);
   if (fields.targetId) form.append('TargetId', fields.targetId);
   if (fields.bodyText) form.append('BodyText', fields.bodyText);
   appendFile(form, 'Image', image, fileName);
-  return postMultipart(`/api/trips/${tripId}/notes/photo`, form);
+  return postMultipart(`/api/trips/${tripId}/notes/photo`, form, onProgress);
 }
 
 /** Absolute URL for a media asset (used directly by native `Image`/`expo-audio` with auth headers). */

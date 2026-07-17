@@ -1,8 +1,9 @@
 # Project Plan — Wander (Trip Planning App)
 
-> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-07-16
+> Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-07-17
 > Progress: Phases 0–8 **closed** on dev. **Phase 9 — Offline, Polish & Launch** is in progress:
-> the offline outbox (Phase 4) now covers voice/photo media, not just text — see
+> the offline outbox (Phase 4) now covers voice/photo media, pending captures survive a reload,
+> and there's a live sync-status indicator with manual retry and upload progress — see
 > [`phases/phase-9-offline-polish-launch`](../phases/phase-9-offline-polish-launch).
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
@@ -231,7 +232,17 @@ and discovery layers make it a community product over time.
   appeared instantly → reconnect → synced with no duplicate; a queued op + its cached bytes also
   survive a page reload while still offline and sync correctly afterward, though the pending entry
   doesn't reappear in the list until the flush completes (filed under **Sync status UI**, not this
-  item). App **106/106**, `tsc` clean. See
+  item). App **106/106**, `tsc` clean. **Sync status UI now complete (2026-07-17):**
+  `useTripNotesQuery` derives its result by overlaying the outbox's queued ops onto the fetched
+  list on every render (reactive via `useOutbox`), so a pending note now survives a reload —
+  closing the gap above — and replaced four manual `patchNotesCache` calls. The outbox also tracks
+  a `blocked` flag (a flush attempt actually hit a network failure with work still queued) exposed
+  via `useSyncStatus()` alongside a `retryNow` action; `SyncStatusBar.tsx` shows a soft "N pending"
+  or a red "Offline — N pending [Retry]" in the Journal panel. `postMultipart` moved from `fetch`
+  to `XMLHttpRequest` for upload-progress events, so voice/photo captures now show "Uploading…
+  NN%". Hand-verified live end to end: online upload still works, offline capture shows the bar,
+  manual retry while blocked stays blocked, retry once reconnected syncs and clears the bar with no
+  duplicate. App **123/123**, `tsc` clean. See
   [`phases/phase-9-offline-polish-launch`](../phases/phase-9-offline-polish-launch).
 
 ### Later / v2 — Monetization & advanced

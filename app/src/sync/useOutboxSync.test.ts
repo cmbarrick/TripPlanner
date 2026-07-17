@@ -22,9 +22,25 @@ jest.mock('./mediaCache', () => ({
   deleteCachedMedia: (...args: [string]) => mockDeleteCachedMedia(...args),
 }));
 
-import { ApiError, createVoiceNote, createPhotoNote } from '../api';
-import { runOp } from './useOutboxSync';
-import { OutboxOp } from './outbox';
+// In-memory storage mock so enqueueing (for the useSyncStatus tests below) doesn't touch native
+// modules — same pattern as sync/outbox.test.ts.
+const mockMem = new Map<string, string>();
+jest.mock('../storage', () => ({
+  readJson: async (key: string, fallback: unknown) => {
+    const raw = mockMem.get(key);
+    return raw ? JSON.parse(raw) : fallback;
+  },
+  writeJson: async (key: string, value: unknown) => {
+    mockMem.set(key, JSON.stringify(value));
+  },
+}));
+
+import React from 'react';
+import { renderHook, waitFor, act } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ApiError, createNote, createVoiceNote, createPhotoNote } from '../api';
+import { runOp, useSyncStatus } from './useOutboxSync';
+import { OutboxOp, enqueueNoteCreate, __resetOutboxForTests } from './outbox';
 
 const voiceOp: OutboxOp = {
   id: 'op-1',
@@ -41,6 +57,8 @@ const voiceOp: OutboxOp = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockMediaStore.clear();
+  mockMem.clear();
+  __resetOutboxForTests();
 });
 
 describe('runOp — note.media', () => {
@@ -95,5 +113,45 @@ describe('runOp — note.media', () => {
 
     expect(outcome).toBe('drop');
     expect(mockDeleteCachedMedia).toHaveBeenCalledWith('temp-1');
+  });
+});
+
+function wrapper({ children }: { children: React.ReactNode }) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return React.createElement(QueryClientProvider, { client: qc }, children);
+}
+
+describe('useSyncStatus', () => {
+  it('retryNow drains the queue and updates pendingCount/blocked reactively', async () => {
+    await enqueueNoteCreate('t1', { scope: 'Trip', bodyText: 'hello' });
+    (createNote as jest.Mock).mockResolvedValue({ id: 'real-1' });
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await waitFor(() => expect(result.current.pendingCount).toBe(1));
+
+    let drained = 0;
+    await act(async () => {
+      drained = await result.current.retryNow();
+    });
+
+    expect(drained).toBe(1);
+    expect(createNote).toHaveBeenCalledWith('t1', { scope: 'Trip', bodyText: 'hello' });
+    await waitFor(() => expect(result.current.pendingCount).toBe(0));
+    expect(result.current.blocked).toBe(false);
+  });
+
+  it('reports blocked after retryNow hits a transient failure', async () => {
+    await enqueueNoteCreate('t1', { scope: 'Trip', bodyText: 'hello' });
+    (createNote as jest.Mock).mockRejectedValue(new Error('network down'));
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await waitFor(() => expect(result.current.pendingCount).toBe(1));
+
+    await act(async () => {
+      await result.current.retryNow();
+    });
+
+    expect(result.current.pendingCount).toBe(1);
+    await waitFor(() => expect(result.current.blocked).toBe(true));
   });
 });

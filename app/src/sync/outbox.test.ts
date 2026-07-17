@@ -25,6 +25,7 @@ jest.mock('./mediaCache', () => ({
   deleteCachedMedia: (...args: [string]) => mockDeleteCachedMedia(...args),
 }));
 
+import { renderHook, waitFor } from '@testing-library/react-native';
 import {
   enqueueNoteCreate,
   enqueueNoteUpdate,
@@ -32,6 +33,7 @@ import {
   enqueueMediaNote,
   flushOutbox,
   isTempNoteId,
+  useOutbox,
   __resetOutboxForTests,
   OutboxOp,
   FlushOutcome,
@@ -179,5 +181,36 @@ describe('flushOutbox', () => {
     });
     expect(drained).toBe(0);
     expect(persisted()).toHaveLength(1);
+  });
+});
+
+describe('useOutbox — blocked status', () => {
+  it('is not blocked with an empty queue', async () => {
+    const { result } = renderHook(() => useOutbox());
+    await waitFor(() => expect(result.current.blocked).toBe(false));
+    expect(result.current.pendingCount).toBe(0);
+  });
+
+  it('flips to blocked when a flush stops on a retry, and reports it reactively', async () => {
+    await enqueueNoteCreate('t1', { scope: 'Trip', bodyText: 'x' });
+    const { result } = renderHook(() => useOutbox());
+    await waitFor(() => expect(result.current.pendingCount).toBe(1));
+    expect(result.current.blocked).toBe(false);
+
+    await flushOutbox(async () => 'retry');
+
+    await waitFor(() => expect(result.current.blocked).toBe(true));
+  });
+
+  it('clears blocked once a later flush drains the queue', async () => {
+    await enqueueNoteCreate('t1', { scope: 'Trip', bodyText: 'x' });
+    await flushOutbox(async () => 'retry');
+    const { result } = renderHook(() => useOutbox());
+    await waitFor(() => expect(result.current.blocked).toBe(true));
+
+    await flushOutbox(async () => 'done');
+
+    await waitFor(() => expect(result.current.blocked).toBe(false));
+    expect(result.current.pendingCount).toBe(0);
   });
 });

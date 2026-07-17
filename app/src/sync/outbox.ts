@@ -40,14 +40,31 @@ export type FlushOutcome =
   // Server rejected it (4xx/validation); retrying can't help, so drop it to avoid a poison-pill loop.
   | 'drop';
 
+/** Reactive snapshot for {@link useOutbox}. Bundling `ops` and `blocked` into one object (rather
+ *  than exposing them as separate module variables) means a `blocked`-only change still produces a
+ *  new snapshot reference, which `useSyncExternalStore` needs to know to re-render — it bails out
+ *  when the snapshot it reads is `Object.is`-equal to the last one. */
+type OutboxSnapshot = { ops: OutboxOp[]; blocked: boolean };
+
 let ops: OutboxOp[] = [];
+/** True once a flush attempt has stopped on a `retry` outcome (network/offline) with the queue
+ *  still non-empty — cleared on the next flush that either drains fully or finds nothing queued. */
+let blocked = false;
+let snapshot: OutboxSnapshot = { ops, blocked };
 let loaded = false;
 let loading: Promise<void> | null = null;
 let flushing = false;
 const listeners = new Set<() => void>();
 
 function emit() {
+  snapshot = { ops, blocked };
   for (const l of listeners) l();
+}
+
+function setBlocked(next: boolean) {
+  if (blocked === next) return;
+  blocked = next;
+  emit();
 }
 
 async function persist() {
@@ -77,8 +94,8 @@ async function ready(): Promise<void> {
   if (loading) await loading;
 }
 
-function getSnapshot(): OutboxOp[] {
-  return ops;
+function getSnapshot(): OutboxSnapshot {
+  return snapshot;
 }
 
 /** Best-effort UUID; falls back when crypto.randomUUID is unavailable (some RN runtimes). */
@@ -223,9 +240,13 @@ export async function removeOp(id: string): Promise<void> {
 export async function flushOutbox(runner: (op: OutboxOp) => Promise<FlushOutcome>): Promise<number> {
   if (flushing) return 0;
   await ready();
-  if (ops.length === 0) return 0;
+  if (ops.length === 0) {
+    setBlocked(false);
+    return 0;
+  }
   flushing = true;
   let synced = 0;
+  let hitRetry = false;
   try {
     // Snapshot ids up front; the queue can be mutated by the UI mid-flush.
     const queue = [...ops];
@@ -237,7 +258,10 @@ export async function flushOutbox(runner: (op: OutboxOp) => Promise<FlushOutcome
       } catch {
         outcome = 'retry';
       }
-      if (outcome === 'retry') break;
+      if (outcome === 'retry') {
+        hitRetry = true;
+        break;
+      }
       await removeOp(op.id);
       // A dropped op leaves the queue but wasn't a successful sync, so don't count it.
       if (outcome === 'done') synced += 1;
@@ -245,18 +269,23 @@ export async function flushOutbox(runner: (op: OutboxOp) => Promise<FlushOutcome
   } finally {
     flushing = false;
   }
+  setBlocked(hitRetry);
   return synced;
 }
 
-/** Reactive snapshot of the queued ops (for a "pending sync" indicator). */
-export function useOutbox(): { ops: OutboxOp[]; pendingCount: number } {
+/** Reactive snapshot of the queued ops (for a "pending sync" indicator): the ops themselves, a
+ *  convenience count, and whether the last flush attempt stopped on a network failure with work
+ *  still queued (an "offline/blocked" signal — see {@link OutboxSnapshot}). */
+export function useOutbox(): { ops: OutboxOp[]; pendingCount: number; blocked: boolean } {
   const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  return { ops: current, pendingCount: current.length };
+  return { ops: current.ops, pendingCount: current.ops.length, blocked: current.blocked };
 }
 
 /** Test-only: reset in-memory state. */
 export function __resetOutboxForTests() {
   ops = [];
+  blocked = false;
+  snapshot = { ops, blocked };
   loaded = false;
   loading = null;
   flushing = false;

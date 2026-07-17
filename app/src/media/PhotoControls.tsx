@@ -16,6 +16,7 @@ interface PhotoControlsProps {
 export function PhotoControls({ tripId, scope, targetId }: PhotoControlsProps) {
   const createPhoto = useCreatePhotoNoteMutation(tripId);
   const [error, setError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const pick = async () => {
     setError(null);
@@ -41,7 +42,8 @@ export function PhotoControls({ tripId, scope, targetId }: PhotoControlsProps) {
         upload = { uri: asset.uri, name: fileName, type };
       }
 
-      createPhoto.mutate({ fields: { scope, targetId }, image: upload, fileName });
+      setUploadProgress(0);
+      createPhoto.mutate({ fields: { scope, targetId }, image: upload, fileName, onProgress: setUploadProgress });
     } catch {
       setError("Couldn't add that photo. Try again.");
     }
@@ -51,7 +53,9 @@ export function PhotoControls({ tripId, scope, targetId }: PhotoControlsProps) {
     return (
       <View style={st.row}>
         <ActivityIndicator size="small" color={colors.brand} />
-        <Text style={st.recText}>Uploading photo…</Text>
+        <Text style={st.recText}>
+          Uploading photo{uploadProgress > 0 ? `… ${Math.round(uploadProgress * 100)}%` : '…'}
+        </Text>
       </View>
     );
   }

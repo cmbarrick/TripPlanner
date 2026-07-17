@@ -12,6 +12,7 @@ import { useTripNotesQuery, useCreateNoteMutation, useDeleteNoteMutation, useUpd
 import { NoteCard } from '../notes/NoteCard';
 import { VoiceControls } from '../voice/VoiceControls';
 import { PhotoControls } from '../media/PhotoControls';
+import { SyncStatusBar } from '../sync/SyncStatusBar';
 import { ReflectFlow } from '../prompts/ReflectFlow';
 import { usePromptSettings } from '../prompts/store';
 import { useNotificationSettings } from '../notifications/settings';
@@ -771,6 +772,8 @@ function JournalPanel({
     <ScrollView contentContainerStyle={s.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Text style={s.packTitle}>📓 Journal</Text>
       <Text style={s.packSub}>{visible.length === 0 ? 'No entries yet — capture how the trip is going.' : `${visible.length} ${visible.length === 1 ? 'entry' : 'entries'} across this trip`}</Text>
+
+      <SyncStatusBar />
 
       <Pressable style={s.promptToggle} onPress={toggleTripPrompts} accessibilityLabel="Toggle reflection prompts for this trip">
         <Text style={s.promptToggleText}>💭 Reflection prompts: {promptsOn ? 'On' : 'Off'}</Text>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,7 +12,7 @@ import {
   CreatePhotoNoteFields,
 } from '../api';
 import { tripNotesQueryKey } from '../queries/notes';
-import { flushOutbox, FlushOutcome, OutboxOp } from './outbox';
+import { flushOutbox, FlushOutcome, OutboxOp, useOutbox } from './outbox';
 import { loadCachedMedia, deleteCachedMedia } from './mediaCache';
 
 /** Replays one queued op. Network/5xx failures retry later; 4xx rejections are dropped. */
@@ -44,30 +44,36 @@ export async function runOp(op: OutboxOp): Promise<FlushOutcome> {
   }
 }
 
+/** One flush attempt: replays queued ops and invalidates the notes query for any trip that
+ *  actually drained something. Shared by the automatic triggers in {@link useOutboxSync} and the
+ *  manual "Retry now" action in {@link useSyncStatus} — same logic either way. */
+function useFlushOutbox() {
+  const queryClient = useQueryClient();
+  return useCallback(async (): Promise<number> => {
+    const affected = new Set<string>();
+    const drained = await flushOutbox(async (op) => {
+      const outcome = await runOp(op);
+      if (outcome === 'done') affected.add(op.tripId);
+      return outcome;
+    });
+    if (drained > 0) {
+      for (const tripId of affected) {
+        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
+      }
+    }
+    return drained;
+  }, [queryClient]);
+}
+
 /**
  * Drives the offline outbox: replays queued journal writes whenever connectivity likely returned
  * (app start, web `online` event, return to foreground, and a slow safety-net interval) and
  * refreshes the affected trips' notes once anything drains. Mounted once near the app root.
  */
 export function useOutboxSync(): void {
-  const queryClient = useQueryClient();
+  const flush = useFlushOutbox();
 
   useEffect(() => {
-    let cancelled = false;
-
-    const flush = async () => {
-      const affected = new Set<string>();
-      const drained = await flushOutbox(async (op) => {
-        const outcome = await runOp(op);
-        if (outcome === 'done') affected.add(op.tripId);
-        return outcome;
-      });
-      if (cancelled || drained === 0) return;
-      for (const tripId of affected) {
-        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
-      }
-    };
-
     void flush();
     const interval = setInterval(() => void flush(), 20_000);
 
@@ -79,10 +85,20 @@ export function useOutboxSync(): void {
     });
 
     return () => {
-      cancelled = true;
       clearInterval(interval);
       if (isWeb) window.removeEventListener('online', onOnline);
       appStateSub.remove();
     };
-  }, [queryClient]);
+  }, [flush]);
+}
+
+/**
+ * Read-only sync status (pending count, whether the last flush attempt was blocked by a network
+ * failure) plus a manual retry action — for a "N pending — offline, tap to retry" indicator.
+ * Doesn't drive the automatic flush itself; mount `useOutboxSync` once near the app root for that.
+ */
+export function useSyncStatus(): { pendingCount: number; blocked: boolean; retryNow: () => Promise<number> } {
+  const { pendingCount, blocked } = useOutbox();
+  const retryNow = useFlushOutbox();
+  return { pendingCount, blocked, retryNow };
 }

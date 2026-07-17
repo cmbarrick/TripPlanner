@@ -10,6 +10,7 @@ export function VoiceControls({ tripId, scope, targetId }: VoiceControlsProps) {
   const createVoice = useCreateVoiceNoteMutation(tripId);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const recorderRef = useRef<Recorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -43,10 +44,12 @@ export function VoiceControls({ tripId, scope, targetId }: VoiceControlsProps) {
     if (!rec) return;
     try {
       const result = await rec.stop();
+      setUploadProgress(0);
       createVoice.mutate({
         fields: { scope, targetId, durationSeconds: result.durationSeconds, locale: 'en-US' },
         audio: result.blob,
         fileName: result.fileName,
+        onProgress: setUploadProgress,
       });
     } catch {
       // recording failed — nothing persisted
@@ -57,7 +60,9 @@ export function VoiceControls({ tripId, scope, targetId }: VoiceControlsProps) {
     return (
       <View style={st.row}>
         <ActivityIndicator size="small" color={colors.brand} />
-        <Text style={st.recText}>Uploading voice note…</Text>
+        <Text style={st.recText}>
+          Uploading voice note{uploadProgress > 0 ? `… ${Math.round(uploadProgress * 100)}%` : '…'}
+        </Text>
       </View>
     );
   }
