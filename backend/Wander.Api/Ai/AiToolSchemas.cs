@@ -3,7 +3,16 @@ namespace Wander.Api.Ai;
 /// <summary>Tool schemas exposed to the chat model (Slice 3).</summary>
 public static class AiToolSchemas
 {
-    public static IReadOnlyList<AiToolSchema> All { get; } =
+    /// <summary>The tools offered to the model this turn. <paramref name="activitiesEnabled"/> is a
+    /// deliberate kill switch (<c>Activities:Enabled</c> in config) — <c>searchActivities</c> stays
+    /// out of the model's tool list entirely until it's flipped on, e.g. while a newly-issued
+    /// provider API key is still going through its own activation delay. This is independent of
+    /// which <c>IActivityProvider</c> is registered (real vs. fake): the tool can be wired and
+    /// tested end-to-end without ever being reachable from a live chat.</summary>
+    public static IReadOnlyList<AiToolSchema> All(bool activitiesEnabled = true) =>
+        activitiesEnabled ? AllTools : AllTools.Where(t => t.Name != "searchActivities").ToList();
+
+    private static readonly IReadOnlyList<AiToolSchema> AllTools =
     [
         new(
             "searchPlaces",

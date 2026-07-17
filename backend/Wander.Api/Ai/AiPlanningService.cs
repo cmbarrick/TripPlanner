@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Wander.Api.Data;
 using Wander.Api.Models;
 
@@ -21,7 +22,8 @@ public sealed class AiPlanningService(
     IPreferenceService preferences,
     IAiTokenQuotaService quota,
     IAiToolExecutor tools,
-    IAiChatRateLimiter rateLimiter) : IAiPlanningService
+    IAiChatRateLimiter rateLimiter,
+    IConfiguration config) : IAiPlanningService
 {
     public const int MaxMessageLength = 2000;
     public const int MaxHistoryMessages = 20;
@@ -86,6 +88,7 @@ public sealed class AiPlanningService(
         var allChanges = new List<AiTripChange>();
         var allUndoSteps = new List<AiUndoStep>();
         var batchId = Guid.NewGuid();
+        var toolSchemas = AiToolSchemas.All(activitiesEnabled: config.GetValue<bool>("Activities:Enabled"));
 
         for (var round = 0; round < MaxToolRounds; round++)
         {
@@ -93,7 +96,7 @@ public sealed class AiPlanningService(
 
             var completionRequest = new AiCompletionRequest(
                 messages,
-                AiToolSchemas.All,
+                toolSchemas,
                 DeploymentKind: "chat");
 
             var roundText = new StringBuilder();

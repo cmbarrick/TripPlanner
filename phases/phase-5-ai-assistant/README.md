@@ -32,6 +32,10 @@
       loud instead of silently attaching nothing (or something wrong). Same anti-fabrication
       discipline as Phase 6/8's citation validators, applied to tool-calling instead of RAG.
       `FakeActivityProvider` (dev/CI default) mirrors every other provider seam in this app.
+      **Hidden behind `Activities:Enabled` (default `false`)** — `searchActivities` is fully built
+      and tested but excluded from the tool list offered to the model until this flag flips on,
+      independent of which provider is wired up. Kept off pending Viator sandbox key activation;
+      flipping it on is a one-line config change, no code changes needed.
 - [x] **Preference-aware output:** stored preferences flow into generate-itinerary and chat prompts (Profile UI in Slice 1).
 - [x] **Smart gap-fill:** `suggestGapFill` tool analyzes empty schedule slots (Slice 3).
 - [x] **Streaming responses** in chat UI; trip-change activity rail with **batch undo** (Slice 4).
@@ -122,3 +126,10 @@
   round trip end to end and correct any response field names that don't match; consider whether
   `/products/search` (destination-ID-based, supports date/price/rating filters) is worth the extra
   `/destinations` resolution step once Basic Access's freetext search proves too coarse.
+- **2026-07-17** — **Kill switch.** Added `Activities:Enabled` (config, default `false`) as a
+  dedicated gate on whether `searchActivities` appears in the model's tool list at all —
+  `AiToolSchemas.All(bool activitiesEnabled)` filters it out when disabled. Lets the whole feature
+  stay merged, built, and tested while remaining fully inert in production until the Viator key is
+  confirmed working; re-enabling needs zero code changes, just flipping the flag. Two new tests
+  lock in both states of the switch directly against `AiToolSchemas.All`. **Tests: backend
+  242/242.**

@@ -145,6 +145,20 @@ public class AiToolExecutorTests
     }
 
     [Fact]
+    public void ToolSchemas_ActivitiesDisabled_ExcludesSearchActivities()
+    {
+        var tools = AiToolSchemas.All(activitiesEnabled: false);
+        Assert.DoesNotContain(tools, t => t.Name == "searchActivities");
+    }
+
+    [Fact]
+    public void ToolSchemas_ActivitiesEnabled_IncludesSearchActivities()
+    {
+        var tools = AiToolSchemas.All(activitiesEnabled: true);
+        Assert.Contains(tools, t => t.Name == "searchActivities");
+    }
+
+    [Fact]
     public async Task SearchPlaces_UsesFakeProvider()
     {
         var (executor, trip, _) = Build();
@@ -272,7 +286,8 @@ public class AiPlanningServiceTests
                 new Wander.Api.Weather.FakeWeatherProvider(),
                 new Wander.Api.Activities.FakeActivityProvider()),
             new AiChatRateLimiter(new Microsoft.Extensions.Caching.Memory.MemoryCache(
-                new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
+                new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())),
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
 
     private static WanderDbContext NewDb() =>
         new(new DbContextOptionsBuilder<WanderDbContext>()

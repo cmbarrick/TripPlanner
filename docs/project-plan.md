@@ -154,7 +154,10 @@ and discovery layers make it a community product over time.
   anti-fabrication discipline as Phase 6/8's citation validators, applied to tool-calling. Request
   shape confirmed against Viator's official Postman collection and schema-validated live against
   the real sandbox (clean `401` from auth, not a `400`); response field names still need
-  confirming once the sandbox key finishes activating. Backend **240/240**. See
+  confirming once the sandbox key finishes activating. **Hidden behind `Activities:Enabled`
+  (default off)** — fully built and tested, but excluded from the model's tool list until the
+  Viator key is confirmed working; re-enabling is a one-line config flip, no code changes.
+  Backend **242/242**. See
   [`phase-5-summary.md`](./phase-5-summary.md) and
   [`phases/phase-5-ai-assistant/README.md`](../phases/phase-5-ai-assistant/README.md).
 
