@@ -146,7 +146,16 @@ and discovery layers make it a community product over time.
   SSE chat + tools, batch undo, input guard + chat rate limit). Azure OpenAI wired on dev App Service.
   Chat + Generate on the **Assistant tab**; trip planner AI dock is placeholder + undo after chat.
   Deferred by decision: in-trip composer, integration tests, golden AI evals, automated E2E, expanded
-  safety evals, undo on Generate Apply. See [`phase-5-summary.md`](./phase-5-summary.md) and
+  safety evals, undo on Generate Apply. **Extended (2026-07-17):** a `searchActivities` tool gives
+  the assistant real, currently-bookable tour/activity options (Viator's Basic-Access affiliate
+  API — no traffic-minimum gate, unlike GetYourGuide's partner program). The model can only
+  reference a result by id; the server re-resolves it before ever writing a booking URL/price, so
+  a hallucinated or stale id fails loud instead of silently fabricating a link — the same
+  anti-fabrication discipline as Phase 6/8's citation validators, applied to tool-calling. Request
+  shape confirmed against Viator's official Postman collection and schema-validated live against
+  the real sandbox (clean `401` from auth, not a `400`); response field names still need
+  confirming once the sandbox key finishes activating. Backend **240/240**. See
+  [`phase-5-summary.md`](./phase-5-summary.md) and
   [`phases/phase-5-ai-assistant/README.md`](../phases/phase-5-ai-assistant/README.md).
 
 ### Phase 6 — AI Recap & Export  ✅ **Complete (2026-06-12)**

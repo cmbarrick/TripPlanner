@@ -34,7 +34,11 @@ public static class AiToolSchemas
             """),
         new(
             "addItineraryItem",
-            "Add a tentative stop to a day on the trip. Never set confirmation numbers or booking URLs.",
+            "Add a tentative stop to a day on the trip. Never set confirmation numbers. Never write a " +
+            "bookingUrl, price, or rating yourself — there is no such field here. If this stop is a " +
+            "bookable activity found via searchActivities, pass its activityId and the server attaches " +
+            "the real booking link and price; if you didn't search first, omit activityId entirely " +
+            "rather than guessing one.",
             """
             {
               "type": "object",
@@ -48,9 +52,30 @@ public static class AiToolSchemas
                 "address": { "type": "string" },
                 "placeId": { "type": "string" },
                 "cost": { "type": "number" },
-                "notes": { "type": "string" }
+                "notes": { "type": "string" },
+                "activityId": {
+                  "type": "string",
+                  "description": "activityId from a prior searchActivities result, if this stop is that bookable activity. Omit if not applicable — never invent one."
+                }
               },
               "required": ["dayNumber", "type", "title"],
+              "additionalProperties": false
+            }
+            """),
+        new(
+            "searchActivities",
+            "Search real, currently-bookable tours/activities near a day's stops. Returns actual " +
+            "options with real prices and booking links — never present an activity to the traveler " +
+            "unless it came from this tool.",
+            """
+            {
+              "type": "object",
+              "properties": {
+                "dayNumber": { "type": "integer", "description": "Day to find activities near (uses that day's located stops, or the trip destination)" },
+                "query": { "type": "string", "description": "Optional keyword filter, e.g. 'walking tour' or 'cooking class'" },
+                "limit": { "type": "integer", "description": "Max results (1-10)", "default": 5 }
+              },
+              "required": ["dayNumber"],
               "additionalProperties": false
             }
             """),

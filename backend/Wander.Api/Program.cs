@@ -110,6 +110,20 @@ else
             sp.GetRequiredService<Microsoft.Extensions.Caching.Distributed.IDistributedCache>()));
 }
 
+// Activity search (Phase 9): real bookable options for the AI planning assistant's
+// searchActivities tool. Swap ViatorActivityProvider for FakeActivityProvider automatically when
+// no API key is configured (e.g. CI, or before a Viator affiliate account exists).
+var viatorApiKey = builder.Configuration["Activities:ViatorApiKey"];
+if (!string.IsNullOrWhiteSpace(viatorApiKey))
+{
+    builder.Services.AddHttpClient<Wander.Api.Activities.ViatorActivityProvider>();
+    builder.Services.AddScoped<Wander.Api.Activities.IActivityProvider, Wander.Api.Activities.ViatorActivityProvider>();
+}
+else
+{
+    builder.Services.AddSingleton<Wander.Api.Activities.IActivityProvider, Wander.Api.Activities.FakeActivityProvider>();
+}
+
 // Application Insights (SDK 3.x is OpenTelemetry-based and validates the connection string
 // eagerly at startup). Only enable it for a *valid* connection string: a non-empty but invalid
 // value — e.g. an unresolved "@Microsoft.KeyVault(...)" reference during the brief RBAC

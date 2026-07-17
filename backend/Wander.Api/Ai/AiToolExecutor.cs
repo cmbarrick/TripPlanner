@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Wander.Api.Activities;
 using Wander.Api.Data;
 using Wander.Api.Models;
 using Wander.Api.Places;
@@ -25,7 +26,8 @@ public interface IAiToolExecutor
 public sealed class AiToolExecutor(
     ITripRepository trips,
     IPlaceProvider places,
-    IWeatherProvider weather) : IAiToolExecutor
+    IWeatherProvider weather,
+    IActivityProvider activities) : IAiToolExecutor
 {
     public async Task<AiToolExecutionResult> ExecuteAsync(
         Trip trip,
@@ -41,12 +43,51 @@ public sealed class AiToolExecutor(
         {
             "searchPlaces" => await SearchPlacesAsync(trip, root, ct),
             "getWeather" => await GetWeatherAsync(trip, root, ct),
-            "addItineraryItem" => AddItem(trip, ownerId, root),
+            "addItineraryItem" => await AddItem(trip, ownerId, root, ct),
             "moveItem" => MoveItem(trip, ownerId, root),
             "removeItem" => RemoveItem(trip, ownerId, root),
             "suggestGapFill" => SuggestGapFill(trip, root),
+            "searchActivities" => await SearchActivitiesAsync(trip, root, ct),
             _ => throw new AiToolExecutionException($"Unknown tool '{toolName}'."),
         };
+    }
+
+    private async Task<AiToolExecutionResult> SearchActivitiesAsync(Trip trip, JsonElement root, CancellationToken ct)
+    {
+        var dayNumber = AiToolArguments.RequireInt(root, "dayNumber");
+        var day = RequireDay(trip, dayNumber);
+        var query = AiToolArguments.OptionalString(root, "query");
+        var limit = Math.Clamp(AiToolArguments.OptionalInt(root, "limit", 5), 1, 10);
+
+        // Bias toward what's actually scheduled on the day when something's located there yet;
+        // otherwise the trip destination is still a perfectly good search hint (Viator-style
+        // providers key off a place name, not raw coordinates — see ViatorActivityProvider).
+        var located = day.Items.FirstOrDefault(i => i.DeletedAt is null && !string.IsNullOrWhiteSpace(i.LocationName));
+        var locationHint = located?.LocationName ?? trip.Destination;
+
+        IReadOnlyList<ActivityOption> results;
+        try
+        {
+            results = await activities.SearchAsync(locationHint, day.Date, query, trip.Currency, limit, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new AiToolExecutionException("Activity search is temporarily unavailable.");
+        }
+
+        var payload = results.Select(a => new
+        {
+            a.ActivityId,
+            a.Title,
+            a.Description,
+            a.PriceFrom,
+            a.Currency,
+            a.Rating,
+        }).ToList();
+
+        return new AiToolExecutionResult(
+            JsonSerializer.Serialize(new { activities = payload }),
+            []);
     }
 
     private async Task<AiToolExecutionResult> SearchPlacesAsync(Trip trip, JsonElement root, CancellationToken ct)
@@ -137,7 +178,7 @@ public sealed class AiToolExecutor(
             []);
     }
 
-    private AiToolExecutionResult AddItem(Trip trip, string ownerId, JsonElement root)
+    private async Task<AiToolExecutionResult> AddItem(Trip trip, string ownerId, JsonElement root, CancellationToken ct)
     {
         var dayNumber = AiToolArguments.RequireInt(root, "dayNumber");
         var day = RequireDay(trip, dayNumber);
@@ -158,6 +199,20 @@ public sealed class AiToolExecutor(
         if (start is { } s && end is { } e && e < s)
             throw new AiToolExecutionException("End time must be on or after start time.");
 
+        // The model can only ever *reference* an activity by id from a prior searchActivities
+        // result — it never supplies a URL/price itself. Re-resolving here (rather than trusting
+        // anything about the id beyond its existence) means a stale or hallucinated id just fails
+        // loud instead of silently attaching nothing, or worse, something wrong.
+        string? bookingUrl = null;
+        var activityId = AiToolArguments.OptionalString(root, "activityId");
+        if (!string.IsNullOrWhiteSpace(activityId))
+        {
+            var option = await activities.GetDetailsAsync(activityId, ct)
+                ?? throw new AiToolExecutionException("That activity is no longer available — search again.");
+            bookingUrl = option.BookingUrl;
+            cost ??= option.PriceFrom;
+        }
+
         var item = new ItineraryItem
         {
             Type = type,
@@ -171,6 +226,7 @@ public sealed class AiToolExecutor(
             Cost = cost,
             Currency = trip.Currency,
             Notes = AiToolArguments.OptionalString(root, "notes"),
+            BookingUrl = bookingUrl,
         };
 
         var created = trips.AddItem(trip.Id, ownerId, day.Id, item)
@@ -185,6 +241,7 @@ public sealed class AiToolExecutor(
                 dayNumber,
                 title = created.Title,
                 status = created.Status.ToString(),
+                bookingUrl = created.BookingUrl,
             }),
             [change],
             [undo]);

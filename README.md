@@ -84,8 +84,11 @@ publish sheet. Test health at last close: backend **236/236**, Functions **3/3**
   transcription verified end-to-end**, reflection prompts + reminders, media via ownership-checked
   streaming + short-lived SAS, and **offline-first** text/prompt capture. See [`phase-4-summary.md`](./docs/phase-4-summary.md).
 - **Phase 5 — AI planning assistant:** "Generate itinerary" + SSE chat assistant with tool-calling
-  (search places, add/move items, gap-fill), preference-aware, per-user token quotas, batch undo,
-  input guard + rate limit. Azure OpenAI on dev. See [`phase-5-summary.md`](./docs/phase-5-summary.md).
+  (search places, add/move items, gap-fill, **search real bookable activities**), preference-aware,
+  per-user token quotas, batch undo, input guard + rate limit. Azure OpenAI on dev. The assistant
+  can only recommend a tour/activity it actually searched for (Viator's affiliate API) and can only
+  attach a booking link the server itself resolved — never one it wrote — so recommendations are
+  never fabricated. See [`phase-5-summary.md`](./docs/phase-5-summary.md).
 - **Phase 6 — AI recap & export:** Grounded, versioned recaps (trip/day/event) from notes + transcripts
   with per-section citations + historical weather actuals; tone picker; **PDF export** (QuestPDF) and an
   unlisted `/share/recaps/{token}` page; in-trip AI dock composer. See [`phase-6-summary.md`](./docs/phase-6-summary.md).

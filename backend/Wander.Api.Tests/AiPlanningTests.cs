@@ -93,6 +93,58 @@ public class AiToolExecutorTests
     }
 
     [Fact]
+    public async Task SearchActivities_ReturnsRealFakeOptions()
+    {
+        var (executor, trip, _) = Build();
+        var args = """{"dayNumber":1,"query":"tour","limit":3}""";
+
+        var result = await executor.ExecuteAsync(trip, OwnerId, "searchActivities", args, CancellationToken.None);
+
+        Assert.Contains("activities", result.ResultJson);
+        Assert.Contains("fake_act_", result.ResultJson);
+        // The model is never shown a bookingUrl at search time -- only activityId, so it can't
+        // hand-type a link even if it tried; see AiToolExecutor.SearchActivitiesAsync.
+        Assert.DoesNotContain("bookingUrl", result.ResultJson);
+    }
+
+    [Fact]
+    public async Task AddItineraryItem_WithActivityId_AttachesRealBookingUrlFromProvider()
+    {
+        var (executor, trip, ctx) = Build();
+        var args = """{"dayNumber":1,"type":"Activity","title":"Colosseum tour","activityId":"fake_act_colosseum_tour"}""";
+
+        var result = await executor.ExecuteAsync(trip, OwnerId, "addItineraryItem", args, CancellationToken.None);
+
+        Assert.Contains("viator.com", result.ResultJson);
+        var saved = ctx.ItineraryItems.Single();
+        Assert.Equal("https://www.viator.com/tours/Rome/fake-colosseum-tour/d511-fake001", saved.BookingUrl);
+        // The provider's real price fills in when the model didn't separately supply a cost.
+        Assert.Equal(49.00m, saved.Cost);
+    }
+
+    [Fact]
+    public async Task AddItineraryItem_WithUnknownActivityId_ThrowsRatherThanSilentlyAddingNoLink()
+    {
+        var (executor, trip, ctx) = Build();
+        var args = """{"dayNumber":1,"type":"Activity","title":"Ghost tour","activityId":"not-a-real-activity"}""";
+
+        await Assert.ThrowsAsync<AiToolExecutionException>(() =>
+            executor.ExecuteAsync(trip, OwnerId, "addItineraryItem", args, CancellationToken.None));
+        Assert.Empty(ctx.ItineraryItems);
+    }
+
+    [Fact]
+    public async Task AddItineraryItem_WithoutActivityId_LeavesBookingUrlNull()
+    {
+        var (executor, trip, ctx) = Build();
+        var args = """{"dayNumber":1,"type":"Food","title":"Coffee"}""";
+
+        await executor.ExecuteAsync(trip, OwnerId, "addItineraryItem", args, CancellationToken.None);
+
+        Assert.Null(ctx.ItineraryItems.Single().BookingUrl);
+    }
+
+    [Fact]
     public async Task SearchPlaces_UsesFakeProvider()
     {
         var (executor, trip, _) = Build();
@@ -144,7 +196,8 @@ public class AiToolExecutorTests
         var executor = new AiToolExecutor(
             new EfCoreTripRepository(ctx),
             new Wander.Api.Places.FakePlaceProvider(),
-            new Wander.Api.Weather.FakeWeatherProvider());
+            new Wander.Api.Weather.FakeWeatherProvider(),
+            new Wander.Api.Activities.FakeActivityProvider());
         return (executor, trip, ctx);
     }
 
@@ -216,7 +269,8 @@ public class AiPlanningServiceTests
             new AiToolExecutor(
                 new EfCoreTripRepository(db),
                 new Wander.Api.Places.FakePlaceProvider(),
-                new Wander.Api.Weather.FakeWeatherProvider()),
+                new Wander.Api.Weather.FakeWeatherProvider(),
+                new Wander.Api.Activities.FakeActivityProvider()),
             new AiChatRateLimiter(new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
 

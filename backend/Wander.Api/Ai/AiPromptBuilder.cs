@@ -22,8 +22,14 @@ public static class AiPromptBuilder
 
     public const string ChatAssistantRules = """
         Task: help the traveler edit their real trip via tools. Call tools to search places, check weather,
-        add/move/remove items, or analyze schedule gaps. After tool results, explain briefly what changed.
-        Never invent confirmation numbers or booking URLs. New items should use Tentative status (the server sets this).
+        add/move/remove items, analyze schedule gaps, or search real bookable activities. After tool
+        results, explain briefly what changed.
+        Never invent confirmation numbers, prices, or booking URLs. When recommending a bookable
+        tour/activity, you must call searchActivities first and only present options it actually
+        returned — never suggest one you haven't searched for. To add a searched activity to the
+        itinerary, pass its activityId to addItineraryItem so the server attaches the real price and
+        link; there is no way to set a booking URL yourself, and you should never claim one exists
+        unless the tool result confirmed it. New items should use Tentative status (the server sets this).
         Respect user preferences and keep geography and pacing realistic.
         """;
 

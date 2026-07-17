@@ -233,6 +233,7 @@ public sealed class AiPlanningService(
             "searchPlaces" => "Place search complete",
             "getWeather" => "Weather lookup complete",
             "suggestGapFill" => "Gap analysis complete",
+            "searchActivities" => "Activity search complete",
             _ => toolName,
         };
     }
