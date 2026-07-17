@@ -249,7 +249,15 @@ public class NotesController : ControllerBase
         if (request.BodyText is { Length: > Note.MaxBodyLength })
             return BadRequest(new { error = $"Note body cannot exceed {Note.MaxBodyLength} characters." });
 
-        var updated = _notes.UpdateBody(noteId, ownerId, request.BodyText);
+        Note? updated;
+        try
+        {
+            updated = _notes.UpdateBody(noteId, ownerId, request.BodyText, request.Version);
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(new { title = ex.Message });
+        }
         if (updated is null)
             return NotFound();
 
@@ -322,7 +330,10 @@ public record CreateNoteRequest(
     Guid? PromptId,
     string? PromptText = null);
 
-public record UpdateNoteRequest(string? BodyText);
+/// <summary>Note edit. <see cref="Version"/> is the concurrency token from the note the client last
+/// read; defaults to 0 for older/untyped clients, which will only ever collide with a genuinely
+/// concurrent edit (see <see cref="Wander.Api.Data.ConcurrencyConflictException"/>).</summary>
+public record UpdateNoteRequest(string? BodyText, uint Version = 0);
 
 /// <summary>A signed, time-limited direct URL for a media asset.</summary>
 public record MediaSasResponse(string Url, DateTimeOffset ExpiresAt);

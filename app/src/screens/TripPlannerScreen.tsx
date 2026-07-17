@@ -836,8 +836,13 @@ function JournalPanel({
             tripId={trip.id}
             anchorLabel={labelFor(note)}
             onDelete={() => deleteNote.mutate(note.id)}
-            onEdit={(bodyText) => updateNote.mutate({ noteId: note.id, bodyText })}
+            onEdit={(bodyText) => updateNote.mutate({ noteId: note.id, bodyText, version: note.version })}
             savingEdit={updateNote.isPending && updateNote.variables?.noteId === note.id}
+            editError={
+              updateNote.isError && updateNote.variables?.noteId === note.id
+                ? (updateNote.error as Error).message
+                : null
+            }
           />
         ))
       )}

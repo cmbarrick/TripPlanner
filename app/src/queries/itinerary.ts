@@ -6,6 +6,7 @@ import {
   createWishlistItem,
   deleteItem,
   deletePackingItem,
+  isConflictError,
   moveItem,
   reorderBacklog,
   reorderDayItems,
@@ -64,6 +65,11 @@ export function useUpdateItemMutation() {
     mutationFn: ({ tripId, itemId, input }: { tripId: string; itemId: string; input: ItineraryItemInput }) =>
       updateItem(tripId, itemId, input),
     onSuccess: invalidate,
+    // A 409 means someone else's edit already landed — refetch so the planner reflects their
+    // change instead of staying pinned to what's now stale.
+    onError: (e) => {
+      if (isConflictError(e)) invalidate();
+    },
   });
 }
 

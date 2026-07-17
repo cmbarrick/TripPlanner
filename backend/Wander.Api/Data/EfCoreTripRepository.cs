@@ -81,6 +81,11 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         if (existing is null)
             return null;
 
+        // The caller's Version is whatever it last read; setting it as the tracked entry's
+        // *original* value is what makes EF Core's concurrency check compare against it (rather
+        // than the value silently reloaded from the DB row we just queried above).
+        dbContext.Entry(existing).Property("Version").OriginalValue = updated.Version;
+
         existing.Title = updated.Title;
         existing.Destination = updated.Destination;
         existing.StartDate = updated.StartDate;
@@ -93,7 +98,14 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         TripDaySync.Sync(dbContext, existing, ownerId);
-        dbContext.SaveChanges();
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConcurrencyConflictException();
+        }
 
         return GetById(id, ownerId);
     }
@@ -183,6 +195,11 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         if (item is null)
             return null;
 
+        // See the matching comment in Update(Trip) — this is what makes the concurrency check
+        // compare against what the caller actually last read, not the value FindOwnedItem just
+        // queried for us above.
+        dbContext.Entry(item).Property("Version").OriginalValue = updated.Version;
+
         item.Type = updated.Type;
         item.Status = updated.Status;
         item.Title = updated.Title;
@@ -200,7 +217,14 @@ public class EfCoreTripRepository(WanderDbContext dbContext) : ITripRepository
         item.BookingUrl = updated.BookingUrl;
         item.Notes = updated.Notes;
         item.UpdatedAt = DateTimeOffset.UtcNow;
-        dbContext.SaveChanges();
+        try
+        {
+            dbContext.SaveChanges();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConcurrencyConflictException();
+        }
         return item;
     }
 

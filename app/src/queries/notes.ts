@@ -8,6 +8,7 @@ import {
   updateNote,
   getTripNotes,
   isOfflineError,
+  isConflictError,
   CreateNoteInput,
   CreatePhotoNoteFields,
   CreateVoiceNoteFields,
@@ -256,13 +257,13 @@ export function useDeleteNoteMutation(tripId: string) {
 export function useUpdateNoteMutation(tripId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ noteId, bodyText }: { noteId: string; bodyText: string }) => {
+    mutationFn: async ({ noteId, bodyText, version }: { noteId: string; bodyText: string; version?: number }) => {
       if (isTempNoteId(noteId)) {
         await enqueueNoteUpdate(tripId, noteId, bodyText);
         return { offline: true, noteId, bodyText };
       }
       try {
-        await updateNote(noteId, bodyText);
+        await updateNote(noteId, bodyText, version);
         return { offline: false, noteId, bodyText };
       } catch (e) {
         if (!isOfflineError(e)) throw e;
@@ -272,6 +273,11 @@ export function useUpdateNoteMutation(tripId: string) {
     },
     onSuccess: ({ offline }) => {
       if (!offline) queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
+    },
+    // A 409 means someone else's edit already landed — refetch so this note shows their change
+    // instead of staying pinned to what's now stale.
+    onError: (e) => {
+      if (isConflictError(e)) queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
     },
   });
 }

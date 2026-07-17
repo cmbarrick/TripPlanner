@@ -33,6 +33,10 @@ export interface ItineraryItem {
   bookingUrl?: string | null; // e.g. GetYourGuide voucher / reservation link
   notes?: string | null;
   sortOrder: number;
+  /** Optimistic concurrency token (Phase 9) — round-trip whatever value was last read. A stale
+   *  update (someone else changed this since) is rejected with a 409 rather than silently
+   *  overwritten; see `isConflictError` in api.ts. */
+  version: number;
 }
 
 export interface PackingItem {
@@ -91,6 +95,9 @@ export interface Note {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
+  /** Optimistic concurrency token (Phase 9) — see the matching field on ItineraryItem. Absent
+   *  (undefined) on a client-only optimistic note that hasn't synced yet. */
+  version?: number;
   /** Client-only: set on optimistic notes that are queued in the offline outbox and not yet synced. */
   pendingSync?: boolean;
   /** Client-only: set on an optimistic voice/photo note so the UI can show what kind of media is
@@ -122,6 +129,8 @@ export interface Trip {
    * 'Viewer'. Absent on trips the server didn't stamp (treated as 'Owner' — your own trips).
    */
   accessRole?: TripRole | null;
+  /** Optimistic concurrency token (Phase 9) — see the matching field on ItineraryItem. */
+  version: number;
 }
 
 export type TripRole = 'Owner' | 'Editor' | 'Viewer';

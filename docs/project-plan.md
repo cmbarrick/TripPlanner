@@ -3,7 +3,9 @@
 > Status: **Draft v2** · Owner: Project Manager · Last updated: 2026-07-17
 > Progress: Phases 0–8 **closed** on dev. **Phase 9 — Offline, Polish & Launch** is in progress:
 > the offline outbox (Phase 4) now covers voice/photo media, pending captures survive a reload,
-> and there's a live sync-status indicator with manual retry and upload progress — see
+> there's a live sync-status indicator with manual retry and upload progress, and concurrent edits
+> to a trip/item/note are now detected (optimistic concurrency via Postgres's `xmin`) and rejected
+> with a clear error instead of silently overwriting one editor's change — see
 > [`phases/phase-9-offline-polish-launch`](../phases/phase-9-offline-polish-launch).
 
 A phased delivery plan that ships a usable product early and layers value with each phase.
@@ -242,7 +244,18 @@ and discovery layers make it a community product over time.
   to `XMLHttpRequest` for upload-progress events, so voice/photo captures now show "Uploading…
   NN%". Hand-verified live end to end: online upload still works, offline capture shows the bar,
   manual retry while blocked stays blocked, retry once reconnected syncs and clears the bar with no
-  duplicate. App **123/123**, `tsc` clean. See
+  duplicate. App **123/123**, `tsc` clean. **Conflict handling now hardened (2026-07-17):** research
+  found the backend was pure last-write-wins with zero conflict detection (no `RowVersion`/`xmin`/
+  ETag anywhere); soft-delete was already in place for every core entity, so that part of the task
+  was already done. `Trip`/`ItineraryItem`/`Note` gained a `Version` mapped onto Postgres's `xmin`
+  system column (no new column — `xmin` already exists on every row); a stale write now throws and
+  is mapped to `409 Conflict` with a clear message instead of silently overwriting the other
+  editor's change. Client round-trips `version` and refetches + surfaces the message on a conflict;
+  `NoteCard`'s inline editor stays open with the draft intact instead of closing unconditionally.
+  Backend **236/236** (+5), app **125/125** (+2), `tsc` clean. Hand-verified with genuinely
+  concurrent writes (curl racing the browser) against real Postgres — all three endpoints 409
+  correctly and the losing write never persisted. Scoped as detection + fail-loud, not a CRDT
+  rewrite, matching `docs/architecture.md`'s existing last-write-wins-v1 decision. See
   [`phases/phase-9-offline-polish-launch`](../phases/phase-9-offline-polish-launch).
 
 ### Later / v2 — Monetization & advanced

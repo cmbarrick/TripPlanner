@@ -87,7 +87,7 @@ public class RecapExportServiceTests
         public IEnumerable<Note> GetAllForTrip(Guid tripId) => [];
         public Note? Add(Guid tripId, string ownerId, Note note) => null;
         public Note AddAuthored(Guid tripId, string authorOwnerId, Note note) => note;
-        public Note? UpdateBody(Guid noteId, string ownerId, string? bodyText) => null;
+        public Note? UpdateBody(Guid noteId, string ownerId, string? bodyText, uint expectedVersion) => null;
         public bool Delete(Guid noteId, string ownerId) => false;
         public MediaAsset? GetMediaAsset(Guid mediaAssetId) => null;
         public Guid? GetTripIdForMediaAsset(Guid mediaAssetId) => null;

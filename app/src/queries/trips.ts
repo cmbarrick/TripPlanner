@@ -4,6 +4,7 @@ import {
   deleteTrip,
   getTrips,
   updateTrip,
+  isConflictError,
   TripInput,
 } from '../api';
 import { Trip } from '../types';
@@ -43,6 +44,11 @@ export function useUpdateTripMutation() {
           : current
       );
       queryClient.invalidateQueries({ queryKey: tripsQueryKey });
+    },
+    // A 409 means someone else's edit already landed — refetch so the cache (and the form, once
+    // reopened) reflects their change instead of staying pinned to what's now stale.
+    onError: (e) => {
+      if (isConflictError(e)) queryClient.invalidateQueries({ queryKey: tripsQueryKey });
     },
   });
 }

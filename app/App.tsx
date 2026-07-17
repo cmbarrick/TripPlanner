@@ -161,7 +161,7 @@ function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSess
   const handleSubmitTripForm = (input: TripInput) => {
     if (editingTripId) {
       updateTrip.mutate(
-        { id: editingTripId, input },
+        { id: editingTripId, input: { ...input, version: editingTripData?.version } },
         { onSuccess: () => closeTripForm() }
       );
     } else {
@@ -184,7 +184,11 @@ function AuthedApp({ authSession }: { authSession: ReturnType<typeof useAuthSess
     if (!openTripId) return;
     try {
       if (editingItemId) {
-        await updateItem.mutateAsync({ tripId: openTripId, itemId: editingItemId, input });
+        await updateItem.mutateAsync({
+          tripId: openTripId,
+          itemId: editingItemId,
+          input: { ...input, version: editingItem?.version },
+        });
         // Day changed (including scheduling from / unscheduling to the backlog).
         if (originalDayId !== dayId) {
           await moveItem.mutateAsync({ tripId: openTripId, itemId: editingItemId, targetDayId: dayId });

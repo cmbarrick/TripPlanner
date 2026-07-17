@@ -81,6 +81,9 @@ export interface TripInput {
   estimatedCost: number;
   currency: string;
   timeZoneId?: string | null;
+  /** Optimistic concurrency token — pass the trip's current `version` when editing. Omitted (or 0)
+   *  on create, where it's meaningless. */
+  version?: number;
 }
 
 export class ApiError extends Error {
@@ -99,6 +102,14 @@ export class ApiError extends Error {
 export function isOfflineError(e: unknown): boolean {
   if (e instanceof ApiError) return e.status === undefined;
   return true;
+}
+
+/** True for a 409 — the server rejected the write because its concurrency token (`version`) was
+ *  stale: someone else changed this record since the caller last read it (Phase 9). The caller
+ *  should refetch and let the user decide whether to reapply their edit, rather than retrying the
+ *  same request (which would just 409 again) or silently discarding it. */
+export function isConflictError(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 409;
 }
 
 async function sendJson<T>(path: string, method: string, body?: unknown): Promise<T> {
@@ -163,6 +174,9 @@ export interface ItineraryItemInput {
   confirmationNo?: string | null;
   bookingUrl?: string | null;
   notes?: string | null;
+  /** Optimistic concurrency token — pass the item's current `version` when editing. Omitted (or 0)
+   *  on create, where it's meaningless. */
+  version?: number;
 }
 
 export interface PlaceCandidate {
@@ -957,8 +971,8 @@ export async function deleteNote(noteId: string): Promise<void> {
   await sendJson<void>(`/api/notes/${noteId}`, 'DELETE');
 }
 
-export async function updateNote(noteId: string, bodyText: string): Promise<Note> {
-  return sendJson<Note>(`/api/notes/${noteId}`, 'PUT', { bodyText });
+export async function updateNote(noteId: string, bodyText: string, version?: number): Promise<Note> {
+  return sendJson<Note>(`/api/notes/${noteId}`, 'PUT', { bodyText, version: version ?? 0 });
 }
 
 export interface CreateVoiceNoteFields {

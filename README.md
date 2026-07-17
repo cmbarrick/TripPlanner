@@ -66,7 +66,7 @@ environment (web target). The app runs end-to-end on Azure dev: plan a trip → 
 co-edit it with friends in real time → publish a recap publicly after the trip ends, PII-reviewed
 and moderated by real Azure AI Content Safety with a reportable/reviewable queue → find it via
 search or ask a grounded, cited RAG assistant about it, all from the client's **Discover** tab and
-publish sheet. Test health at last close: backend **231/231**, Functions **3/3**, app **123/123** +
+publish sheet. Test health at last close: backend **236/236**, Functions **3/3**, app **125/125** +
 `tsc` clean. See the per-phase summaries in [`/docs`](./docs).
 
 - **Phase 0 — Foundation (local-first):** PostgreSQL-backed API via EF Core (migrations), per-user
@@ -121,26 +121,33 @@ publish sheet. Test health at last close: backend **231/231**, Functions **3/3**
   upload-progress event neither web nor native `fetch` has). Hand-verified live end to end: capture
   offline → pending indicator → reconnect → synced with no duplicate; survives a reload while
   offline; retry while still blocked stays blocked, retry once reconnected clears it.
+  **Conflict handling hardened:** `Trip`/`ItineraryItem`/`Note` gained a `Version` mapped onto
+  Postgres's `xmin` system column (no new column — every row already has one); a stale write from a
+  concurrent editor now fails with `409 Conflict` and a clear message instead of silently
+  overwriting the other editor's change, and the client refetches + keeps the losing edit's draft
+  visible rather than discarding it. Hand-verified with genuinely concurrent writes (curl racing
+  the browser) against real Postgres — the losing write never persisted.
   See [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch).
 
 ## What's next & handoff (read this if you're the next agent)
 
 **Where we are:** Phases 0–8 are closed on dev (web). **Phase 9 (Offline, Polish & Launch)** is in
-progress: the offline outbox now covers voice/photo media, pending captures survive a reload, and
-there's a live sync-status indicator with manual retry and upload progress (see above), all
+progress: the offline outbox now covers voice/photo media, pending captures survive a reload,
+there's a live sync-status indicator with manual retry and upload progress, and concurrent edits to
+a trip/item/note are now detected and rejected rather than silently overwritten (see above) — all
 hand-verified live against a running dev API. Planning docs and per-phase summaries in
 [`/docs`](./docs) are current, including
 [`phase-8-summary.md`](./docs/phase-8-summary.md).
 
 **What to continue — Phase 9 (Offline, Polish & Launch):**
 1. Read [`phases/phase-9-offline-polish-launch`](./phases/phase-9-offline-polish-launch) for the
-   phase plan and progress log. Offline media, reload-persistence, and the Sync status UI (offline
-   indicator, pending count, upload progress, manual retry) are all done — see above.
-2. Conflict handling: Phase 7 shipped last-write-wins + presence; operational-merge/CRDT handling
-   is a documented backlog item.
-3. Offline data layer (local SQLite as UI source of truth), performance & accessibility passes,
+   phase plan and progress log. Offline media, reload-persistence, Sync status UI, and conflict
+   handling (optimistic concurrency for trip/item/note edits) are all done — see above. Still open
+   within conflict handling: the bulk `ReorderDayItems` endpoint still blind-overwrites sort order,
+   and a delete-while-someone-else-is-editing race still returns a plain 404.
+2. Offline data layer (local SQLite as UI source of truth), performance & accessibility passes,
    onboarding, store assets, final security/privacy review.
-4. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
+3. Backlog, pick up opportunistically: PII detection for names/addresses/faces (needs a real NLP
    provider — regex only covers emails/phones today), location coarsening on public recaps, an async
    indexing job (indexing runs synchronously on publish/approve today), a golden RAG eval corpus
    against a real model, a "clone this itinerary" action from discovery citations, native mobile

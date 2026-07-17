@@ -563,4 +563,163 @@ public class EfCoreTripRepositoryTests
             Assert.Equal(new[] { "C", "A", "B" }, trip.UnscheduledItems.Select(i => i.Title).ToArray());
         }
     }
+
+    // ---- Optimistic concurrency (Phase 9) --------------------------------
+    //
+    // Postgres bumps every row's `xmin` automatically on each UPDATE (MVCC) — that's what the real
+    // concurrency check compares against in production. The in-memory provider used here doesn't
+    // simulate that auto-bump for a custom `xid`-typed property, so these tests bump it explicitly
+    // to stand in for "someone else's write landed first"; the actual comparison-and-throw logic
+    // under test (dbContext.Entry(...).Property("Version").OriginalValue vs. the stored value) is
+    // the same generic EF Core SaveChanges machinery either way, not something the provider fakes.
+
+    private static void SimulateConcurrentItemWrite(WanderDbContext ctx, Guid itemId, uint newVersion)
+    {
+        var tracked = ctx.ItineraryItems.Single(i => i.Id == itemId);
+        ctx.Entry(tracked).Property("Version").CurrentValue = newVersion;
+        ctx.SaveChanges();
+    }
+
+    private static void SimulateConcurrentTripWrite(WanderDbContext ctx, Guid tripId, uint newVersion)
+    {
+        var tracked = ctx.Trips.Single(t => t.Id == tripId);
+        ctx.Entry(tracked).Property("Version").CurrentValue = newVersion;
+        ctx.SaveChanges();
+    }
+
+    [Fact]
+    public void UpdateItem_StaleVersion_ThrowsConcurrencyConflict()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId, itemId;
+        uint originalVersion;
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            var created = repo.Add(SampleTrip("owner-a"));
+            tripId = created.Id;
+            var item = repo.AddItem(tripId, "owner-a", created.Days[0].Id,
+                new ItineraryItem { Title = "Museum", Cost = 10m, Currency = "EUR" })!;
+            itemId = item.Id;
+            originalVersion = item.Version;
+        }
+
+        // Someone else's edit lands first and bumps the row's version.
+        using (var ctx = NewContext(db))
+        {
+            SimulateConcurrentItemWrite(ctx, itemId, originalVersion + 1);
+        }
+
+        // This caller is still holding the version from before that write — stale, must be rejected.
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            Assert.Throws<ConcurrencyConflictException>(() =>
+                repo.UpdateItem(tripId, "owner-a", itemId,
+                    new ItineraryItem { Title = "Stale edit", Version = originalVersion, Currency = "EUR" }));
+        }
+
+        // The stale write never landed.
+        using (var ctx = NewContext(db))
+        {
+            var trip = new EfCoreTripRepository(ctx).GetById(tripId, "owner-a")!;
+            Assert.Equal("Museum", trip.Days[0].Items.Single().Title);
+        }
+    }
+
+    [Fact]
+    public void UpdateItem_CurrentVersion_Succeeds()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId, itemId;
+        uint originalVersion;
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            var created = repo.Add(SampleTrip("owner-a"));
+            tripId = created.Id;
+            var item = repo.AddItem(tripId, "owner-a", created.Days[0].Id, new ItineraryItem { Title = "V1", Currency = "EUR" })!;
+            itemId = item.Id;
+            originalVersion = item.Version;
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            var updated = repo.UpdateItem(tripId, "owner-a", itemId,
+                new ItineraryItem { Title = "V2", Version = originalVersion, Currency = "EUR" });
+            Assert.Equal("V2", updated!.Title);
+        }
+    }
+
+    [Fact]
+    public void Update_Trip_StaleVersion_ThrowsConcurrencyConflict()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId;
+        uint originalVersion;
+        using (var ctx = NewContext(db))
+        {
+            var created = new EfCoreTripRepository(ctx).Add(SampleTrip("owner-a"));
+            tripId = created.Id;
+            originalVersion = created.Version;
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            SimulateConcurrentTripWrite(ctx, tripId, originalVersion + 1);
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            Assert.Throws<ConcurrencyConflictException>(() => repo.Update(tripId, "owner-a", new Trip
+            {
+                Title = "Stale rename",
+                Destination = "Porto",
+                StartDate = new DateOnly(2026, 7, 1),
+                EndDate = new DateOnly(2026, 7, 5),
+                Travelers = 2,
+                CoverTheme = "porto",
+                Currency = "EUR",
+                Version = originalVersion,
+            }));
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            Assert.Equal("Test Trip", new EfCoreTripRepository(ctx).GetById(tripId, "owner-a")!.Title);
+        }
+    }
+
+    [Fact]
+    public void Update_Trip_CurrentVersion_Succeeds()
+    {
+        var db = Guid.NewGuid().ToString();
+        Guid tripId;
+        uint originalVersion;
+        using (var ctx = NewContext(db))
+        {
+            var created = new EfCoreTripRepository(ctx).Add(SampleTrip("owner-a"));
+            tripId = created.Id;
+            originalVersion = created.Version;
+        }
+
+        using (var ctx = NewContext(db))
+        {
+            var repo = new EfCoreTripRepository(ctx);
+            var updated = repo.Update(tripId, "owner-a", new Trip
+            {
+                Title = "Renamed",
+                Destination = "Porto",
+                StartDate = new DateOnly(2026, 7, 1),
+                EndDate = new DateOnly(2026, 7, 5),
+                Travelers = 2,
+                CoverTheme = "porto",
+                Currency = "EUR",
+                Version = originalVersion,
+            });
+            Assert.Equal("Renamed", updated!.Title);
+        }
+    }
 }

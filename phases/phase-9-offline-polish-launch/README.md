@@ -28,8 +28,38 @@
       (a still-queued note disappearing from the list across a page reload, even though the op and
       its cached bytes both survive and still sync correctly) is now fixed — see **Sync status UI**
       below.
-- [ ] **Conflict handling:** harden for single + multi-user (builds on Phase 7 merge strategy);
+- [x] **Conflict handling:** harden for single + multi-user (builds on Phase 7 merge strategy);
       soft-delete via `deleted_at`.
+      *(Soft-delete was already in place for every core editable entity — `Trip`, `Day`,
+      `ItineraryItem`, `PackingItem`, `Note` all had `DeletedAt` since earlier phases; nothing to
+      add there. The real gap was concurrency: writes were pure last-write-wins with **zero
+      detection** — two concurrent edits to the same trip/item/note silently overwrote each other,
+      no error, no merge (confirmed by research: no `RowVersion`/`xmin`/ETag anywhere, no
+      `DbUpdateConcurrencyException` handling). Hardening here means detecting and failing loud
+      instead of silently losing data — not a CRDT rewrite; `docs/architecture.md` already commits
+      to last-write-wins as the deliberate v1 strategy, and a full per-field merge/CRDT system stays
+      a documented future item, gated on the current low-conflict usage pattern actually demanding
+      it.)*
+      `Trip`, `ItineraryItem`, and `Note` each gained a `Version` property mapped onto Postgres's
+      `xmin` system column (`WanderDbContext.MapXminConcurrencyToken` — every row already has one,
+      auto-incremented by Postgres on every `UPDATE`, so this needs no new column, no backfill, and
+      the generated migration (`AddConcurrencyTokens`) is a deliberate no-op — see its header
+      comment and https://www.npgsql.org/efcore/modeling/concurrency.html). The client round-trips
+      whatever `version` it last read; `EfCoreTripRepository.Update`/`UpdateItem` and
+      `EfCoreNoteRepository.UpdateBody` set that value as the tracked entity's concurrency-check
+      *original* value before saving, so a stale write throws
+      `DbUpdateConcurrencyException` → caught and re-thrown as `ConcurrencyConflictException` →
+      mapped to `409 Conflict` with a clear message in `TripsController`/`NotesController`. Client:
+      `Trip`/`ItineraryItem`/`Note` gained a `version` field; `TripFormScreen`/`AddActivityScreen`'s
+      submit handlers (in `App.tsx`) inject the currently-edited entity's version into the outgoing
+      request; a new `isConflictError` helper (`api.ts`) detects the 409; the three update mutations
+      (`useUpdateTripMutation`, `useUpdateItemMutation`, `useUpdateNoteMutation`) refetch on conflict
+      so the UI reflects the winning write, and the existing `serverError` surfacing already showed
+      the server's message with no further wiring needed. `NoteCard`'s inline editor specifically
+      now stays open with the user's draft intact on a conflict (previously it closed unconditionally
+      right after calling `onEdit`, before any server response) — an observed
+      saving-then-not-saving transition (via a ref, not a same-tick flag) decides whether to close,
+      so it's robust regardless of how fast the mutation resolves.
 - [x] **Sync status UI:** offline indicator, "pending changes", media upload progress, retry.
       [x] **Pending-changes persistence:** `useTripNotesQuery` (`app/src/queries/notes.ts`) now
       derives its result by overlaying the outbox's queued ops onto the fetched list on every
@@ -100,6 +130,15 @@
       progress reported as `upload.onprogress` fires, a non-length-computable event is ignored, a
       4xx response rejects with the server's `title` message, and a network-level failure rejects
       with `status: undefined` (so `isOfflineError` still treats it as "queue for later").
+- [x] **Unit (concurrency conflicts):** `EfCoreTripRepositoryTests.cs` — a stale `ItineraryItem`/
+      `Trip` version throws `ConcurrencyConflictException` and the losing write never lands; the
+      current version always succeeds. (The in-memory EF Core provider doesn't auto-bump a custom
+      `xid`-typed concurrency token the way Postgres's real MVCC does, so these tests bump it
+      explicitly to stand in for "someone else's write landed first" — the comparison-and-throw
+      logic under test is the same generic `SaveChanges` machinery either way.) `NotesControllerTests.cs`
+      — a stale note edit returns `409 Conflict` and the body text is unchanged. `NoteCard.test.tsx`
+      — the editor closes on an observed save-then-succeed transition, and stays open with the
+      draft intact + the error visible on a conflict.
 - [ ] **Integration:** mutate offline (incl. voice note) → reconnect → server reflects changes + media.
 - [x] **E2E (offline, web, manual/Playwright):** hand-verified against a running dev API + local
       Postgres — blocked the photo-upload endpoint to simulate a real offline fetch rejection
@@ -115,7 +154,15 @@
       still blocked flips it to "🔌 Offline — 1 change waiting to sync"; pressing **Retry** again
       once unblocked syncs it and the bar disappears entirely, with no duplicate entry. Native
       (iOS/Android) and voice-note capture verified by code review + unit tests only, not live (no
-      device/simulator or mic access in this pass).
+      device/simulator or mic access in this pass). **Conflict handling:** hand-verified with real
+      concurrent writes against a running dev API + local Postgres (not simulated) — curl'd a
+      second, concurrent update to an item/trip/note the browser had already loaded, bumping its
+      real `xmin` server-side, then submitted the browser's edit still holding the old version:
+      each of the three endpoints correctly returned `409` with
+      `"This was changed by someone else since you last loaded it."`, the losing write never
+      persisted (confirmed via a fresh GET), and the item edit form showed the exact message while
+      keeping the user's in-progress edit ("Edited from the browser (stale)") visible in the field
+      rather than closing or discarding it.
 - [ ] **Non-functional:** Lighthouse (web) targets; cold start < target; a11y (axe) clean; bundle budget.
 - [ ] **Privacy/security:** consent + deletion/export regression; no data leaks across users.
 - [ ] **Soak / device matrix:** real iOS + Android devices; low-end device check.
@@ -183,6 +230,40 @@
   XHR path; offline capture shows the soft pending bar; pressing Retry while still blocked flips it
   to the red offline state; pressing Retry again once unblocked syncs and clears the bar, no
   duplicate. This closes out the Sync status UI task in full.
-- **Next:** conflict handling hardening (Phase 7 shipped last-write-wins + presence;
-  operational-merge/CRDT is a documented backlog item), then the offline data layer (local SQLite
-  as UI source of truth) — see the Scope/tasks checklist above.
+- **2026-07-17** — **Conflict handling: optimistic concurrency shipped.** Research first
+  (subagent-driven code audit): the backend was pure last-write-wins with **zero** conflict
+  detection anywhere — no `RowVersion`/`xmin`/ETag, no `DbUpdateConcurrencyException` handling — so
+  two concurrent edits to the same trip/item/note silently overwrote each other. Soft-delete
+  (`DeletedAt`) was already in place for every core entity, so that half of the original task
+  description was already done. Scoped this to detection + fail-loud (matching
+  `docs/architecture.md`'s existing "last-write-wins v1, revisit with CRDTs only if needed"
+  decision), not a merge/CRDT rewrite. `Trip`/`ItineraryItem`/`Note` gained a `Version` property
+  mapped onto Postgres's `xmin` system column (`WanderDbContext.MapXminConcurrencyToken` — no new
+  column, no backfill; the generated `AddConcurrencyTokens` migration is a deliberate no-op, since
+  `xmin` already exists on every table and EF Core's migration diff can't know that). A stale write
+  now throws `ConcurrencyConflictException` → `409 Conflict` with a clear message, on all three
+  repositories/controllers. Client: `version` round-trips through `Trip`/`ItineraryItem`/`Note` and
+  the update mutations; a new `isConflictError` helper detects the 409 and refetches; `NoteCard`'s
+  inline editor now stays open with the draft intact on a conflict instead of closing
+  unconditionally right after calling `onEdit` (the pre-existing behavior, which meant a failed
+  note edit — including a plain network failure, not just a conflict — just silently vanished from
+  the UI with no way to retry).
+  **Tests: backend 236/236** (+5 across `EfCoreTripRepositoryTests.cs`/`NotesControllerTests.cs` —
+  written against the in-memory EF Core provider, which doesn't auto-bump a custom `xid`-typed
+  token the way Postgres does, so these explicitly simulate a concurrent write rather than relying
+  on that), **app 125/125** (+2 `NoteCard.test.tsx`), `tsc` clean.
+  **Hand-verified live with genuinely concurrent writes** (not simulated) against a running dev API
+  + local Postgres: curl'd a second update to an item/trip/note the browser already had loaded
+  (confirmed real non-zero `xmin` values, e.g. 930 → 1057 after one write), bumping it server-side,
+  then submitted the browser's stale edit — all three endpoints correctly 409'd with the exact
+  message, the losing write never persisted (confirmed via a fresh GET), and the item edit form
+  showed the message while keeping "Edited from the browser (stale)" visible in the title field.
+  **Deferred:** the `ReorderDayItems` bulk endpoint still blind-overwrites `SortOrder` (a version
+  per item would complicate a multi-row reorder significantly — single-record field edits were the
+  primary silent-data-loss risk this targeted); a delete-while-someone-else-is-mid-edit race still
+  returns a plain 404 rather than a distinguishable "this was deleted" case; broader
+  retry/backoff logic and an integration test running against real Postgres (not just EF Core
+  in-memory) are still open.
+- **Next:** the offline data layer (local SQLite as UI source of truth), performance & accessibility
+  passes, onboarding, store assets, and final security/privacy review — see the Scope/tasks
+  checklist above.

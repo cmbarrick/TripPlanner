@@ -73,7 +73,7 @@ public class EfCoreNoteRepository : INoteRepository
             .Select(n => (Guid?)n.TripId)
             .FirstOrDefault();
 
-    public Note? UpdateBody(Guid noteId, string ownerId, string? bodyText)
+    public Note? UpdateBody(Guid noteId, string ownerId, string? bodyText, uint expectedVersion)
     {
         var note = _ctx.Notes
             .Include(n => n.MediaAssets)
@@ -81,9 +81,18 @@ public class EfCoreNoteRepository : INoteRepository
         if (note is null)
             return null;
 
+        _ctx.Entry(note).Property("Version").OriginalValue = expectedVersion;
+
         note.BodyText = bodyText;
         note.UpdatedAt = DateTimeOffset.UtcNow;
-        _ctx.SaveChanges();
+        try
+        {
+            _ctx.SaveChanges();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConcurrencyConflictException();
+        }
         return note;
     }
 

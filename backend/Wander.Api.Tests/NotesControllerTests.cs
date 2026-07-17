@@ -117,6 +117,36 @@ public class NotesControllerTests
     }
 
     [Fact]
+    public void Update_StaleVersion_ReturnsConflict()
+    {
+        var (ctrl, ctx, trip) = Build();
+        var created = (Note)((OkObjectResult)ctrl.Create(
+            trip.Id, new CreateNoteRequest(NoteScope.Trip, null, NoteKind.Text, "before", null)).Result!).Value!;
+        // Copy the value out before mutating — `ctx.Notes.Single(...)` below returns the very same
+        // tracked instance as `created` (EF Core's identity map), so bumping it in place would
+        // otherwise silently update `created.Version` too and defeat the "stale" setup.
+        var originalVersion = created.Version;
+
+        // Someone else's edit lands first and bumps the row's version (see the matching comment in
+        // EfCoreTripRepositoryTests — the in-memory provider doesn't auto-bump xmin like Postgres
+        // does, so the test bumps it explicitly to exercise the same conflict-detection path).
+        var tracked = ctx.Notes.Single(n => n.Id == created.Id);
+        ctx.Entry(tracked).Property("Version").CurrentValue = originalVersion + 1;
+        ctx.SaveChanges();
+
+        var result = ctrl.Update(created.Id, new UpdateNoteRequest("stale edit", originalVersion));
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(409, conflict.StatusCode);
+        // The failed SaveChanges leaves the tracked entity's in-memory BodyText mutated even though
+        // nothing was actually persisted (EF Core doesn't roll back C# property values on a thrown
+        // DbUpdateConcurrencyException) — clear the tracker so this re-query reflects the real,
+        // unpersisted-change store instead of that dirty local state.
+        ctx.ChangeTracker.Clear();
+        Assert.Equal("before", ctx.Notes.Single().BodyText);
+    }
+
+    [Fact]
     public void Update_BodyTooLong_ReturnsBadRequest()
     {
         var (ctrl, _, trip) = Build();

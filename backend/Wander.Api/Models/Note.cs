@@ -62,4 +62,10 @@ public class Note
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>Optimistic concurrency token, backed by Postgres's <c>xmin</c> system column (see
+    /// <c>WanderDbContext</c>). The client round-trips whatever value it last read; a stale write
+    /// (someone else updated the row since) fails with a 409 instead of silently overwriting their
+    /// edit — see <see cref="Wander.Api.Data.ConcurrencyConflictException"/>.</summary>
+    public uint Version { get; set; }
 }

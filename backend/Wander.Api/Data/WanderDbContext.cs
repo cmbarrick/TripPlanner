@@ -58,6 +58,7 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
                 .WithOne()
                 .HasForeignKey(x => x.TripId)
                 .OnDelete(DeleteBehavior.Cascade);
+            MapXminConcurrencyToken(entity);
         });
 
         modelBuilder.Entity<Day>(entity =>
@@ -80,6 +81,7 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
             // TripId is a durable scalar link (no navigation); indexed with DayId/SortOrder so both
             // day agendas and the backlog query (DayId == null) stay fast.
             entity.HasIndex(x => new { x.TripId, x.DayId, x.SortOrder });
+            MapXminConcurrencyToken(entity);
         });
 
         modelBuilder.Entity<PackingItem>(entity =>
@@ -127,6 +129,7 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
                 .WithOne()
                 .HasForeignKey(x => x.NoteId)
                 .OnDelete(DeleteBehavior.Cascade);
+            MapXminConcurrencyToken(entity);
         });
 
         modelBuilder.Entity<MediaAsset>(entity =>
@@ -198,5 +201,23 @@ public class WanderDbContext(DbContextOptions<WanderDbContext> options) : DbCont
             // One chunk per (source, sourceId) today — re-indexing updates it in place.
             entity.HasIndex(x => new { x.Source, x.SourceId }).IsUnique();
         });
+    }
+
+    /// <summary>
+    /// Maps an entity's <c>Version</c> property onto Postgres's <c>xmin</c> system column — every
+    /// row already has one, auto-incremented by Postgres on every update, so this needs no new
+    /// column or backfill. EF Core includes it in the UPDATE's <c>WHERE</c> clause and throws
+    /// <see cref="Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException"/> if the row moved
+    /// since the caller read it (see <see cref="ConcurrencyConflictException"/>, which repositories
+    /// translate that into). Entity types that opt in must declare <c>public uint Version { get; set; }</c>.
+    /// </summary>
+    private static void MapXminConcurrencyToken<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity)
+        where T : class
+    {
+        entity.Property<uint>("Version")
+            .HasColumnName("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate()
+            .IsConcurrencyToken();
     }
 }

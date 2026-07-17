@@ -31,8 +31,11 @@ public interface INoteRepository
     /// <summary>The trip a note (owned by the caller) belongs to, or null when not found.</summary>
     Guid? GetTripIdForNote(Guid noteId, string ownerId);
 
-    /// <summary>Updates a note's body text (the editable field); null if the note isn't the owner's.</summary>
-    Note? UpdateBody(Guid noteId, string ownerId, string? bodyText);
+    /// <summary>Updates a note's body text (the editable field); null if the note isn't the owner's.
+    /// <paramref name="expectedVersion"/> is the caller's last-read concurrency token — a stale
+    /// value throws <see cref="ConcurrencyConflictException"/> rather than silently overwriting a
+    /// concurrent edit.</summary>
+    Note? UpdateBody(Guid noteId, string ownerId, string? bodyText, uint expectedVersion);
 
     /// <summary>Soft-deletes a note the owner controls.</summary>
     bool Delete(Guid noteId, string ownerId);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { Note, MediaAsset } from '../types';
 import { colors, radius } from '../theme';
@@ -13,6 +13,7 @@ export function NoteCard({
   onDelete,
   onEdit,
   savingEdit,
+  editError,
   anchorLabel,
 }: {
   note: Note;
@@ -20,6 +21,10 @@ export function NoteCard({
   onDelete: () => void;
   onEdit?: (bodyText: string) => void;
   savingEdit?: boolean;
+  /** Set when the most recent save attempt for *this* note failed (e.g. a 409 — someone else
+   *  edited it first). The editor stays open with the draft intact so the user can see why and
+   *  decide whether to retry, rather than the edit silently vanishing. */
+  editError?: string | null;
   anchorLabel?: string;
 }) {
   const media = note.mediaAssets ?? [];
@@ -38,6 +43,20 @@ export function NoteCard({
   const editable = onEdit != null && (note.kind === 'Text' || note.kind === 'PromptResponse');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.bodyText ?? '');
+  const wasSavingRef = useRef(false);
+
+  // Close the editor once a save we actually observed in progress (savingEdit was true on some
+  // prior render) finishes successfully — but if it failed, stay open with the draft intact so the
+  // error is visible and the user can retry instead of the edit just silently disappearing. Keying
+  // off an *observed* true->false transition (rather than "we just called onEdit") means this never
+  // fires before the in-flight state has actually been seen, regardless of how quickly the mutation
+  // resolves.
+  useEffect(() => {
+    if (wasSavingRef.current && !savingEdit && !editError) {
+      setEditing(false);
+    }
+    wasSavingRef.current = !!savingEdit;
+  }, [savingEdit, editError]);
 
   const startEdit = () => {
     setDraft(note.bodyText ?? '');
@@ -50,7 +69,6 @@ export function NoteCard({
       return;
     }
     onEdit?.(next);
-    setEditing(false);
   };
 
   return (
@@ -74,6 +92,7 @@ export function NoteCard({
               autoFocus
               accessibilityLabel="Edit journal entry"
             />
+            {editError ? <Text style={st.editError}>{editError}</Text> : null}
             <View style={st.editActions}>
               <Pressable onPress={() => setEditing(false)} hitSlop={6} accessibilityLabel="Cancel edit">
                 <Text style={st.editCancel}>Cancel</Text>
@@ -159,6 +178,7 @@ const st = StyleSheet.create({
   editActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16, marginTop: 6 },
   editCancel: { fontSize: 12, fontWeight: '700', color: colors.ink400 },
   editSave: { fontSize: 12, fontWeight: '800', color: colors.brand },
+  editError: { fontSize: 11, color: colors.danger, fontWeight: '600', marginTop: 6 },
   transcript: { fontSize: 13, color: colors.ink600, fontStyle: 'italic', marginTop: 6, lineHeight: 18 },
   transcriptMuted: { fontSize: 11, color: colors.ink400, marginTop: 6 },
 });

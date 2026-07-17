@@ -22,6 +22,7 @@ function item(over: Partial<ItineraryItem> & { id: string }): ItineraryItem {
     startTime: null,
     endTime: null,
     cost: null,
+    version: 1,
     ...over,
   };
 }
@@ -44,6 +45,7 @@ const trip: Trip = {
   createdAt: '',
   updatedAt: '',
   nights: 2,
+  version: 1,
   days: [
     day('d1', [
       item({ id: 'a', cost: 25, startTime: '10:00:00', endTime: '11:00:00' }),

@@ -1,21 +1,24 @@
 import { Trip, Day, ItineraryItem, ItineraryItemStatus } from './types';
 
-// Mock items omit the durable trip link and lifecycle status; normalizeTrips() fills them in
-// (tripId from the parent trip, status defaulting to "Confirmed") so the literals stay readable.
-type MockItem = Omit<ItineraryItem, 'tripId' | 'status'> & { status?: ItineraryItemStatus };
+// Mock items omit the durable trip link, lifecycle status, and concurrency version;
+// normalizeTrips() fills them in (tripId from the parent trip, status defaulting to "Confirmed",
+// version defaulting to 1 — this fallback data is never actually PUT back to the server) so the
+// literals stay readable.
+type MockItem = Omit<ItineraryItem, 'tripId' | 'status' | 'version'> & { status?: ItineraryItemStatus };
 type MockDay = Omit<Day, 'items'> & { items: MockItem[] };
-type MockTrip = Omit<Trip, 'days' | 'unscheduledItems'> & {
+type MockTrip = Omit<Trip, 'days' | 'unscheduledItems' | 'version'> & {
   days: MockDay[];
   unscheduledItems?: MockItem[];
 };
 
 function normalizeItems(items: MockItem[], tripId: string): ItineraryItem[] {
-  return items.map((it) => ({ ...it, tripId, status: it.status ?? 'Confirmed' }));
+  return items.map((it) => ({ ...it, tripId, status: it.status ?? 'Confirmed', version: 1 }));
 }
 
 function normalizeTrips(trips: MockTrip[]): Trip[] {
   return trips.map((trip) => ({
     ...trip,
+    version: 1,
     days: trip.days.map((d) => ({ ...d, items: normalizeItems(d.items, trip.id) })),
     unscheduledItems: trip.unscheduledItems ? normalizeItems(trip.unscheduledItems, trip.id) : [],
   }));

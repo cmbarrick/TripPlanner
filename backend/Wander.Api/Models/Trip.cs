@@ -65,6 +65,12 @@ public class Trip : IValidatableObject
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? DeletedAt { get; set; }
 
+    /// <summary>Optimistic concurrency token, backed by Postgres's <c>xmin</c> system column (see
+    /// <c>WanderDbContext</c>). The client round-trips whatever value it last read; a stale write
+    /// (someone else updated the row since) fails with a 409 instead of silently overwriting their
+    /// change — see <see cref="Wander.Api.Data.ConcurrencyConflictException"/>.</summary>
+    public uint Version { get; set; }
+
     public int Nights => Math.Max(0, EndDate.DayNumber - StartDate.DayNumber);
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

@@ -86,7 +86,15 @@ public class TripsController : ControllerBase
         if (error is not null)
             return error;
 
-        var updated = _repo.Update(id, access!.TripOwnerId, trip);
+        Trip? updated;
+        try
+        {
+            updated = _repo.Update(id, access!.TripOwnerId, trip);
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(new { title = ex.Message });
+        }
         if (updated is null)
             return NotFound();
 
@@ -146,7 +154,15 @@ public class TripsController : ControllerBase
         if (error is not null)
             return error;
 
-        var updated = _repo.UpdateItem(tripId, access!.TripOwnerId, itemId, item);
+        ItineraryItem? updated;
+        try
+        {
+            updated = _repo.UpdateItem(tripId, access!.TripOwnerId, itemId, item);
+        }
+        catch (ConcurrencyConflictException ex)
+        {
+            return Conflict(new { title = ex.Message });
+        }
         if (updated is null)
             return NotFound();
 
