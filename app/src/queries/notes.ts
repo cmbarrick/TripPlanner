@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient, QueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   createNote,
   createPhotoNote,
@@ -13,24 +14,27 @@ import {
   UploadFile,
 } from '../api';
 import { Note, NoteScope } from '../types';
-import { enqueueNoteCreate, enqueueNoteUpdate, enqueueNoteDelete, enqueueMediaNote, isTempNoteId } from '../sync/outbox';
+import {
+  enqueueNoteCreate,
+  enqueueNoteUpdate,
+  enqueueNoteDelete,
+  enqueueMediaNote,
+  isTempNoteId,
+  useOutbox,
+  OutboxOp,
+} from '../sync/outbox';
 
 export const tripNotesQueryKey = (tripId: string) => ['notes', tripId] as const;
 
-type NotesCache = { data: Note[]; live: boolean };
-
-/** Surgically updates the cached notes list (offline-first paths edit the cache directly so the
- *  optimistic entry shows immediately, without a server round-trip). */
-function patchNotesCache(qc: QueryClient, tripId: string, updater: (notes: Note[]) => Note[]) {
-  qc.setQueryData<NotesCache>(tripNotesQueryKey(tripId), (old) => ({
-    data: updater(old?.data ?? []),
-    live: old?.live ?? false,
-  }));
-}
-
-/** Builds the placeholder note rendered while a queued create awaits sync. */
-function buildOptimisticNote(tripId: string, tempId: string, input: CreateNoteInput): Note {
-  const now = new Date().toISOString();
+/** Builds the placeholder note rendered while a queued create awaits sync. `createdAt` defaults to
+ *  now (a fresh capture) but callers reconstructing from a persisted op pass its original
+ *  timestamp, so the entry sorts consistently instead of jumping to "just now" every render. */
+function buildOptimisticNote(
+  tripId: string,
+  tempId: string,
+  input: CreateNoteInput,
+  createdAt: string = new Date().toISOString(),
+): Note {
   return {
     id: tempId,
     tripId,
@@ -42,16 +46,75 @@ function buildOptimisticNote(tripId: string, tempId: string, input: CreateNoteIn
     promptId: input.promptId ?? null,
     promptText: input.promptText ?? null,
     mediaAssets: [],
-    createdAt: now,
-    updatedAt: now,
+    createdAt,
+    updatedAt: createdAt,
     pendingSync: true,
   };
 }
 
-/** All notes for a trip (newest first). Used for the per-event "has notes" indicator and the
- *  event journal section. Short stale time so newly added notes show up promptly. */
+/** Builds the placeholder note rendered while a queued voice/photo note awaits sync. There's no
+ *  MediaAsset yet (the bytes live in `mediaCache`, not the server) — `pendingMediaKind` tells the
+ *  UI what kind of media to indicate instead of rendering a player/photo. */
+function buildOptimisticMediaNote(
+  tripId: string,
+  tempId: string,
+  mediaKind: 'Voice' | 'Photo',
+  fields: { scope: NoteScope; targetId?: string | null; bodyText?: string | null },
+  createdAt: string = new Date().toISOString(),
+): Note {
+  return {
+    id: tempId,
+    tripId,
+    ownerId: '',
+    scope: fields.scope,
+    targetId: fields.targetId ?? null,
+    // Matches the server's kind assignment: voice notes are kind 'Voice'; photo notes are kind
+    // 'Text' with a Photo MediaAsset attached (see NotesController).
+    kind: mediaKind === 'Voice' ? 'Voice' : 'Text',
+    bodyText: fields.bodyText ?? null,
+    promptId: null,
+    promptText: null,
+    mediaAssets: [],
+    createdAt,
+    updatedAt: createdAt,
+    pendingSync: true,
+    pendingMediaKind: mediaKind,
+  };
+}
+
+/**
+ * Overlays this trip's queued-but-unsynced outbox ops onto a fetched notes list: pending
+ * creates/media notes are added, a pending edit shows on the real note it targets, and a pending
+ * delete removes its target. Deriving this from the outbox on every render (rather than patching
+ * the query cache from each mutation's `onSuccess`) means a pending capture shows up correctly
+ * even right after a fresh page load — before this, an optimistic note only ever existed in the
+ * in-memory query cache, so it silently vanished from the list across a reload despite the queued
+ * op (and, for media, its cached bytes) still being there and still syncing correctly later.
+ */
+function mergeWithPendingOps(tripId: string, notes: Note[], ops: OutboxOp[]): Note[] {
+  let merged = notes;
+  const pending: Note[] = [];
+  for (const op of ops) {
+    if (op.tripId !== tripId) continue;
+    if (op.kind === 'note.create') {
+      pending.push(buildOptimisticNote(tripId, op.tempNoteId, op.input, op.createdAt));
+    } else if (op.kind === 'note.media') {
+      pending.push(buildOptimisticMediaNote(tripId, op.tempNoteId, op.mediaKind, op.fields, op.createdAt));
+    } else if (op.kind === 'note.update') {
+      merged = merged.map((n) => (n.id === op.noteId ? { ...n, bodyText: op.bodyText, pendingSync: true } : n));
+    } else if (op.kind === 'note.delete') {
+      merged = merged.filter((n) => n.id !== op.noteId);
+    }
+  }
+  if (pending.length === 0) return merged;
+  return [...pending, ...merged].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+/** All notes for a trip (newest first), with any queued-but-unsynced writes overlaid — see
+ *  {@link mergeWithPendingOps}. Used for the per-event "has notes" indicator and the event journal
+ *  section. Short stale time so newly added notes show up promptly. */
 export function useTripNotesQuery(tripId: string) {
-  return useQuery({
+  const query = useQuery({
     queryKey: tripNotesQueryKey(tripId),
     queryFn: async () => {
       const res = await getTripNotes(tripId);
@@ -75,6 +138,17 @@ export function useTripNotesQuery(tripId: string) {
       return transcribing ? 5000 : false;
     },
   });
+
+  const { ops } = useOutbox();
+  const data = useMemo(() => {
+    if (query.data) return { ...query.data, data: mergeWithPendingOps(tripId, query.data.data, ops) };
+    // The fetch is still loading or failed outright (e.g. cold-started fully offline) — surface
+    // whatever's queued anyway rather than showing nothing until a real list is available.
+    const pendingOnly = mergeWithPendingOps(tripId, [], ops);
+    return pendingOnly.length > 0 ? { data: pendingOnly, live: false } : query.data;
+  }, [query.data, ops, tripId]);
+
+  return { ...query, data };
 }
 
 export function useCreateNoteMutation(tripId: string) {
@@ -90,44 +164,12 @@ export function useCreateNoteMutation(tripId: string) {
         return buildOptimisticNote(tripId, tempId, input);
       }
     },
+    // A queued (pendingSync) result needs no cache update — useTripNotesQuery derives it from the
+    // outbox directly. Only a real server write needs a refetch.
     onSuccess: (note) => {
-      if (note.pendingSync) {
-        patchNotesCache(queryClient, tripId, (notes) => [note, ...notes]);
-      } else {
-        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
-      }
+      if (!note.pendingSync) queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
     },
   });
-}
-
-/** Builds the placeholder note rendered while a queued voice/photo note awaits sync. There's no
- *  MediaAsset yet (the bytes live in `mediaCache`, not the server) — `pendingMediaKind` tells the
- *  UI what kind of media to indicate instead of rendering a player/photo. */
-function buildOptimisticMediaNote(
-  tripId: string,
-  tempId: string,
-  mediaKind: 'Voice' | 'Photo',
-  fields: { scope: NoteScope; targetId?: string | null; bodyText?: string | null },
-): Note {
-  const now = new Date().toISOString();
-  return {
-    id: tempId,
-    tripId,
-    ownerId: '',
-    scope: fields.scope,
-    targetId: fields.targetId ?? null,
-    // Matches the server's kind assignment: voice notes are kind 'Voice'; photo notes are kind
-    // 'Text' with a Photo MediaAsset attached (see NotesController).
-    kind: mediaKind === 'Voice' ? 'Voice' : 'Text',
-    bodyText: fields.bodyText ?? null,
-    promptId: null,
-    promptText: null,
-    mediaAssets: [],
-    createdAt: now,
-    updatedAt: now,
-    pendingSync: true,
-    pendingMediaKind: mediaKind,
-  };
 }
 
 export function useCreateVoiceNoteMutation(tripId: string) {
@@ -151,11 +193,7 @@ export function useCreateVoiceNoteMutation(tripId: string) {
       }
     },
     onSuccess: (note) => {
-      if (note.pendingSync) {
-        patchNotesCache(queryClient, tripId, (notes) => [note, ...notes]);
-      } else {
-        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
-      }
+      if (!note.pendingSync) queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
     },
   });
 }
@@ -181,11 +219,7 @@ export function useCreatePhotoNoteMutation(tripId: string) {
       }
     },
     onSuccess: (note) => {
-      if (note.pendingSync) {
-        patchNotesCache(queryClient, tripId, (notes) => [note, ...notes]);
-      } else {
-        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
-      }
+      if (!note.pendingSync) queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
     },
   });
 }
@@ -208,12 +242,8 @@ export function useDeleteNoteMutation(tripId: string) {
         return { offline: true, noteId };
       }
     },
-    onSuccess: ({ offline, noteId }) => {
-      if (offline) {
-        patchNotesCache(queryClient, tripId, (notes) => notes.filter((n) => n.id !== noteId));
-      } else {
-        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
-      }
+    onSuccess: ({ offline }) => {
+      if (!offline) queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
     },
   });
 }
@@ -235,18 +265,8 @@ export function useUpdateNoteMutation(tripId: string) {
         return { offline: true, noteId, bodyText };
       }
     },
-    onSuccess: ({ offline, noteId, bodyText }) => {
-      if (offline) {
-        patchNotesCache(queryClient, tripId, (notes) =>
-          notes.map((n) =>
-            n.id === noteId
-              ? { ...n, bodyText, pendingSync: true, updatedAt: new Date().toISOString() }
-              : n,
-          ),
-        );
-      } else {
-        queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
-      }
+    onSuccess: ({ offline }) => {
+      if (!offline) queryClient.invalidateQueries({ queryKey: tripNotesQueryKey(tripId) });
     },
   });
 }

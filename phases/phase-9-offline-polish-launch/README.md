@@ -24,18 +24,26 @@
       deleting one frees its cached bytes instead of leaking them.)*
       Resuming interrupted **transcription** on reconnect wasn't touched — voice notes upload the
       full audio in one shot once back online, and transcription then runs exactly like an online
-      upload; there's no separate resume path to add. Known gap (shared with the Phase 4 text
-      outbox, not new here): a still-queued note disappears from the list across a page reload,
-      since the optimistic entry lives only in the React Query cache, not the notes list itself —
-      the op and cached bytes both survive and still sync correctly once reconnected, but the UI
-      doesn't show it as pending in the meantime. That's the **Sync status UI** item below, not this
-      one — pending ops aren't merged into the notes list on load yet.
+      upload; there's no separate resume path to add. The reload-persistence gap this surfaced
+      (a still-queued note disappearing from the list across a page reload, even though the op and
+      its cached bytes both survive and still sync correctly) is now fixed — see **Sync status UI**
+      below.
 - [ ] **Conflict handling:** harden for single + multi-user (builds on Phase 7 merge strategy);
       soft-delete via `deleted_at`.
-- [ ] **Sync status UI:** offline indicator, "pending changes", media upload progress, retry.
-      *(Includes merging the outbox queue into the notes list on load, so a pending note — text,
-      voice, or photo — still shows as pending after a page reload instead of only reappearing once
-      the flush completes; see the media outbox note above.)*
+- [~] **Sync status UI:** offline indicator, "pending changes", media upload progress, retry.
+      [x] **Pending-changes persistence:** `useTripNotesQuery` (`app/src/queries/notes.ts`) now
+      derives its result by overlaying the outbox's queued ops onto the fetched list on every
+      render (reactive via `useOutbox`), instead of the four write mutations manually patching the
+      React Query cache in their `onSuccess`. A pending create/media note is added, a pending edit
+      shows on the real note it targets, and a pending delete removes its target — all recomputed
+      whenever the outbox changes, so a still-queued note (text, voice, or photo) now survives a
+      page reload and even a fully-offline cold start (no cached server list at all), not just the
+      brief window between capture and reload. This also deleted the four `patchNotesCache` calls,
+      since the overlay replaces what they were doing less generally. [ ] Still open: an explicit
+      offline indicator/banner, a dedicated "N pending" summary UI (the count is already available
+      via `useOutbox().pendingCount`, just not surfaced anywhere), per-file media upload progress,
+      and a manual retry action (today: automatic only — on app start, foreground, the web `online`
+      event, and a 20s safety-net interval).
 - [ ] **Performance pass:** list virtualization, image/audio optimization, cold-start, bundle size.
 - [ ] **Accessibility pass:** labels, focus order, dynamic type, contrast (axe / manual SR test).
 - [ ] **UX polish:** onboarding, empty/error/loading states, micro-interactions; **in-trip AI dock**
@@ -63,18 +71,21 @@
       up the cache on success, retries (keeping the cache) on a transient failure, and drops +
       cleans up on a 4xx. Conflict resolver / broader retry-backoff logic: not yet (later Phase 9
       slice).
+- [x] **Unit (pending-changes overlay):** `queries/notes.test.ts` (`useTripNotesQuery`, via
+      `renderHook`) — a queued create/media op overlays onto the fetched list, newest first; a
+      queued op for a *different* trip is excluded; queued captures still surface even when the
+      fetch itself fails outright (cold-started offline, no cached server list at all).
 - [ ] **Integration:** mutate offline (incl. voice note) → reconnect → server reflects changes + media.
 - [x] **E2E (offline, web, manual/Playwright):** hand-verified against a running dev API + local
       Postgres — blocked the photo-upload endpoint to simulate a real offline fetch rejection
       (`context.setOffline` hangs requests rather than rejecting them, so it doesn't exercise the
       catch path — request interception does), picked a photo → optimistic "📷 Photo added ⏳ Saved
       offline — will sync" entry appeared immediately → unblocked + fired `online` → outbox flushed,
-      uploaded, and the entry became permanent with no duplicate. Reload-while-still-blocked: the
-      queued op and cached bytes survived (localStorage + IndexedDB) and still flushed successfully
-      once unblocked, confirming no data loss — though the pending entry itself doesn't reappear in
-      the list after a reload until the flush completes (see the Sync status UI gap above). Native
-      (iOS/Android) and voice-note capture verified by code review + unit tests only, not live (no
-      device/simulator or mic access in this pass).
+      uploaded, and the entry became permanent with no duplicate. Reload-while-still-blocked
+      (re-verified after the overlay fix): the pending entry **now reappears immediately after the
+      reload** (previously it vanished until the flush completed) and still flushes to a permanent
+      entry with no duplicate once reconnected. Native (iOS/Android) and voice-note capture verified
+      by code review + unit tests only, not live (no device/simulator or mic access in this pass).
 - [ ] **Non-functional:** Lighthouse (web) targets; cold start < target; a11y (axe) clean; bundle budget.
 - [ ] **Privacy/security:** consent + deletion/export regression; no data leaks across users.
 - [ ] **Soak / device matrix:** real iOS + Android devices; low-end device check.
@@ -115,6 +126,18 @@
   device/simulator/mic access in this pass); resuming interrupted transcription wasn't a separate
   concern to add — a queued voice note uploads whole once reconnected and transcribes exactly like
   any other upload.
-- **Next:** Sync status UI (offline indicator, pending-changes list including reload-persistence,
-  upload progress, retry), then conflict handling hardening and the offline data layer (local SQLite
-  source of truth) — see the Scope/tasks checklist above.
+- **2026-07-17** — **Pending-changes reload-persistence fixed.** `useTripNotesQuery`
+  (`app/src/queries/notes.ts`) now derives its result by overlaying the outbox's queued ops (via
+  `useOutbox`) onto the fetched notes list on every render, instead of each write mutation
+  patching the React Query cache by hand in `onSuccess`. Deleted all four `patchNotesCache` calls
+  — the overlay supersedes them and additionally covers the cold-start-fully-offline case (queued
+  captures show even when the initial fetch itself fails, not just after a live mutation). **Tests:
+  app 110/110** (+4 `queries/notes.test.ts`), `tsc` clean. **Re-verified live**: the exact repro
+  from the prior entry (reload the page while a photo upload is still blocked) now shows the
+  pending entry immediately after reload instead of it vanishing until the flush completes; still
+  syncs to a permanent entry with no duplicate once reconnected. Still open on **Sync status UI**:
+  an explicit offline indicator/banner, a "N pending" summary (the count is already available via
+  `useOutbox().pendingCount`), per-file media upload progress, and a manual retry action.
+- **Next:** finish **Sync status UI** (offline indicator, pending-count summary, upload progress,
+  manual retry), then conflict handling hardening and the offline data layer (local SQLite source
+  of truth) — see the Scope/tasks checklist above.
