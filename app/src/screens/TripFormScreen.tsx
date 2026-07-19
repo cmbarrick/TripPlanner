@@ -93,6 +93,7 @@ export function TripFormScreen({
             placeholderTextColor={colors.ink400}
             value={title}
             onChangeText={(t) => { setTitle(t); setError(''); }}
+            accessibilityLabel="Title"
           />
         </Field>
 
@@ -103,6 +104,7 @@ export function TripFormScreen({
             placeholderTextColor={colors.ink400}
             value={destination}
             onChangeText={(t) => { setDestination(t); setError(''); }}
+            accessibilityLabel="Destination"
           />
         </Field>
 
@@ -138,6 +140,7 @@ export function TripFormScreen({
               value={travelers}
               onChangeText={(t) => { setTravelers(t); setError(''); }}
               keyboardType="numeric"
+              accessibilityLabel="Travelers"
             />
           </Field>
           <Field label="Est. cost" style={{ flex: 1 }}>
@@ -148,6 +151,7 @@ export function TripFormScreen({
               value={cost}
               onChangeText={setCost}
               keyboardType="numeric"
+              accessibilityLabel="Estimated cost"
             />
           </Field>
         </View>

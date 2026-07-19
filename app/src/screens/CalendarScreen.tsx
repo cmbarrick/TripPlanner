@@ -295,8 +295,17 @@ function DayGrid({ trip, selectedDayId, onSelect }: { trip: Trip; selectedDayId?
             if (!c || !c.date) return <View key={ci} style={s.cell} />;
             const on = c.dayId && c.dayId === selectedDayId;
             const planned = c.hasItems;
+            const dateLabel = c.date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
             return (
-              <Pressable key={ci} style={s.cell} onPress={() => c.dayId && onSelect(c.dayId)} disabled={!c.dayId}>
+              <Pressable
+                key={ci}
+                style={s.cell}
+                onPress={() => c.dayId && onSelect(c.dayId)}
+                disabled={!c.dayId}
+                accessibilityLabel={planned ? `${dateLabel}, has items` : dateLabel}
+                accessibilityRole={c.dayId ? 'button' : undefined}
+                accessibilityState={c.dayId ? { selected: !!on } : undefined}
+              >
                 <View style={[s.cellInner, on && s.cellOn, !on && planned && s.cellHas]}>
                   <Text style={[s.cellText, on && { color: '#fff' }, !on && planned && { color: colors.brand }]}>
                     {c.date.getDate()}

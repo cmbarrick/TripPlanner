@@ -91,6 +91,8 @@
       voice note… 42%".
 - [ ] **Performance pass:** list virtualization, image/audio optimization, cold-start, bundle size.
 - [ ] **Accessibility pass:** labels, focus order, dynamic type, contrast (axe / manual SR test).
+      *(Screen-reader **labels** now largely in place — see 2026-07-19 progress log entry. Focus
+      order, dynamic type scaling, contrast, and automated `axe`/manual SR testing still open.)*
 - [ ] **UX polish:** onboarding, empty/error/loading states, micro-interactions; **in-trip AI dock**
       composer (wire mockup `option-4-map-ai-planner.html` — tap/type → chat for open trip; Phase 5
       shipped chat on Assistant tab only).
@@ -296,6 +298,23 @@
   fresh again (new `Users`/`Preference` row, not blocked by the anonymized old one); also
   verified against the identity from the bug repro itself (which had accumulated two trips
   across both test runs) — both cleaned up correctly by the fixed version.
-- **Next:** the offline data layer (local SQLite as UI source of truth), performance & accessibility
-  passes, onboarding, store assets, and final security/privacy review — see the Scope/tasks
-  checklist above.
+- **2026-07-19** — **Accessibility: screen-reader labels pass.** Also confirmed the app never
+  requests device GPS location (map only plots trip-entered coordinates from place search), so no
+  location permission string is needed in `app.json`. A subagent audit found the app already had
+  broad `accessibilityLabel` coverage from earlier phases; fixed the remaining real gaps: `TabBar`
+  (bottom nav, every screen) gained `accessibilityRole="tab"` + `accessibilityState={{selected}}`
+  so screen readers announce the active tab, not just floating icon/label text; `TripCover` (trip
+  list cards) gained `accessibilityRole="button"` + a combined label so title/subtitle/badge read
+  as one tappable unit instead of separate text nodes; the Assistant chat send button (glyph-only
+  `↑`), `ShareTripSheet`'s error-dismiss tap target, and `CalendarScreen`'s day-grid cells (now
+  announce the full date + "has items", not just a bare number) all gained labels. Fixed the
+  repeated `Field`-wrapper gap (visual `<Text>` label with no `accessibilityLabel` on the paired
+  `TextInput`, so screen readers can't associate them) on `TripFormScreen` (Title, Destination,
+  Travelers, Est. cost) and `AddActivityScreen` (Title) — other fields in both forms already had
+  labels. **Tests: app 129/129** (all prop-only additions, no behavior change), `tsc` clean. Not
+  hand-verified visually — no browser-automation tool was available in this environment — but
+  every change is an added prop with no style/layout impact. **Remaining for this checklist item:**
+  focus order, dynamic type scaling, contrast, and automated `axe`/manual screen-reader testing.
+- **Next:** the offline data layer (local SQLite as UI source of truth), the rest of the
+  accessibility pass (focus order/dynamic type/contrast/axe), onboarding, store assets, and final
+  security/privacy review — see the Scope/tasks checklist above.

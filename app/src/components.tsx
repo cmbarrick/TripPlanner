@@ -40,7 +40,12 @@ export function TripCover({
 }) {
   const gradient = coverThemes[theme] ?? coverThemes.default;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.9 : faded ? 0.7 : 1 }]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [{ opacity: pressed ? 0.9 : faded ? 0.7 : 1 }]}
+      accessibilityRole="button"
+      accessibilityLabel={badge ? `${title}, ${subtitle}, ${badge}` : `${title}, ${subtitle}`}
+    >
       <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.cover}>
         {badge ? (
           <View style={s.badge}>
@@ -70,7 +75,14 @@ export function TabBar({ active, onChange }: { active: TabKey; onChange: (k: Tab
       {TABS.map((t) => {
         const on = t.key === active;
         return (
-          <Pressable key={t.key} style={s.tab} onPress={() => onChange(t.key)}>
+          <Pressable
+            key={t.key}
+            style={s.tab}
+            onPress={() => onChange(t.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={t.label}
+          >
             <Text style={[s.tabIcon, { opacity: on ? 1 : 0.5 }]}>{t.icon}</Text>
             <Text style={[s.tabLabel, { color: on ? colors.brand : colors.ink400 }]}>{t.label}</Text>
           </Pressable>

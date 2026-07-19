@@ -129,7 +129,12 @@ export function ShareTripSheet({
 
         <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
           {error ? (
-            <Pressable onPress={() => setError(null)} style={s.errorBox}>
+            <Pressable
+              onPress={() => setError(null)}
+              style={s.errorBox}
+              accessibilityLabel={`Dismiss error: ${error}`}
+              accessibilityRole="button"
+            >
               <Text style={s.errorText}>{error}</Text>
             </Pressable>
           ) : null}

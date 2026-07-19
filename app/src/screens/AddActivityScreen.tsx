@@ -198,6 +198,7 @@ export function AddActivityScreen({
             placeholderTextColor={colors.ink400}
             value={title}
             onChangeText={(t) => { setTitle(t); setError(''); }}
+            accessibilityLabel="Title"
           />
         </Field>
 

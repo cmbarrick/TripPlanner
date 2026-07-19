@@ -210,6 +210,8 @@ export function AssistantChatPanel({
             style={[s.sendBtn, (!input.trim() || busy || !tripId) && s.btnDisabled]}
             onPress={() => send()}
             disabled={!input.trim() || busy || !tripId}
+            accessibilityLabel="Send message"
+            accessibilityRole="button"
           >
             {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.sendText}>↑</Text>}
           </Pressable>
