@@ -12,10 +12,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.wander.app"
+      "bundleIdentifier": "com.wandertripapp.app"
     },
     "android": {
-      "package": "com.wander.app",
+      "package": "com.wandertripapp.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -308,6 +308,45 @@ consumers**. Before public launch:
 4. **Token `aud`:** confirm the CIAM app's access-token `aud` matches the API
    `Authentication:EntraExternalId:Audience` (dev uses the bare client id — verify by decoding a real token).
 
+**Progress (2026-07-18) — Sign in with Apple, in progress, done through portal setup:**
+- Discovered `Authentication:EntraExternalId:Authority` in `appsettings.json` was still Microsoft's
+  literal placeholder (`contoso.ciamlogin.com`) — the External ID (CIAM) tenant had never actually
+  been created, only planned. Created it: **External** tenant type, name `Wander`, domain
+  `wandertripapp.onmicrosoft.com` (auth endpoint domain is `wandertripapp.ciamlogin.com`), tenant ID
+  `903c7b62-9a4e-472a-a69b-242ecd9d969d`, in `rg-wander-dev` / East US region. Confirmed the
+  workforce tenant's "External Identities" feature (under Default Directory) does **not** support
+  Apple as a built-in IdP (only Google/Facebook/Microsoft/Email OTP) — Apple requires a real External
+  tenant, not that lighter-weight guest-collaboration feature.
+- iOS bundle ID had to change: `com.wander.app` was already taken on Apple's side. Now
+  **`com.wandertripapp.app`** everywhere — updated in `app/app.json` (`ios.bundleIdentifier` +
+  `android.package`, kept identical across platforms; uncommitted as of this note).
+- Apple Developer portal, done: App ID `com.wandertripapp.app` (Sign In with Apple capability
+  enabled) → Services ID `com.wandertripapp.app.signin` → Sign In with Apple key created (`.p8`
+  downloaded once, Key ID `6MNU387WCY`, Team ID `GTV7SC6XM4`) → Services ID's Web Authentication
+  Configuration (Domains/Return URLs) filled in and saved using the
+  `<tenant-name>.ciamlogin.com` / `<tenant-id>.ciamlogin.com` pattern from Microsoft's official Apple
+  federation doc.
+- Entra side, done: switched into the new Wander tenant → External Identities → All identity
+  providers → Apple → Configure, entered Client (Apple service) ID / Team ID / Key ID / uploaded the
+  `.p8` secret → shows **Configured** (green check) in the identity-provider list.
+- **Not yet done** (picking up here next):
+  1. **App registration** for the client itself doesn't exist yet in the new Wander tenant — needed
+     to get a real Client ID and to register the native redirect URI (`wander://auth`, matching
+     `app.json`'s `scheme: "wander"`, per item 3 above).
+  2. **User flow** (sign-up and sign-in) doesn't exist yet either — configuring an identity provider
+     tenant-wide does *not* put it on any specific sign-in experience; a user flow must be created
+     and Apple (+ whichever others, e.g. Email one-time passcode) explicitly added to it, then the
+     app registration associated with that flow.
+  3. **Backend config** (`Authentication:EntraExternalId:Authority`/`Audience` — currently still the
+     `contoso.ciamlogin.com` placeholder in `appsettings.json`) and **client env vars**
+     (`EXPO_PUBLIC_AUTH_ISSUER`, `EXPO_PUBLIC_AUTH_CLIENT_ID`, `EXPO_PUBLIC_AUTH_AUDIENCE`,
+     `EXPO_PUBLIC_AUTH_SCOPES` in `app/src/auth/session.ts`) need to point at the real tenant/app
+     once the app registration exists (item 1).
+  4. End-to-end test of the actual Sign in with Apple flow once 1–3 are done.
+  5. `com.wandertripapp.app` bundle ID change in `app/app.json` is still **uncommitted** — commit it
+     once this whole thread is further along (bundling it with the auth config change makes more
+     sense than committing it alone).
+
 ### 11b. Store submission prerequisites (when publishing)
 - **iOS permission usage strings** (Info.plist via config plugins): microphone (voice notes),
   photo library (photo notes), and notifications. Add the `expo-image-picker` config plugin (not yet
