@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card } from '../components';
 import { colors, radius } from '../theme';
 import { AuthState } from '../auth/session';
+import { deleteAccount } from '../api';
 import { PromptSettingsCard } from '../prompts/PromptSettingsCard';
 import { NotificationSettingsCard } from '../notifications/NotificationSettingsCard';
 import { ModerationQueueScreen } from './ModerationQueueScreen';
@@ -49,6 +51,15 @@ export function ProfileScreen({
     auth.mode === 'entra' ? 'Entra session' : auth.mode === 'dev-bypass' ? 'Development bypass' : 'Signed out';
 
   const [showModerationQueue, setShowModerationQueue] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const queryClient = useQueryClient();
+  const deleteAccountMutation = useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: async () => {
+      queryClient.clear();
+      await onSignOut();
+    },
+  });
   const prefsEnabled = auth.isAuthenticated;
   const prefsQuery = usePreferencesQuery(prefsEnabled);
   const updatePrefs = useUpdatePreferencesMutation();
@@ -234,6 +245,58 @@ export function ProfileScreen({
           </Pressable>
         </Card>
 
+        {auth.isAuthenticated && auth.mode === 'entra' ? (
+          <>
+            <Text style={s.section}>Danger zone</Text>
+            <Card style={s.dangerCard}>
+              <Text style={s.rowLabel}>Delete account</Text>
+              <Text style={s.rowHint}>
+                Permanently deletes your account and everything you own — trips, journal entries,
+                photos/voice notes, recaps, and shares. This can't be undone.
+              </Text>
+              {!confirmDeleteAccount ? (
+                <Pressable
+                  style={s.dangerBtn}
+                  onPress={() => setConfirmDeleteAccount(true)}
+                  accessibilityLabel="Delete account"
+                >
+                  <Text style={s.dangerBtnText}>Delete account</Text>
+                </Pressable>
+              ) : (
+                <View style={s.confirm}>
+                  <Text style={s.confirmText}>
+                    Are you sure? Your account and all its data will be permanently deleted.
+                  </Text>
+                  {deleteAccountMutation.isError ? (
+                    <Text style={s.error}>Couldn't delete your account. Please try again.</Text>
+                  ) : null}
+                  <View style={s.confirmRow}>
+                    <Pressable
+                      style={s.confirmCancel}
+                      onPress={() => setConfirmDeleteAccount(false)}
+                      disabled={deleteAccountMutation.isPending}
+                    >
+                      <Text style={s.confirmCancelText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      style={s.confirmDelete}
+                      onPress={() => deleteAccountMutation.mutate()}
+                      disabled={deleteAccountMutation.isPending}
+                      accessibilityLabel="Confirm delete account"
+                    >
+                      {deleteAccountMutation.isPending ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={s.confirmDeleteText}>Delete</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+            </Card>
+          </>
+        ) : null}
+
         <Text style={s.note}>
           Display settings (temperature, clock) stay on-device until synced via the preferences API.
           Travel planning preferences sync to your account when the API is reachable.
@@ -330,4 +393,21 @@ const s = StyleSheet.create({
   optTextCompact: { fontSize: 12 },
   optTextOn: { color: '#fff' },
   note: { fontSize: 11, color: colors.ink400, marginTop: 16, lineHeight: 16, marginHorizontal: 2 },
+  dangerCard: { borderColor: '#fecaca' },
+  dangerBtn: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.sm,
+    backgroundColor: colors.danger,
+  },
+  dangerBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  confirm: { marginTop: 12, backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 14, padding: 12 },
+  confirmText: { color: '#991b1b', fontSize: 13, fontWeight: '600', marginBottom: 10 },
+  confirmRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  confirmCancel: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  confirmCancelText: { color: colors.ink600, fontWeight: '700', fontSize: 13 },
+  confirmDelete: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.danger, minWidth: 80, alignItems: 'center' },
+  confirmDeleteText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 });

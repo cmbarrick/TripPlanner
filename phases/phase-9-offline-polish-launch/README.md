@@ -99,7 +99,7 @@
 - [ ] **App store submission** (see [`deployment-and-app-stores.md`](../../docs/deployment-and-app-stores.md)):
   - [ ] **Apple App Privacy** labels + **Google Data Safety** form completed and accurate.
   - [ ] All **permission usage strings/rationales** present (microphone, photos, location, notifications).
-  - [ ] **In-app account deletion** implemented (required by both stores).
+  - [x] **In-app account deletion** implemented (required by both stores). See 2026-07-19 progress log entry.
   - [ ] **UGC moderation + reporting + blocking** live **before** public recaps (Apple Guideline 1.2 / Play).
   - [ ] Content/age ratings; production binaries submitted via **`eas submit`**; staged rollout planned.
 - [ ] **Web deploy:** Expo web export live on **Azure Static Web Apps** (custom domain + HTTPS).
@@ -264,6 +264,38 @@
   returns a plain 404 rather than a distinguishable "this was deleted" case; broader
   retry/backoff logic and an integration test running against real Postgres (not just EF Core
   in-memory) are still open.
+- **2026-07-19** — **In-app account deletion.** `DELETE /api/users/me` (new `UsersController`,
+  new `IAccountDeletionService`) soft-deletes everything the caller owns — Trips (+ Days/Items/
+  PackingItems), Notes (+ MediaAssets, which gained a `DeletedAt` column — small migration,
+  `AddMediaAssetDeletedAt`), Recaps, PublicRecaps, Reactions, TripShares — plus every
+  `TripMember` row referencing the caller (both trips they created and their membership on
+  others' trips), `Preference`, and `ConsentSetting`. The `User` row itself is anonymized
+  (`OwnerId`/`SubjectId`/`Email` replaced with random values) rather than hard-deleted, since
+  those three columns are unique-indexed — leaving the original values would permanently block
+  the same real-world identity (Apple/Entra subject) from signing up again later.
+  **Deliberately out of scope**, documented in the service's class remarks: `AiTokenUsage`
+  (aggregate quota counters, no content) and `PublicRecapReport` (moderation reports the user
+  filed against *others'* content — deleting them would erase the moderation trail). Media bytes
+  in blob storage aren't deleted, only the DB row tracking them — `IBlobStore` has no delete
+  method yet; a follow-up can wire that once it's worth the storage cost.
+  **Bug caught by hand-testing, not unit tests**: the first version required a `Users` row to
+  exist before deleting anything, and returned `404`/no-op otherwise. But `Users` rows are
+  created lazily (first touch of preferences/consent/sharing) — an account that has only ever
+  created a trip owns real data with no `Users` row at all. Live curl testing (create a trip
+  under a fresh dev identity → delete → list trips) caught this immediately: the trip was still
+  there after a "successful" 404. Fixed to sweep every owned table regardless of whether a
+  `Users` row exists, and to report success if *either* a `Users` row or any owned data was
+  found. Added a regression test for exactly this shape. Client: `ProfileScreen` gained a
+  "Danger zone" section (only shown when signed in via a real Entra session, not dev-bypass/
+  guest) with the same two-step inline confirm pattern as trip deletion; confirming calls the
+  new `deleteAccount()` API function, clears the entire React Query cache, then signs out.
+  **Tests: backend 255/255** (+8 `AccountDeletionTests`, +2 `ViatorActivityProviderTests` from
+  the prior entry), **app 129/129** (+4 `ProfileScreen.test.tsx`), `tsc` clean.
+  **Hand-verified live** against a running dev API: created a trip under a fresh identity →
+  deleted → trip list empty → repeat delete correctly 404s → same identity string can sign up
+  fresh again (new `Users`/`Preference` row, not blocked by the anonymized old one); also
+  verified against the identity from the bug repro itself (which had accumulated two trips
+  across both test runs) — both cleaned up correctly by the fixed version.
 - **Next:** the offline data layer (local SQLite as UI source of truth), performance & accessibility
   passes, onboarding, store assets, and final security/privacy review — see the Scope/tasks
   checklist above.

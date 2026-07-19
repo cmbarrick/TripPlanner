@@ -971,6 +971,11 @@ export async function deleteNote(noteId: string): Promise<void> {
   await sendJson<void>(`/api/notes/${noteId}`, 'DELETE');
 }
 
+/** Permanently deletes the signed-in traveler's account and everything they own. */
+export async function deleteAccount(): Promise<void> {
+  await sendJson<void>('/api/users/me', 'DELETE');
+}
+
 export async function updateNote(noteId: string, bodyText: string, version?: number): Promise<Note> {
   return sendJson<Note>(`/api/notes/${noteId}`, 'PUT', { bodyText, version: version ?? 0 });
 }

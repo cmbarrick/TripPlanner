@@ -157,6 +157,7 @@ builder.Services.AddScoped<ITripShareService, TripShareService>();
 builder.Services.AddScoped<ITripMemberService, TripMemberService>();
 builder.Services.AddScoped<IReactionService, ReactionService>();
 builder.Services.AddScoped<IConsentService, ConsentService>();
+builder.Services.AddScoped<IAccountDeletionService, AccountDeletionService>();
 
 // Real-time co-editing (Phase 7, Slice 3): self-hosted SignalR + in-memory presence. The notifier
 // is the transport seam (swappable for Azure Web PubSub). Presence/notifier are process-local
