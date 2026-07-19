@@ -88,8 +88,8 @@ publish sheet. Test health at last close: backend **236/236**, Functions **3/3**
   per-user token quotas, batch undo, input guard + rate limit. Azure OpenAI on dev. The assistant
   can only recommend a tour/activity it actually searched for (Viator's affiliate API) and can only
   attach a booking link the server itself resolved — never one it wrote — so recommendations are
-  never fabricated. Currently hidden behind a config flag (`Activities:Enabled`) pending Viator
-  sandbox key activation. See [`phase-5-summary.md`](./docs/phase-5-summary.md).
+  never fabricated. Live-verified against the real Viator sandbox and enabled (`Activities:Enabled`).
+  See [`phase-5-summary.md`](./docs/phase-5-summary.md).
 - **Phase 6 — AI recap & export:** Grounded, versioned recaps (trip/day/event) from notes + transcripts
   with per-section citations + historical weather actuals; tone picker; **PDF export** (QuestPDF) and an
   unlisted `/share/recaps/{token}` page; in-trip AI dock composer. See [`phase-6-summary.md`](./docs/phase-6-summary.md).

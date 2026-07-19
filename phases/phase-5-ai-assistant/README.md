@@ -32,10 +32,8 @@
       loud instead of silently attaching nothing (or something wrong). Same anti-fabrication
       discipline as Phase 6/8's citation validators, applied to tool-calling instead of RAG.
       `FakeActivityProvider` (dev/CI default) mirrors every other provider seam in this app.
-      **Hidden behind `Activities:Enabled` (default `false`)** — `searchActivities` is fully built
-      and tested but excluded from the tool list offered to the model until this flag flips on,
-      independent of which provider is wired up. Kept off pending Viator sandbox key activation;
-      flipping it on is a one-line config change, no code changes needed.
+      Gated by `Activities:Enabled` (kept off until live-verified against the real Viator sandbox;
+      now **on** — see 2026-07-19 progress log entry).
 - [x] **Preference-aware output:** stored preferences flow into generate-itinerary and chat prompts (Profile UI in Slice 1).
 - [x] **Smart gap-fill:** `suggestGapFill` tool analyzes empty schedule slots (Slice 3).
 - [x] **Streaming responses** in chat UI; trip-change activity rail with **batch undo** (Slice 4).
@@ -133,3 +131,46 @@
   confirmed working; re-enabling needs zero code changes, just flipping the flag. Two new tests
   lock in both states of the switch directly against `AiToolSchemas.All`. **Tests: backend
   242/242.**
+- **2026-07-19** — **Live-verified end to end; feature enabled.** The Viator sandbox key activated;
+  ran a real chat request through `searchActivities` → real results → `addItineraryItem` against
+  the live sandbox (not curl-only). Response field names matched the earlier Postman-based guesses
+  almost exactly — `title`, `description`, `productCode`, `productUrl`, `pricing.summary.fromPrice`,
+  `pricing.currency`, `reviews.combinedAverageRating` were all correct on first contact with real
+  data. Two things weren't, both fixed:
+  - **Images**: nest under `images[].variants[]` by size, not a flat `images[].url`. Now picks the
+    cover image's largest variant.
+  - **No price on `/products/{code}`**: Basic Access's product-details endpoint returns
+    `pricingInfo` (age bands, booking type) but never a price — pricing only exists in
+    `/search/freetext` results. So `addItineraryItem`'s "prefill cost from the re-resolved
+    provider" behavior only actually fires against `FakeActivityProvider`; against the real API,
+    cost stays null unless the model supplies one. Absorbed safely by the nullable design (no
+    crash), documented in `ViatorActivityProvider`'s class remarks so it isn't mistaken for a bug
+    later.
+  Also found and fixed two bugs that only a live key could surface (neither was reachable with
+  `FakeActivityProvider`, hence untested until now):
+  - **Crash**: `MediaTypeWithQualityHeaderValue`'s single-string constructor rejects the
+    `;version=2.0` parameter on the `Accept` header (curl doesn't validate this the way .NET's
+    typed header does) — every real request would have thrown. Fixed via `.Parse(...)`.
+  - **Silent zero-results bug**: `SandboxBaseUrl` was missing a trailing slash. `HttpClient`
+    combines `BaseAddress` with a relative request URI via `new Uri(base, relative)`, which drops
+    the base's last path segment when it isn't slash-terminated — every search silently hit
+    `api.sandbox.viator.com/search/freetext` (404, wrong host entirely) instead of
+    `.../partner/search/freetext`, and the 404 was swallowed by the `!IsSuccessStatusCode ->
+    return []` fallback. The feature would have looked "always returns nothing" with a perfectly
+    valid key. This was the one that actually mattered — found by testing the real chat flow
+    end-to-end rather than trusting curl-only verification (curl always used the correct full URL
+    directly, so it never exercised this bug).
+  Real end-to-end chat transcript confirmed grounded, non-fabricated recommendations: 5 real
+  Interlaken-area tours with real EUR prices (€5.52–€170.13) and real ratings, no invented
+  data. `Activities:Enabled` flipped to `true` in `appsettings.json` — the feature is live.
+  Production Viator key received and stored in Azure Key Vault (`kv-wndr-dev-azgnto`, secret
+  `Activities--ViatorApiKey`) — **not yet wired to the App Service** (deliberately deferred; see
+  `docs/deployment-runbook.md`). Caution for later: that secret name is the same one the standard
+  Key Vault → App Service wiring convention would use for the **dev** environment, but its value is
+  the **production** key — wiring dev to it as-is would point the dev App Service at production
+  credentials. Needs a deliberate decision (separate secret name, or a real per-environment Key
+  Vault split) before that wiring happens, not just following the existing Mapbox/Azure Maps
+  pattern blindly.
+  **Tests: backend 247/247** (+5: `ViatorActivityProviderTests` — constructor validation plus a
+  regression test pinning the correct `/partner/search/freetext` URL construction so the
+  trailing-slash bug can't silently return).

@@ -152,12 +152,13 @@ and discovery layers make it a community product over time.
   reference a result by id; the server re-resolves it before ever writing a booking URL/price, so
   a hallucinated or stale id fails loud instead of silently fabricating a link — the same
   anti-fabrication discipline as Phase 6/8's citation validators, applied to tool-calling. Request
-  shape confirmed against Viator's official Postman collection and schema-validated live against
-  the real sandbox (clean `401` from auth, not a `400`); response field names still need
-  confirming once the sandbox key finishes activating. **Hidden behind `Activities:Enabled`
-  (default off)** — fully built and tested, but excluded from the model's tool list until the
-  Viator key is confirmed working; re-enabling is a one-line config flip, no code changes.
-  Backend **242/242**. See
+  shape confirmed against Viator's official Postman collection. **Live-verified end to end
+  (2026-07-19)** against the real sandbox once the key activated: response field names matched on
+  first try except images (`images[].variants[]` by size, not a flat `url`) — fixed; also caught
+  and fixed a base-URL trailing-slash bug that made every real search silently return zero results
+  (a 404 swallowed by the empty-result fallback) and a header-construction crash bug, both only
+  reachable with a live key. `Activities:Enabled` is now **on** — the kill switch stays in the
+  code for future use but the feature is live. Backend **247/247**. See
   [`phase-5-summary.md`](./phase-5-summary.md) and
   [`phases/phase-5-ai-assistant/README.md`](../phases/phase-5-ai-assistant/README.md).
 

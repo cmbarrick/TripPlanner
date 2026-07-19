@@ -14,21 +14,33 @@ namespace Wander.Api.Activities;
 ///
 /// The request shapes below (endpoint paths, headers, the <c>/search/freetext</c> body) are
 /// confirmed against Viator's official "Basic-Access Affiliate API v2" Postman collection
-/// (docs.viator.com/partner-api/technical/), not guessed. <b>The response field names are still
-/// unverified</b> — that collection documents requests but not example responses, and the
-/// sandbox key issued for this integration hadn't finished Viator's (up to 24h) activation
-/// delay as of writing, so no real response has been inspected yet. Every field on
-/// <see cref="ActivityOption"/> is nullable/optional specifically so a wrong guess here degrades
-/// to a missing field rather than a crash; re-verify field names (`title`, `pricing.summary.
-/// fromPrice`, `images[].url`, `reviews.combinedAverageRating`, `productUrl`) against a real
-/// response once the key is live.
+/// (docs.viator.com/partner-api/technical/). <b>Response field names verified 2026-07-19</b>
+/// against live sandbox responses: <c>title</c>, <c>description</c>, <c>productCode</c>,
+/// <c>productUrl</c>, <c>pricing.summary.fromPrice</c>/<c>pricing.currency</c>, and
+/// <c>reviews.combinedAverageRating</c> all matched on <c>/search/freetext</c> exactly as
+/// originally guessed. Two things did not: images nest URLs under <c>images[].variants[]</c> by
+/// size rather than a flat <c>images[].url</c> (fixed below — picks the cover image's largest
+/// variant); and <b><c>/products/{{code}}</c> (used by <see cref="GetDetailsAsync"/>) has no price
+/// field at all under Basic Access</b> — only <c>pricingInfo</c> (age bands/booking type, not a
+/// price). That means <see cref="AiToolExecutor.AddItem"/>'s "prefill cost from the re-resolved
+/// provider option" behavior will only ever fill a price when talking to
+/// <see cref="FakeActivityProvider"/>; against the real API, cost stays null unless the model
+/// separately supplies one, which is <c>ActivityOption</c>'s nullable design absorbing it (no
+/// crash), just not the originally-intended UX. Every field remains nullable/optional so any
+/// future field-name drift degrades the same way.
 /// </summary>
 public class ViatorActivityProvider : IActivityProvider
 {
     // Sandbox is the default because a sandbox key only works against the sandbox host (and
-    // vice versa) — set Activities:ViatorBaseUrl to "https://api.viator.com/partner" once
-    // switching to a production key.
-    private const string SandboxBaseUrl = "https://api.sandbox.viator.com/partner";
+    // vice versa) — set Activities:ViatorBaseUrl to "https://api.viator.com/partner/" once
+    // switching to a production key. Trailing slash matters: HttpClient.BaseAddress combines
+    // with a relative request URI via `new Uri(base, relative)`, which drops the base's last path
+    // segment ("partner") when it isn't slash-terminated — silently hitting the wrong host
+    // (`api.sandbox.viator.com/search/freetext`, a 404) instead of `.../partner/search/freetext`.
+    // Discovered live: requests "succeeded" with an unhandled 404 swallowed by the
+    // `!res.IsSuccessStatusCode -> return []` branch below, so search silently always returned zero
+    // results instead of erroring.
+    private const string SandboxBaseUrl = "https://api.sandbox.viator.com/partner/";
 
     private readonly HttpClient _http;
     private readonly string? _partnerId;
@@ -39,12 +51,16 @@ public class ViatorActivityProvider : IActivityProvider
         var apiKey = config["Activities:ViatorApiKey"]
             ?? throw new InvalidOperationException("Activities:ViatorApiKey must be configured.");
         _partnerId = config["Activities:ViatorPartnerId"];
-        var baseUrl = config["Activities:ViatorBaseUrl"];
+        var baseUrl = string.IsNullOrWhiteSpace(config["Activities:ViatorBaseUrl"])
+            ? SandboxBaseUrl
+            : config["Activities:ViatorBaseUrl"]!;
+        if (!baseUrl.EndsWith('/'))
+            baseUrl += "/";
 
-        _http.BaseAddress = new Uri(string.IsNullOrWhiteSpace(baseUrl) ? SandboxBaseUrl : baseUrl);
+        _http.BaseAddress = new Uri(baseUrl);
         _http.DefaultRequestHeaders.Add("exp-api-key", apiKey);
         _http.DefaultRequestHeaders.Accept.Clear();
-        _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json;version=2.0"));
+        _http.DefaultRequestHeaders.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("application/json;version=2.0"));
         _http.DefaultRequestHeaders.AcceptLanguage.Add(new StringWithQualityHeaderValue("en-US"));
     }
 
@@ -99,8 +115,14 @@ public class ViatorActivityProvider : IActivityProvider
             PriceFrom: p.Pricing?.Summary?.FromPrice,
             Currency: p.Pricing?.Currency,
             BookingUrl: url,
-            ImageUrl: p.Images?.FirstOrDefault()?.Url,
+            ImageUrl: SelectImageUrl(p.Images),
             Rating: p.Reviews?.CombinedAverageRating);
+    }
+
+    private static string? SelectImageUrl(List<ViatorImage>? images)
+    {
+        var image = images?.FirstOrDefault(i => i.IsCover) ?? images?.FirstOrDefault();
+        return image?.Variants?.OrderByDescending(v => v.Width).FirstOrDefault()?.Url;
     }
 
     // Request shape confirmed against Viator's Basic-Access Postman collection; response shape is
@@ -141,6 +163,11 @@ public class ViatorActivityProvider : IActivityProvider
         [property: JsonPropertyName("fromPrice")] decimal? FromPrice);
 
     private record ViatorImage(
+        [property: JsonPropertyName("isCover")] bool IsCover,
+        [property: JsonPropertyName("variants")] List<ViatorImageVariant>? Variants);
+
+    private record ViatorImageVariant(
+        [property: JsonPropertyName("width")] int Width,
         [property: JsonPropertyName("url")] string? Url);
 
     private record ViatorReviews(
