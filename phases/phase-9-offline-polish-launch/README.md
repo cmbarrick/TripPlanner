@@ -96,6 +96,8 @@
 - [ ] **UX polish:** onboarding, empty/error/loading states, micro-interactions; **in-trip AI dock**
       composer (wire mockup `option-4-map-ai-planner.html` — tap/type → chat for open trip; Phase 5
       shipped chat on Assistant tab only).
+      *(**Onboarding** shipped — see 2026-07-19 progress log entry. Empty/error/loading states and
+      the in-trip AI dock composer still open.)*
 - [ ] **Privacy review:** consent gates, deletion/export, moderation paths verified end-to-end.
 - [ ] **Launch prep:** app icons, splash, store screenshots (all required sizes), privacy policy, listings.
 - [ ] **App store submission** (see [`deployment-and-app-stores.md`](../../docs/deployment-and-app-stores.md)):
@@ -315,6 +317,31 @@
   hand-verified visually — no browser-automation tool was available in this environment — but
   every change is an added prop with no style/layout impact. **Remaining for this checklist item:**
   focus order, dynamic type scaling, contrast, and automated `axe`/manual screen-reader testing.
+- **2026-07-19** — **Onboarding shipped.** New `OnboardingScreen.tsx` — a 3-step first-run carousel
+  (Welcome/AI assistant/Capture-the-journey) reusing `SignInScreen`'s gradient-hero-plus-white-card
+  visual language (same `colors.brand600`→`colors.brand` gradient, same rounded bottom sheet with a
+  primary brand button) rather than inventing a new look. Dot progress indicator, a `Skip` that
+  exits immediately from any step, `Next` that advances, and `Get started` on the last step. The
+  microphone/photo-library step deliberately doesn't trigger any OS permission dialog itself — it
+  just sets expectations before the cold `expo-audio`/`expo-image-picker` prompts a user would
+  otherwise hit unprompted on first tap of Record/Photo (confirmed neither currently shows any
+  custom priming UI).
+  Gated in `App.tsx`'s `AppShell` by a new `onboarded` state, persisted via the existing
+  `storage.ts` `readJson`/`writeJson` convention (key `wander-onboarded` — same SecureStore/
+  localStorage seam already used for UI prefs) — shown once per install, **before** the sign-in
+  gate (device-level, not account-level, so it isn't repeated on every sign-out/sign-in cycle).
+  Modeled the loading tri-state on the existing auth-session pattern: `onboarded === null` (flag
+  still being read) folds into the same splash the auth-session load already shows, so a returning
+  user never sees a one-frame flash of onboarding before it resolves to `true`.
+  `App.test.tsx`'s smoke test needed a fix it was previously missing regardless of this change: it
+  asserted synchronously right after `render()` with no `waitFor`, silently working only because
+  every async gate up to now happened to resolve before assertion (a latent flakiness risk this
+  surfaced, not introduced — reworked to `findByText` plus a `./src/storage` mock simulating a
+  returning user, matching the same pattern `useAuthSession` was already mocked with).
+  **Tests: app 132/132** (+3 `OnboardingScreen.test.tsx`), `tsc` clean. Verified the web bundle
+  still compiles and serves (200) with the new gate wired in; no browser-automation tool was
+  available in this environment for an actual visual screenshot.
 - **Next:** the offline data layer (local SQLite as UI source of truth), the rest of the
-  accessibility pass (focus order/dynamic type/contrast/axe), onboarding, store assets, and final
-  security/privacy review — see the Scope/tasks checklist above.
+  accessibility pass (focus order/dynamic type/contrast/axe), empty/error/loading-state polish and
+  the in-trip AI dock composer, store assets, and final security/privacy review — see the
+  Scope/tasks checklist above.

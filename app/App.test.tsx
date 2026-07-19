@@ -72,6 +72,13 @@ jest.mock('./src/queries/preferences', () => ({
   BUDGET_OPTIONS: [],
 }));
 
+jest.mock('./src/storage', () => ({
+  // Simulates a returning user (onboarding already completed) so this smoke test exercises the
+  // main tabbed app rather than the first-run OnboardingScreen — that flow has its own test.
+  readJson: jest.fn().mockResolvedValue(true),
+  writeJson: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('./src/auth/useAuthSession', () => ({
   useAuthSession: () => ({
     auth: {
@@ -102,10 +109,12 @@ describe('App smoke test', () => {
     });
   });
 
-  it('renders My Trips screen', () => {
+  it('renders My Trips screen', async () => {
     render(<App />);
 
-    expect(screen.getByText('My Trips')).toBeTruthy();
+    // The onboarding-flag read (App.tsx's `readJson`) resolves asynchronously, so the app briefly
+    // shows the splash before settling on the main tab — same as the auth-session load.
+    expect(await screen.findByText('My Trips')).toBeTruthy();
     expect(screen.getByText('0 upcoming · 0 past')).toBeTruthy();
   });
 });

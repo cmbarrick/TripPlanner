@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, Platform, SafeAreaView } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +14,8 @@ import { ProfileScreen } from './src/screens/ProfileScreen';
 import { AssistantScreen } from './src/screens/AssistantScreen';
 import { DiscoverScreen } from './src/screens/DiscoverScreen';
 import { SignInScreen, AuthSplash } from './src/screens/SignInScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
+import { readJson, writeJson } from './src/storage';
 import {
   useTripsQuery,
   useCreateTripMutation,
@@ -42,6 +44,8 @@ import { useOutboxSync } from './src/sync/useOutboxSync';
 const queryClient = new QueryClient();
 initClientObservability();
 
+const ONBOARDED_KEY = 'wander-onboarded';
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -55,15 +59,48 @@ export default function App() {
 function AppShell() {
   const authSession = useAuthSession();
   const [guest, setGuest] = useState(false);
+  // `null` = still reading the persisted flag (treated as loading, alongside authSession.loading,
+  // so a returning user never sees a one-frame flash of onboarding before it resolves to `true`).
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
-  // While restoring a persisted session, show a branded splash rather than flashing demo data.
-  if (authSession.loading) {
+  useEffect(() => {
+    let active = true;
+    readJson(ONBOARDED_KEY, false).then((value) => {
+      if (active) setOnboarded(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // While restoring a persisted session (or the onboarding flag), show a branded splash rather
+  // than flashing demo data or onboarding.
+  if (authSession.loading || onboarded === null) {
     return (
       <View style={styles.page}>
         <View style={styles.phone}>
           <SafeAreaView style={styles.safe}>
             <StatusBar style="dark" />
             <AuthSplash />
+          </SafeAreaView>
+        </View>
+      </View>
+    );
+  }
+
+  // First run only, device-level (not account-level) — shown before the sign-in gate so it isn't
+  // repeated per sign-in/sign-out, only once per install.
+  if (!onboarded) {
+    const finishOnboarding = () => {
+      setOnboarded(true);
+      writeJson(ONBOARDED_KEY, true);
+    };
+    return (
+      <View style={styles.page}>
+        <View style={styles.phone}>
+          <SafeAreaView style={styles.safe}>
+            <StatusBar style="dark" />
+            <OnboardingScreen onDone={finishOnboarding} />
           </SafeAreaView>
         </View>
       </View>
