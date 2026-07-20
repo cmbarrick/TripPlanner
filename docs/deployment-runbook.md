@@ -329,23 +329,39 @@ consumers**. Before public launch:
 - Entra side, done: switched into the new Wander tenant → External Identities → All identity
   providers → Apple → Configure, entered Client (Apple service) ID / Team ID / Key ID / uploaded the
   `.p8` secret → shows **Configured** (green check) in the identity-provider list.
-- **Not yet done** (picking up here next):
-  1. **App registration** for the client itself doesn't exist yet in the new Wander tenant — needed
-     to get a real Client ID and to register the native redirect URI (`wander://auth`, matching
-     `app.json`'s `scheme: "wander"`, per item 3 above).
-  2. **User flow** (sign-up and sign-in) doesn't exist yet either — configuring an identity provider
-     tenant-wide does *not* put it on any specific sign-in experience; a user flow must be created
-     and Apple (+ whichever others, e.g. Email one-time passcode) explicitly added to it, then the
-     app registration associated with that flow.
-  3. **Backend config** (`Authentication:EntraExternalId:Authority`/`Audience` — currently still the
-     `contoso.ciamlogin.com` placeholder in `appsettings.json`) and **client env vars**
-     (`EXPO_PUBLIC_AUTH_ISSUER`, `EXPO_PUBLIC_AUTH_CLIENT_ID`, `EXPO_PUBLIC_AUTH_AUDIENCE`,
-     `EXPO_PUBLIC_AUTH_SCOPES` in `app/src/auth/session.ts`) need to point at the real tenant/app
-     once the app registration exists (item 1).
-  4. End-to-end test of the actual Sign in with Apple flow once 1–3 are done.
-  5. `com.wandertripapp.app` bundle ID change in `app/app.json` is still **uncommitted** — commit it
-     once this whole thread is further along (bundling it with the auth config change makes more
-     sense than committing it alone).
+**Progress (2026-07-20) — Sign in with Apple, working end to end:**
+- App registration (`Wander Mobile`, Client ID `b32700ac-b867-4a6a-a245-ceafc3c9de74`) created in
+  the Wander tenant with `wander://auth` registered as a native redirect (Mobile/desktop platform)
+  plus `http://localhost:8081/auth`, `8082/auth`, `19006/auth` (SPA platform, for local web
+  testing — Metro lands on different ports run to run).
+- User flow `SignUpSignIn` (Sign up and sign in) created with **Apple** + **Email one-time
+  passcode** as identity providers, `Wander Mobile` associated with it under Applications.
+- `Authentication:EntraExternalId:Authority`/`Audience` (dev: `appsettings.Development.json`) and
+  client env vars (`EXPO_PUBLIC_AUTH_ISSUER`/`CLIENT_ID`/`AUDIENCE` — see
+  `scripts/start-local-entra.ps1`) now point at the real tenant.
+- **Real bug found and fixed via live testing** (not reachable by any unit test — needed an actual
+  Apple sign-in against the real tenant): `session.ts`'s token exchange sent
+  `tokenResponse.accessToken` as the API bearer. Since the client only requests generic OIDC scopes
+  (`openid profile email offline_access`) with no custom API resource scope exposed on the app
+  registration, Entra's access token defaults to an audience of **Microsoft Graph**
+  (`00000003-0000-0000-c000-000000000000`), not our own API — confirmed by decoding the actual
+  token from `localStorage` client-side and cross-referencing the backend's `IDX10511: Signature
+  validation failed` error (temporarily unmasked via `IdentityModelEventSource.ShowPII` +
+  an `OnAuthenticationFailed` log line, both since removed — see git history if this needs
+  re-diagnosing). Fixed: `session.ts` now sends **`tokenResponse.idToken`** instead — its `aud` is
+  always the client id by OIDC spec, which already matched
+  `Authentication:EntraExternalId:Audience`'s existing bare-client-id convention (item 4 above)
+  with zero backend changes needed. The textbook long-term fix (expose a custom API scope via
+  "Expose an API" on the app registration, request `api://<client-id>/access_as_user`, get a
+  properly-audienced access token) remains a documented option but wasn't necessary here.
+  **Hand-verified live end to end**: signed in with Apple, landed on Profile showing a real Entra
+  session (`cmbarrick@gmail.com`), Trips tab correctly showed the live (empty) account instead of
+  the demo-data fallback that appears on any API auth failure. `displayName` shows "unknown" (Apple
+  only sends a name on the very first authorization; Entra apparently didn't forward it this time)
+  — cosmetic, not blocking.
+  `com.wandertripapp.app` bundle ID (`app/app.json`), the Entra tenant config, and the sign-in
+  screen redesign were already committed in an earlier session (see git log); this session's fix
+  (`session.ts`) is the only remaining piece to commit.
 
 ### 11b. Store submission prerequisites (when publishing)
 - **iOS permission usage strings** (Info.plist via config plugins): microphone (voice notes),

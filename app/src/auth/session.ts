@@ -216,9 +216,19 @@ async function finalizeTokenExchange(
     discovery
   );
 
-  const accessToken = tokenResponse.accessToken;
+  // Use the ID token as the bearer, not the OAuth access token. The client requests only generic
+  // OIDC scopes (openid/profile/email/offline_access) with no custom API resource scope exposed on
+  // the app registration, so Entra's access token defaults to an audience of Microsoft Graph
+  // (`00000003-0000-0000-c000-000000000000`) rather than our own API — confirmed live: the backend
+  // rejected it with IDX10511 (signature validation failed against a completely different token/key
+  // set, since it's not even meant for our API). The ID token's `aud` is always the client id by
+  // spec, which matches `Authentication:EntraExternalId:Audience`'s existing bare-client-id
+  // convention exactly (see docs/deployment-runbook.md §11a item 4). A real API-scoped access token
+  // (via "Expose an API" + a custom scope) would be the more textbook long-term fix, but this works
+  // today with zero backend/config changes.
+  const accessToken = tokenResponse.idToken ?? tokenResponse.accessToken;
   if (!accessToken) {
-    throw new Error('No access token returned from Entra.');
+    throw new Error('No token returned from Entra.');
   }
 
   const expiresAtUnixSeconds = tokenResponse.expiresIn
