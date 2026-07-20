@@ -23,13 +23,18 @@ param azureOpenAiApiKey = readEnvironmentVariable('WANDER_AZURE_OPENAI_API_KEY',
 param wireApiToExistingTranscription = true
 param transcriptionCallbackKey = readEnvironmentVariable('WANDER_FUNCTIONS_CALLBACK_KEY', '')
 
-// Entra External ID values for the dev environment (non-secret).
-// Dev identity: app registration "Wander Dev" in the Pay-As-You-Go tenant (workforce sign-in
-// for testing). Swap to an Entra External ID tenant when moving to public/customer sign-up.
-param authAuthority = 'https://login.microsoftonline.com/c37d0d41-1d23-42ec-b2a9-142f6013c9c5/v2.0'
-// v2 access tokens for this app's exposed scope carry aud = the bare client id (verified by
-// decoding a live token), not the api:// App ID URI. Must match the JwtBearer Audience exactly.
-param authAudience = '2fc17871-0fc0-414a-a86c-78de362fe29a'
+// Entra External ID values (non-secret) — the "Wander" external tenant (consumer sign-up +
+// Apple/email federation), shared across dev/staging/prod (see docs/deployment-runbook.md §11a; a
+// single pre-launch tenant is a deliberate simplification, split later only if it starts to
+// matter). Migrated off the old workforce-tenant dev-only sign-in
+// (`login.microsoftonline.com/c37d0d41-...`, app registration "Wander Dev") once Apple sign-in was
+// live-verified end to end against this tenant.
+param authAuthority = 'https://wandertripapp.ciamlogin.com/wandertripapp.onmicrosoft.com/v2.0'
+// The client sends the ID token as the API bearer, not the OAuth access token (see
+// app/src/auth/session.ts) — the access token defaults to a Microsoft Graph audience since no
+// custom API scope is exposed on the app registration, but the ID token's aud is always the
+// client id by OIDC spec, which is what this must match exactly.
+param authAudience = 'b32700ac-b867-4a6a-a245-ceafc3c9de74'
 
 // Local Expo web client origins (Metro picks the next free port; 8081 is default, 8082 on fallback).
 param extraCorsOrigins = [
