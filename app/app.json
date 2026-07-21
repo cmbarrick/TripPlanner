@@ -8,12 +8,13 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
+    "runtimeVersion": "1.0.0",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.wandertripapp.app"
+      "bundleIdentifier": "com.wandertripapp.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.wandertripapp.app",
