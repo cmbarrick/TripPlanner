@@ -302,15 +302,6 @@ builder.Services
         // pass the bearer token in the query string for hub connections. Lift it into the context.
         options.Events = new JwtBearerEvents
         {
-            // TEMP diagnostic (2026-07-21): same JWT-failure visibility gap as before, this time
-            // on the deployed dev App Service investigating a native iOS build showing demo-data
-            // fallback after Apple sign-in. Console.Error bypasses the Warning-level filter on
-            // Microsoft.AspNetCore. Remove once confirmed working.
-            OnAuthenticationFailed = context =>
-            {
-                Console.Error.WriteLine($"[JWT AUTH FAILED] {context.Exception.GetType().Name}: {context.Exception.Message}");
-                return Task.CompletedTask;
-            },
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
