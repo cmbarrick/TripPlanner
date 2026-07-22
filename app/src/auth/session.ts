@@ -64,7 +64,15 @@ export type AuthState = {
   expiresAtUnixSeconds: number | null;
 };
 
-type StoredAuthSession = Omit<AuthState, 'mode' | 'isAuthenticated'>;
+type StoredAuthSession = Omit<AuthState, 'mode' | 'isAuthenticated'> & {
+  refreshToken: string | null;
+};
+
+// Kept out of AuthState (not exposed to UI callers) — only used internally to silently mint a
+// fresh token once the current one is close to expiring. Entra ID tokens are short-lived (~60-90
+// min); without this, every session degraded to demo-data fallback after about an hour until the
+// traveler manually signed out and back in — confirmed live, not hypothetical.
+let currentRefreshToken: string | null = null;
 
 function decodeBase64Url(input: string): string | null {
   try {
@@ -147,8 +155,13 @@ export async function initializeAuthState(): Promise<AuthState> {
     }
 
     const parsed = JSON.parse(serialized) as StoredAuthSession;
+    currentRefreshToken = parsed.refreshToken ?? null;
     const now = Math.floor(Date.now() / 1000);
     if (parsed.expiresAtUnixSeconds && parsed.expiresAtUnixSeconds <= now) {
+      // Expired while the app was closed (or just idle) — try a silent refresh before giving up
+      // and forcing a full manual sign-in.
+      const refreshed = await tryRefresh();
+      if (refreshed) return refreshed;
       await sessionStorage.removeItem(STORAGE_KEY);
       currentState = defaultState();
       return currentState;
@@ -192,30 +205,11 @@ function buildAuthRequest(): { request: AuthSession.AuthRequest; redirectUri: st
   return { request, redirectUri };
 }
 
-// Exchanges an authorization code for tokens, reads profile claims from the ID
-// token (we deliberately skip the OIDC userInfo endpoint — our access token is
-// audience-scoped to the Wander API, so Microsoft Graph rejects it with 401),
-// then persists and returns the authenticated session.
-async function finalizeTokenExchange(
-  discovery: Discovery,
-  redirectUri: string,
-  code: string,
-  codeVerifier?: string
-): Promise<AuthState> {
-  const tokenResponse = await AuthSession.exchangeCodeAsync(
-    {
-      clientId: AUTH_CLIENT_ID!,
-      code,
-      redirectUri,
-      scopes: AUTH_SCOPES,
-      extraParams: {
-        ...(AUTH_AUDIENCE ? { audience: AUTH_AUDIENCE } : {}),
-        ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
-      },
-    },
-    discovery
-  );
-
+// Builds, persists, and applies an AuthState from a token response — shared by the initial
+// sign-in exchange and by silent refresh. Reads profile claims from the ID token (we
+// deliberately skip the OIDC userInfo endpoint — our access token is audience-scoped to the
+// Wander API, so Microsoft Graph rejects it with 401).
+function applyTokenResponse(tokenResponse: AuthSession.TokenResponse): AuthState {
   // Use the ID token as the bearer, not the OAuth access token. The client requests only generic
   // OIDC scopes (openid/profile/email/offline_access) with no custom API resource scope exposed on
   // the app registration, so Entra's access token defaults to an audience of Microsoft Graph
@@ -247,21 +241,111 @@ async function finalizeTokenExchange(
     if (typeof claims.name === 'string') displayName = claims.name;
   }
 
-  const stored: StoredAuthSession = {
+  // Not every refresh response includes a new refresh token (some IdPs only rotate
+  // occasionally) — keep the previous one in that case rather than losing it.
+  currentRefreshToken = tokenResponse.refreshToken ?? currentRefreshToken;
+
+  currentState = {
+    mode: 'entra',
+    isAuthenticated: true,
     subject,
     email,
     displayName,
     accessToken,
     expiresAtUnixSeconds,
   };
-  await persistSession(stored);
-
-  currentState = {
-    mode: 'entra',
-    isAuthenticated: true,
-    ...stored,
-  };
   return currentState;
+}
+
+async function persistCurrentSession(): Promise<void> {
+  const stored: StoredAuthSession = {
+    subject: currentState.subject,
+    email: currentState.email,
+    displayName: currentState.displayName,
+    accessToken: currentState.accessToken,
+    expiresAtUnixSeconds: currentState.expiresAtUnixSeconds,
+    refreshToken: currentRefreshToken,
+  };
+  await persistSession(stored);
+}
+
+// Silently exchanges the stored refresh token for a fresh access/ID token, without any user
+// interaction. Returns null (and leaves the caller to fall back to a full sign-in) if there's no
+// refresh token, Entra isn't configured, or the refresh itself fails (e.g. the refresh token was
+// itself revoked/expired — Entra refresh tokens are long-lived but not infinite).
+async function tryRefresh(): Promise<AuthState | null> {
+  if (!currentRefreshToken || !AUTH_ISSUER || !AUTH_CLIENT_ID) return null;
+  try {
+    const discovery = await AuthSession.fetchDiscoveryAsync(AUTH_ISSUER);
+    const tokenResponse = await AuthSession.refreshAsync(
+      {
+        clientId: AUTH_CLIENT_ID,
+        refreshToken: currentRefreshToken,
+        scopes: AUTH_SCOPES,
+        extraParams: AUTH_AUDIENCE ? { audience: AUTH_AUDIENCE } : undefined,
+      },
+      discovery
+    );
+    const state = applyTokenResponse(tokenResponse);
+    await persistCurrentSession();
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns a bearer token guaranteed not to be (near-)expired, silently refreshing first if
+ * needed. This is what actually fixes the "works for an hour, then silently falls back to demo
+ * data until you sign out and back in" bug — every API call used to read the access token
+ * straight off the in-memory snapshot with no expiry check or refresh at all.
+ */
+export async function ensureFreshToken(): Promise<string | null> {
+  if (currentState.mode !== 'entra') return currentState.accessToken;
+
+  const now = Math.floor(Date.now() / 1000);
+  const refreshBufferSeconds = 60;
+  if (
+    currentState.accessToken &&
+    currentState.expiresAtUnixSeconds &&
+    currentState.expiresAtUnixSeconds - refreshBufferSeconds > now
+  ) {
+    return currentState.accessToken;
+  }
+
+  const refreshed = await tryRefresh();
+  if (refreshed) return refreshed.accessToken;
+
+  // Refresh token is gone/invalid — clear the stale session so the UI correctly falls back to
+  // the sign-in screen instead of silently retrying a dead token forever.
+  await signOut();
+  return null;
+}
+
+// Exchanges an authorization code for tokens and persists the resulting session.
+async function finalizeTokenExchange(
+  discovery: Discovery,
+  redirectUri: string,
+  code: string,
+  codeVerifier?: string
+): Promise<AuthState> {
+  const tokenResponse = await AuthSession.exchangeCodeAsync(
+    {
+      clientId: AUTH_CLIENT_ID!,
+      code,
+      redirectUri,
+      scopes: AUTH_SCOPES,
+      extraParams: {
+        ...(AUTH_AUDIENCE ? { audience: AUTH_AUDIENCE } : {}),
+        ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
+      },
+    },
+    discovery
+  );
+
+  const state = applyTokenResponse(tokenResponse);
+  await persistCurrentSession();
+  return state;
 }
 
 export async function signInWithEntra(): Promise<AuthState> {
@@ -341,6 +425,7 @@ export async function completeWebSignIn(): Promise<AuthState> {
 
 export async function signOut(): Promise<AuthState> {
   await sessionStorage.removeItem(STORAGE_KEY);
+  currentRefreshToken = null;
   currentState = defaultState();
   return currentState;
 }

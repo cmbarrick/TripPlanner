@@ -13,7 +13,7 @@ import {
   ReactionTargetType,
 } from './types';
 import { mockTrips } from './mockData';
-import { getAuthStateSnapshot } from './auth/session';
+import { getAuthStateSnapshot, ensureFreshToken } from './auth/session';
 
 // On web/desktop the API is reachable at localhost. Android emulator maps the
 // host machine to 10.0.2.2. Override via EXPO_PUBLIC_API_URL when needed.
@@ -23,9 +23,12 @@ export const API_BASE =
 const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_USER_ID;
 
 async function buildHeaders(): Promise<HeadersInit | undefined> {
-  const auth = getAuthStateSnapshot();
-  if (auth.accessToken) {
-    return { Authorization: `Bearer ${auth.accessToken}` };
+  // Silently refreshes first if the current token is expired/near-expiry — without this, a
+  // session degrades to the demo-data fallback after ~an hour with no way to recover short of
+  // manually signing out and back in (confirmed live, not hypothetical).
+  const token = await ensureFreshToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
   }
 
   if (DEV_USER_ID) {

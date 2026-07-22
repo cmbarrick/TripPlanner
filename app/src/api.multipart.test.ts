@@ -54,6 +54,8 @@ describe('createPhotoNote (XHR multipart upload)', () => {
     const seen: number[] = [];
     const promise = api.createPhotoNote('t1', { scope: 'Trip' }, samplePhoto, 'pic.jpg', (f) => seen.push(f));
 
+    // Two hops: buildHeaders() now awaits ensureFreshToken() before the XHR is created.
+    await Promise.resolve();
     await Promise.resolve();
     const xhr = FakeXHR.instances[0];
     xhr.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 200 });
@@ -71,6 +73,8 @@ describe('createPhotoNote (XHR multipart upload)', () => {
     const seen: number[] = [];
     const promise = api.createPhotoNote('t1', { scope: 'Trip' }, samplePhoto, 'pic.jpg', (f) => seen.push(f));
 
+    // Two hops: buildHeaders() now awaits ensureFreshToken() before the XHR is created.
+    await Promise.resolve();
     await Promise.resolve();
     const xhr = FakeXHR.instances[0];
     xhr.upload.onprogress?.({ lengthComputable: false, loaded: 10, total: 0 });
@@ -85,6 +89,8 @@ describe('createPhotoNote (XHR multipart upload)', () => {
   it('rejects with the server-provided title on a 4xx response', async () => {
     const promise = api.createPhotoNote('t1', { scope: 'Trip' }, samplePhoto, 'pic.jpg');
 
+    // Two hops: buildHeaders() now awaits ensureFreshToken() before the XHR is created.
+    await Promise.resolve();
     await Promise.resolve();
     const xhr = FakeXHR.instances[0];
     xhr.status = 422;
@@ -97,6 +103,8 @@ describe('createPhotoNote (XHR multipart upload)', () => {
   it('rejects with an undefined status on a network-level failure (offline)', async () => {
     const promise = api.createPhotoNote('t1', { scope: 'Trip' }, samplePhoto, 'pic.jpg');
 
+    // Two hops: buildHeaders() now awaits ensureFreshToken() before the XHR is created.
+    await Promise.resolve();
     await Promise.resolve();
     const xhr = FakeXHR.instances[0];
     xhr.onerror?.();
