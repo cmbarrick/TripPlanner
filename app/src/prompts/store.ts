@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { NoteScope, ItineraryItemType } from '../types';
 import { readJson, writeJson } from '../storage';
 import { JournalPrompt, PromptProvider } from './types';
@@ -113,10 +113,11 @@ export interface UsePromptSettings {
 /** Reactive access to prompt settings + a provider built from the current custom prompts. */
 export function usePromptSettings(): UsePromptSettings {
   const settings = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const provider = useMemo(() => createPromptProvider(settings.custom), [settings.custom]);
   return {
     settings,
     ready: loaded,
-    provider: createPromptProvider(settings.custom),
+    provider,
     enabledForTrip: (tripId: string) => promptsEnabledForTrip(settings, tripId),
     setEnabledGlobal: promptStore.setEnabledGlobal,
     setTripEnabled: promptStore.setTripEnabled,

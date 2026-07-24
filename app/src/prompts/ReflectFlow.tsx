@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -55,11 +55,21 @@ export function ReflectFlow({
   const [answer, setAnswer] = useState('');
   const [savedCount, setSavedCount] = useState(0);
   const [done, setDone] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   const prompts = useMemo(
     () => provider.forContext({ scope, eventType }).slice(0, MAX_STEPS),
     [provider, scope, eventType],
   );
+
+  useEffect(() => {
+    if (!open || done) return;
+    // Focusing at mount races the Modal's slide-in animation on iOS -- the keyboard can appear
+    // without the TextInput actually becoming first responder. Focus once the modal has finished
+    // presenting (onShow) or the step's TextInput has remounted (key={prompt.id}) instead.
+    const timer = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [open, done, step]);
 
   if (!enabledForTrip(tripId) || prompts.length === 0) return null;
 
@@ -126,7 +136,13 @@ export function ReflectFlow({
         </Pressable>
       )}
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+      <Modal
+        visible={open}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setOpen(false)}
+        onShow={() => inputRef.current?.focus()}
+      >
         <View style={s.backdrop}>
           <View style={s.sheet}>
             <View style={s.sheetHead}>
@@ -162,13 +178,13 @@ export function ReflectFlow({
                 <Text style={s.prompt}>{prompt.text}</Text>
                 <TextInput
                   key={prompt.id}
+                  ref={inputRef}
                   style={s.input}
                   placeholder="Type your reflection…"
                   placeholderTextColor={colors.ink400}
                   value={answer}
                   onChangeText={setAnswer}
                   multiline
-                  autoFocus
                   accessibilityLabel="Reflection answer"
                 />
                 {createNote.isError ? <Text style={s.error}>Couldn’t save. Try again.</Text> : null}
